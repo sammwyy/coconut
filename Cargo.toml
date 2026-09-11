@@ -1,0 +1,23 @@
+[package]
+name = "creamshell"
+version = "0.1.0"
+edition = "2021"
+description = "A small, native Wayland dock built with CreamUI"
+license = "Apache-2.0"
+
+[dependencies]
+chrono = "0.4"
+creamui-core = { path = "../creamui/crates/core" }
+creamui-image = { path = "../creamui/crates/image", features = ["webp", "jpeg"] }
+creamui-jsx = { path = "../creamui/crates/jsx" }
+creamui-macros = { path = "../creamui/crates/macros" }
+creamui-reactive = { path = "../creamui/crates/reactive" }
+creamui-render = { path = "../creamui/crates/render" }
+creamui-theme = { path = "../creamui/crates/theme" }
+creamui-widgets = { path = "../creamui/crates/widgets" }
+
+[build-dependencies]
+resvg = "0.45.1"
+
+[profile.dev.package."*"]
+opt-level = 2
