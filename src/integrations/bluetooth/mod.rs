@@ -1,4 +1,7 @@
+#[cfg(not(target_os = "windows"))]
 mod bluetoothctl;
+#[cfg(target_os = "windows")]
+mod windows;
 
 pub trait BluetoothIntegration {
     fn powered(&self) -> bool;
@@ -6,7 +9,10 @@ pub trait BluetoothIntegration {
     fn device_name(&self) -> Option<String>;
 }
 
+#[cfg(not(target_os = "windows"))]
 pub use bluetoothctl::BluetoothCtl;
+#[cfg(target_os = "windows")]
+pub use windows::WindowsBluetooth;
 
 pub struct Fallback;
 

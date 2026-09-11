@@ -236,6 +236,16 @@ fn launch_app(app: &AppEntry) {
 }
 
 fn load_apps() -> Vec<AppEntry> {
+    #[cfg(target_os = "windows")]
+    {
+        return load_windows_apps();
+    }
+    #[cfg(not(target_os = "windows"))]
+    load_linux_apps()
+}
+
+#[cfg(not(target_os = "windows"))]
+fn load_linux_apps() -> Vec<AppEntry> {
     let mut desktop_files = HashMap::new();
     for directory in desktop_directories() {
         let Ok(entries) = fs::read_dir(directory) else {
@@ -261,6 +271,42 @@ fn load_apps() -> Vec<AppEntry> {
     apps
 }
 
+#[cfg(target_os = "windows")]
+fn load_windows_apps() -> Vec<AppEntry> {
+    let script = "Get-StartApps | ForEach-Object { \"$($_.Name)`t$($_.AppID)\" }";
+    let output = Command::new("powershell.exe")
+        .args([
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            script,
+        ])
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .map(|output| String::from_utf8_lossy(&output.stdout).to_string())
+        .unwrap_or_default();
+    let mut apps = output
+        .lines()
+        .filter_map(|line| {
+            let (name, app_id) = line.split_once('\t')?;
+            let name = name.trim();
+            let app_id = app_id.trim();
+            (!name.is_empty() && !app_id.is_empty()).then(|| AppEntry {
+                name: name.to_owned(),
+                exec: vec!["explorer.exe".into(), format!("shell:AppsFolder\\{app_id}")],
+                terminal: false,
+                category: "System".into(),
+                icon_name: None,
+                icon: None,
+            })
+        })
+        .collect::<Vec<_>>();
+    apps.sort_by_key(|app| app.name.to_ascii_lowercase());
+    apps
+}
+
 fn resolve_icons(mut apps: Vec<AppEntry>) -> Vec<AppEntry> {
     let icon_index = build_icon_index();
     for app in &mut apps {
@@ -273,6 +319,7 @@ fn resolve_icons(mut apps: Vec<AppEntry>) -> Vec<AppEntry> {
     apps
 }
 
+#[cfg(not(target_os = "windows"))]
 fn desktop_directories() -> Vec<PathBuf> {
     xdg_data_directories()
         .into_iter()
@@ -280,6 +327,7 @@ fn desktop_directories() -> Vec<PathBuf> {
         .collect()
 }
 
+#[cfg(not(target_os = "windows"))]
 fn parse_desktop_entry(path: &Path) -> Option<AppEntry> {
     let contents = fs::read_to_string(path).ok()?;
     let mut fields = HashMap::new();
@@ -317,6 +365,7 @@ fn parse_desktop_entry(path: &Path) -> Option<AppEntry> {
     })
 }
 
+#[cfg(not(target_os = "windows"))]
 fn category_for(categories: Option<&str>) -> String {
     let categories = categories.unwrap_or_default();
     if categories.contains("Development") {
@@ -331,6 +380,7 @@ fn category_for(categories: Option<&str>) -> String {
     .into()
 }
 
+#[cfg(not(target_os = "windows"))]
 fn parse_exec(value: &str) -> Vec<String> {
     let mut arguments = Vec::new();
     let mut current = String::new();
@@ -480,7 +530,7 @@ fn scroll_style() -> creamui_core::layout::Style {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(target_os = "windows")))]
 mod tests {
     use super::parse_exec;
 

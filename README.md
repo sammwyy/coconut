@@ -4,10 +4,10 @@
 > CreamShell is a work in progress. It is still being shaped, polished, and
 > tested for everyday desktop use.
 
-CreamShell is a small, modern desktop shell for Linux and Wayland, built around
-a clean bottom bar and lightweight pop-up panels. It aims to make everyday
-desktop actions feel immediate: launch an app, switch windows, check what is
-playing, or adjust your system without leaving your flow.
+CreamShell is a small, modern desktop shell built around a clean bottom bar and
+lightweight pop-up panels. It aims to make everyday desktop actions feel
+immediate: launch an app, switch windows, check what is playing, or adjust your
+system without leaving your flow.
 
 ## Highlights
 
@@ -17,7 +17,18 @@ playing, or adjust your system without leaving your flow.
 - Live clock and weather entry points
 - Quick access to network, brightness, volume, Bluetooth, and battery status
 - Purpose-built pop-up panels that stay visually consistent with the dock
-- Native integrations for common Linux desktop services when available
+- Native integrations for KDE/Wayland and Windows 10 when available
+
+## Platforms
+
+Windows 10 is supported through the built-in Windows APIs and PowerShell:
+window discovery and activation, Start menu applications, system media
+sessions, master volume, battery, brightness, network, and Bluetooth. Hardware
+features that are not present, such as a laptop battery or an internal display,
+fall back gracefully.
+
+Linux integrations currently target a KDE Wayland session with the relevant
+desktop services installed.
 
 ## Widgets
 

@@ -1,4 +1,7 @@
+#[cfg(not(target_os = "windows"))]
 mod kwin_dbus;
+#[cfg(target_os = "windows")]
+mod windows;
 
 use crate::platform::OpenWindow;
 use creamui_render::WindowHandle;
@@ -10,7 +13,10 @@ pub trait DesktopIntegration {
 }
 
 pub struct Fallback;
+#[cfg(not(target_os = "windows"))]
 pub use kwin_dbus::KWinDbus;
+#[cfg(target_os = "windows")]
+pub use windows::WindowsDesktop;
 
 impl DesktopIntegration for Fallback {
     fn prepare_window(&self, window: &WindowHandle) {
