@@ -1,3 +1,4 @@
+use crate::config::TrayConfig;
 use crate::icons::pixel_icon;
 use crate::integrations::{
     battery::BatteryIntegration, bluetooth::BluetoothIntegration,
@@ -7,12 +8,12 @@ use crate::panels::chrome::{
     BORDER, CARD, CARD_RADIUS, FILL, ISLAND_RADIUS, MUTED, PANEL, TEXT, TRACK,
 };
 use creamui_core::layout::{FlexDirection, Style as LayoutStyle};
-use creamui_core::{BoxedWidget, Size, StateStyle, Style, TextAlign};
+use creamui_core::{Border, BoxedWidget, Size, StateStyle, Style, StyleProp, Styled, TextAlign};
 use creamui_macros::jsx;
 use creamui_reactive::Signal;
 use creamui_theme::Color;
 use creamui_widgets::{
-    layout::{fixed, Align},
+    layout::{fixed, Align, Flex},
     RawMarquee, RawSlider, RawSwitch,
 };
 use std::rc::Rc;
@@ -37,6 +38,7 @@ pub fn build_with_integrations(
     volume_level: Signal<f32>,
     wifi_enabled: Signal<bool>,
     bluetooth_powered: Signal<bool>,
+    tray: &TrayConfig,
 ) -> BoxedWidget {
     let wifi_on = wifi_enabled.get();
     let connected = wifi_on && network.connected();
@@ -154,27 +156,78 @@ pub fn build_with_integrations(
         })
     };
 
+    let mut device_row = Flex::row().gap(10.0);
+    if tray.wifi.shows_in_panel() {
+        device_row = device_row.child(device_tile(
+            wifi_icon,
+            "Wi-Fi",
+            network_name,
+            wifi_caption,
+            wifi_on,
+            toggle_wifi,
+        ));
+    }
+    if tray.bluetooth.shows_in_panel() {
+        device_row = device_row.child(device_tile(
+            bluetooth_icon,
+            "Bluetooth",
+            bluetooth_name,
+            bluetooth_caption,
+            bluetooth_on,
+            toggle_bluetooth,
+        ));
+    }
+
+    let mut status_row = Flex::row().gap(10.0);
+    if tray.battery.shows_in_panel() {
+        status_row = status_row.child(status_tile(
+            battery_icon,
+            "Battery",
+            battery_value,
+            battery_caption,
+        ));
+    }
+    status_row = status_row.child(awake_tile(awake, toggle_awake));
+
+    let mut sliders = Flex::column()
+        .grow(1.0)
+        .padding(12.0)
+        .gap(12.0)
+        .justify(creamui_widgets::layout::Justify::Center)
+        .property(StyleProp::Background(PANEL.into()))
+        .property(StyleProp::Border(Border::new(BORDER, 1.0)))
+        .property(StyleProp::CornerRadius(ISLAND_RADIUS));
+    if tray.brightness.shows_in_panel() {
+        sliders = sliders.child(fat_slider(
+            "brightness",
+            "Brightness",
+            brightness_value,
+            brightness_text,
+            move |level| {
+                set_brightness.set(level);
+                brightness_backend.set_level(level);
+            },
+        ));
+    }
+    if tray.volume.shows_in_panel() {
+        sliders = sliders.child(fat_slider(
+            volume_icon,
+            "Volume",
+            volume_value,
+            volume_text,
+            move |level| {
+                set_volume.set(level);
+                volume_backend.set_level(level);
+            },
+        ));
+    }
+
     Box::new(jsx! {
         <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={16.0} gap={12.0} background={CARD} border={(BORDER, 1.0)} corner_radius={CARD_RADIUS}>
             <RawText color={MUTED} font_size={14.0}>"CONTROL"</RawText>
-            <Flex direction={FlexDirection::Row} gap={10.0}>
-                {device_tile(wifi_icon, "Wi-Fi", network_name, wifi_caption, wifi_on, toggle_wifi)}
-                {device_tile(bluetooth_icon, "Bluetooth", bluetooth_name, bluetooth_caption, bluetooth_on, toggle_bluetooth)}
-            </Flex>
-            <Flex direction={FlexDirection::Row} gap={10.0}>
-                {status_tile(battery_icon, "Battery", battery_value, battery_caption)}
-                {awake_tile(awake, toggle_awake)}
-            </Flex>
-            <Flex direction={FlexDirection::Column} grow={1.0} padding={12.0} gap={12.0} background={PANEL} border={(BORDER, 1.0)} corner_radius={ISLAND_RADIUS} justify={creamui_widgets::layout::Justify::Center}>
-                {fat_slider("brightness", "Brightness", brightness_value, brightness_text, move |level| {
-                    set_brightness.set(level);
-                    brightness_backend.set_level(level);
-                })}
-                {fat_slider(volume_icon, "Volume", volume_value, volume_text, move |level| {
-                    set_volume.set(level);
-                    volume_backend.set_level(level);
-                })}
-            </Flex>
+            {Box::new(device_row) as BoxedWidget}
+            {Box::new(status_row) as BoxedWidget}
+            {Box::new(sliders) as BoxedWidget}
         </Flex>
     })
 }

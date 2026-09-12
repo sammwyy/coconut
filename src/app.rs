@@ -1,4 +1,7 @@
-use crate::bar::{build_dock, BarActions, CreamTheme, SystemStatus, DOCK_HEIGHT};
+use crate::bar::{
+    build_dock, warn_unknown_widgets, BarActions, CreamTheme, SystemStatus, DOCK_HEIGHT,
+};
+use crate::config::{BarPosition, ShellConfig};
 use crate::desktop;
 use crate::integrations::{audio::AudioIntegration, Registry};
 use crate::panels::{app_drawer, clock, control_center, current_playing, weather};
@@ -12,6 +15,14 @@ use std::rc::Rc;
 use std::{cell::RefCell, process::Child, process::Command, time::Duration};
 
 pub fn run() {
+    let config = Rc::new(ShellConfig::load());
+    warn_unknown_widgets(&config.bar.layout);
+    let bar_role = match config.bar.position {
+        BarPosition::Top => creamui_render::platform::WindowRole::TopPanel,
+        BarPosition::Bottom => creamui_render::platform::WindowRole::BottomPanel,
+    };
+    let popup_opens_below = matches!(config.bar.position, BarPosition::Top);
+
     let integrations = Registry::detect();
     let applications = app_drawer::AppCatalog::new();
     let drawer_state = app_drawer::DrawerState::default();
@@ -35,7 +46,8 @@ pub fn run() {
     let volume_level = Signal::new(integrations.volume.level());
     let wifi_enabled = Signal::new(integrations.network.enabled());
     let bluetooth_powered = Signal::new(integrations.bluetooth.powered());
-    let clock_text = Signal::new(Local::now().format("%H:%M").to_string());
+    let clock_format = Rc::new(config.widgets.clock.format.clone());
+    let clock_text = Signal::new(Local::now().format(&clock_format).to_string());
     let status_network = integrations.network.clone();
     let status_battery = integrations.battery.clone();
     let status_bluetooth = integrations.bluetooth.clone();
@@ -92,7 +104,7 @@ pub fn run() {
                 playback_backend.clone(),
                 playback_state.clone(),
             );
-            schedule_clock_refresh(app.clone(), clock_text.clone());
+            schedule_clock_refresh(app.clone(), clock_text.clone(), clock_format.clone());
             applications.start_loading(&app);
             for delay in [Duration::from_secs(1), Duration::from_secs(3)] {
                 let backend = bar_windows_backend.clone();
@@ -114,7 +126,7 @@ pub fn run() {
                 }
                 let weather_handle = weather_handle.clone();
                 let bar_for_popup = weather_bar.clone();
-                let Some(popup) = popup_for(&bar_for_popup, anchor) else {
+                let Some(popup) = popup_for(&bar_for_popup, anchor, popup_opens_below) else {
                     return;
                 };
                 weather_app.append_popup(
@@ -141,7 +153,7 @@ pub fn run() {
                 }
                 let clock_handle = clock_handle.clone();
                 let bar_for_popup = clock_bar.clone();
-                let Some(popup) = popup_for(&bar_for_popup, anchor) else {
+                let Some(popup) = popup_for(&bar_for_popup, anchor, popup_opens_below) else {
                     return;
                 };
                 clock_app.append_popup(
@@ -171,7 +183,7 @@ pub fn run() {
                 let backend = music_backend.clone();
                 let playback_state = playback_state.clone();
                 let bar_for_popup = music_bar.clone();
-                let Some(popup) = popup_for(&bar_for_popup, anchor) else {
+                let Some(popup) = popup_for(&bar_for_popup, anchor, popup_opens_below) else {
                     return;
                 };
                 music_app.append_popup(
@@ -241,7 +253,7 @@ pub fn run() {
                 let catalog = drawer_catalog.clone();
                 let state = drawer_state.clone();
                 let bar_for_popup = drawer_bar.clone();
-                let Some(popup) = popup_for(&bar_for_popup, anchor) else {
+                let Some(popup) = popup_for(&bar_for_popup, anchor, popup_opens_below) else {
                     return;
                 };
                 drawer_app.append_popup(
@@ -296,6 +308,7 @@ pub fn run() {
             let control_handle: Rc<RefCell<Option<WindowHandle>>> = Rc::new(RefCell::new(None));
             let dock_volume = volume_level.clone();
             let control_bar = bar_window.clone();
+            let control_tray_config = config.clone();
             let open_control_center = Rc::new(move |anchor: Point| {
                 if let Some(handle) = control_handle.borrow_mut().take() {
                     if handle.is_open() {
@@ -315,12 +328,13 @@ pub fn run() {
                 let volume_level = volume_level.clone();
                 let wifi_enabled = wifi_enabled.clone();
                 let bluetooth_powered = bluetooth_powered.clone();
+                let control_tray_config = control_tray_config.clone();
                 brightness_level.set(brightness.level());
                 volume_level.set(volume.level());
                 wifi_enabled.set(network.enabled());
                 bluetooth_powered.set(bluetooth.powered());
                 let bar_for_popup = control_bar.clone();
-                let Some(popup) = popup_for(&bar_for_popup, anchor) else {
+                let Some(popup) = popup_for(&bar_for_popup, anchor, popup_opens_below) else {
                     return;
                 };
                 control_app.append_popup(
@@ -350,6 +364,7 @@ pub fn run() {
                             volume_level.clone(),
                             wifi_enabled.clone(),
                             bluetooth_powered.clone(),
+                            &control_tray_config.tray,
                         )
                     },
                 );
@@ -363,7 +378,7 @@ pub fn run() {
                     decorations: false,
                     resizable: false,
                     transparent: true,
-                    role: creamui_render::platform::WindowRole::BottomPanel,
+                    role: bar_role,
                     theme: CreamTheme::theme(),
                     ..Default::default()
                 },
@@ -375,42 +390,54 @@ pub fn run() {
                         *bar_window.borrow_mut() = Some(window);
                     }
                 },
-                move |viewport: Size| -> BoxedWidget {
-                    let status = SystemStatus {
-                        network_connected: status_network.connected(),
-                        network_strength: status_network.strength(),
-                        battery_percentage: status_battery.percentage(),
-                        battery_charging: status_battery.charging(),
-                        bluetooth_powered: status_bluetooth.powered(),
-                        bluetooth_connected: status_bluetooth.connected(),
-                        volume: dock_volume.get(),
-                        volume_muted: status_volume.muted(),
-                    };
-                    build_dock(
-                        viewport,
-                        windows.get(),
-                        launcher_open.clone(),
-                        active_window.clone(),
-                        status,
-                        clock_text.clone(),
-                        BarActions {
-                            refresh_windows: refresh.clone(),
-                            activate_window: activate.clone(),
-                            current_playback: {
-                                let backend = bar_playback_backend.clone();
-                                Rc::new(move || backend.playback())
+                {
+                    let config = config.clone();
+                    move |viewport: Size| -> BoxedWidget {
+                        let status = SystemStatus {
+                            network_connected: status_network.connected(),
+                            network_strength: status_network.strength(),
+                            battery_percentage: status_battery.percentage(),
+                            battery_charging: status_battery.charging(),
+                            bluetooth_powered: status_bluetooth.powered(),
+                            bluetooth_connected: status_bluetooth.connected(),
+                            volume: dock_volume.get(),
+                            volume_muted: status_volume.muted(),
+                        };
+                        build_dock(
+                            viewport,
+                            windows.get(),
+                            launcher_open.clone(),
+                            active_window.clone(),
+                            status,
+                            clock_text.clone(),
+                            BarActions {
+                                refresh_windows: refresh.clone(),
+                                activate_window: activate.clone(),
+                                current_playback: {
+                                    let backend = bar_playback_backend.clone();
+                                    Rc::new(move || backend.playback())
+                                },
+                                toggle_playback: {
+                                    let backend = bar_playback_backend.clone();
+                                    Rc::new(move || backend.toggle_playback())
+                                },
+                                previous_playback: {
+                                    let backend = bar_playback_backend.clone();
+                                    Rc::new(move || backend.previous())
+                                },
+                                next_playback: {
+                                    let backend = bar_playback_backend.clone();
+                                    Rc::new(move || backend.next())
+                                },
+                                open_weather: open_weather.clone(),
+                                open_clock: open_clock.clone(),
+                                open_current_playing: open_current_playing.clone(),
+                                open_app_drawer: open_app_drawer.clone(),
+                                open_control_center: open_control_center.clone(),
                             },
-                            toggle_playback: {
-                                let backend = bar_playback_backend.clone();
-                                Rc::new(move || backend.toggle_playback())
-                            },
-                            open_weather: open_weather.clone(),
-                            open_clock: open_clock.clone(),
-                            open_current_playing: open_current_playing.clone(),
-                            open_app_drawer: open_app_drawer.clone(),
-                            open_control_center: open_control_center.clone(),
-                        },
-                    )
+                            &config,
+                        )
+                    }
                 },
             );
         })
@@ -434,17 +461,18 @@ fn schedule_playback_refresh(
     );
 }
 
-fn schedule_clock_refresh(app: AppHandle, state: Signal<String>) {
+fn schedule_clock_refresh(app: AppHandle, state: Signal<String>, format: Rc<String>) {
     let next_app = app.clone();
     let next_state = state.clone();
+    let next_format = format.clone();
     app.spawn_background(
         || std::thread::sleep(Duration::from_secs(1)),
         move |_| {
-            let formatted = Local::now().format("%H:%M").to_string();
+            let formatted = Local::now().format(&format).to_string();
             if state.peek() != formatted {
                 state.set(formatted);
             }
-            schedule_clock_refresh(next_app, next_state);
+            schedule_clock_refresh(next_app, next_state, next_format);
         },
     );
 }
@@ -459,14 +487,13 @@ fn close_on_focus_lost(window: &WindowHandle) {
     window.on_focus_lost(move || handle.close());
 }
 
-fn popup_for(bar: &Rc<RefCell<Option<WindowHandle>>>, anchor: Point) -> Option<PopupOptions> {
+fn popup_for(
+    bar: &Rc<RefCell<Option<WindowHandle>>>,
+    anchor: Point,
+    opens_below: bool,
+) -> Option<PopupOptions> {
     let bar_ref = bar.borrow();
     bar_ref.as_ref().map(|bar| {
-        let opens_below = bar
-            .position()
-            .zip(bar.monitor_size())
-            .map(|((_, y), (_, monitor_height))| y + DOCK_HEIGHT as i32 / 2 < monitor_height / 2)
-            .unwrap_or(false);
         let anchor_rect = if opens_below {
             Rect {
                 x: anchor.x,

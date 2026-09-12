@@ -144,11 +144,6 @@ fn widget_layer() -> BoxedWidget {
 fn icon_layer(viewport: Size, state: DesktopState) -> BoxedWidget {
     let positions = state.positions.get();
     let entries = state.entries.get();
-    eprintln!(
-        "DIAG icon_layer rebuild entries={} positions={}",
-        entries.len(),
-        positions.len()
-    );
     let children = entries
         .into_iter()
         .enumerate()
@@ -426,12 +421,12 @@ fn open_target(target: DesktopTarget) {
 
 #[cfg(target_os = "windows")]
 fn open_path(path: PathBuf) {
-    let _ = Command::new("explorer.exe").arg(path).spawn();
+    let _ = crate::process::spawn_detached(Command::new("explorer.exe").arg(path));
 }
 
 #[cfg(not(target_os = "windows"))]
 fn open_path(path: PathBuf) {
-    let _ = Command::new("xdg-open").arg(path).spawn();
+    let _ = crate::process::spawn_detached(Command::new("xdg-open").arg(path));
 }
 
 fn launch(program: String, args: Vec<String>, terminal: bool) {
@@ -445,7 +440,7 @@ fn launch(program: String, args: Vec<String>, terminal: bool) {
         command.args(args);
         command
     };
-    let _ = command.spawn();
+    let _ = crate::process::spawn_detached(&mut command);
 }
 
 fn fill_layout() -> LayoutStyle {

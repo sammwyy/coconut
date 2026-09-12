@@ -2,7 +2,7 @@ use crate::icons::pixel_icon;
 use crate::panels::chrome::{ACCENT, BORDER, CARD, CARD_RADIUS, FILL, MUTED, TEXT, TRACK};
 use crate::platform::Playback;
 use creamui_core::layout::{FlexDirection, Style as LayoutStyle};
-use creamui_core::{BoxedWidget, Size, StateStyle, Style, Styled};
+use creamui_core::{BoxedWidget, Size, StateStyle, Style, Styled, TextAlign};
 use creamui_image::{Image, ImageData, ImageFit};
 use creamui_macros::jsx;
 use creamui_theme::Color;
@@ -14,8 +14,8 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::{Mutex, OnceLock};
 
-pub const WIDTH: u32 = 310;
-pub const HEIGHT: u32 = 190;
+pub const WIDTH: u32 = 326;
+pub const HEIGHT: u32 = 142;
 
 pub fn build(
     _: Size,
@@ -40,33 +40,46 @@ pub fn build(
         Some(data) => Box::new(
             Image::new(data)
                 .layout(LayoutStyle {
-                    size: creamui_widgets::layout::fixed(72.0, 72.0),
+                    size: creamui_widgets::layout::fixed(76.0, 76.0),
                     ..Default::default()
                 })
                 .fit(ImageFit::Cover),
         ),
-        None => Box::new(jsx! { <Flex size={(72.0, 72.0)} /> }),
+        None => Box::new(jsx! { <Flex size={(76.0, 76.0)} /> }),
+    };
+    let position_text = playback
+        .as_ref()
+        .map(|item| item.position.as_str())
+        .unwrap_or("0:00");
+    let length_text = playback
+        .as_ref()
+        .map(|item| item.length.as_str())
+        .unwrap_or("0:00");
+    let play_icon = if playback
+        .as_ref()
+        .is_some_and(|item| item.status == "Playing")
+    {
+        "pause"
+    } else {
+        "play"
     };
     Box::new(jsx! {
-        <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={16.0} gap={14.0} background={CARD} border={(BORDER, 1.0)} corner_radius={CARD_RADIUS}>
-            <Flex direction={FlexDirection::Row} gap={12.0} align={Align::Center}>
+        <Flex direction={FlexDirection::Row} size={(WIDTH as f32, HEIGHT as f32)} padding={14.0} gap={12.0} align={Align::Center} background={CARD} border={(BORDER, 1.0)} corner_radius={CARD_RADIUS}>
                 {cover}
-                <Flex direction={FlexDirection::Column} gap={3.0} grow={1.0}>
-                    {Box::new(creamui_widgets::RawMarquee::expanding(playback.as_ref().map(|item| item.title.as_str()).unwrap_or("Nothing playing"), TEXT, 15.0)) as BoxedWidget}
-                    <RawText color={MUTED} font_size={11.0}>{playback.as_ref().map(|item| item.artist.as_str()).unwrap_or("No MPRIS player")}</RawText>
-                    <RawText color={MUTED} font_size={10.0}>{format!("{}  ·  {}", playback.as_ref().map(|item| item.position.as_str()).unwrap_or("0:00"), playback.as_ref().map(|item| item.length.as_str()).unwrap_or("0:00"))}</RawText>
+                <Flex direction={FlexDirection::Column} gap={5.0} grow={1.0} justify={Justify::Center}>
+                    {Box::new(creamui_widgets::RawMarquee::expanding(playback.as_ref().map(|item| item.title.as_str()).unwrap_or_default(), TEXT, 15.0)) as BoxedWidget}
+                    <RawText color={MUTED} font_size={11.0}>{playback.as_ref().map(|item| item.artist.as_str()).unwrap_or_default()}</RawText>
+                    <Flex direction={FlexDirection::Row} gap={6.0} align={Align::Center}>
+                        {time_label(position_text, TextAlign::Start)}
+                        {progress_slider(progress, seek_enabled, seek)}
+                        {time_label(length_text, TextAlign::End)}
+                    </Flex>
+                    <Flex direction={FlexDirection::Row} gap={6.0} justify={Justify::End} align={Align::Center}>
+                        {media_button("back", previous)}
+                        {play_button(play_icon, toggle)}
+                        {media_button("next", next)}
+                    </Flex>
                 </Flex>
-                <RawButton style={control_style()} on_click={move || toggle()}>
-                    <Flex size={(38.0, 38.0)} align={Align::Center} justify={Justify::Center}>{pixel_icon(if playback.as_ref().is_some_and(|item| item.status == "Playing") { "pause" } else { "play" }, 18.0)}</Flex>
-                </RawButton>
-            </Flex>
-            <Flex direction={FlexDirection::Row} gap={8.0} align={Align::Center}>
-                {media_button("|<", previous)}
-                <RawText color={MUTED} font_size={10.0}>{playback.as_ref().map(|item| item.position.as_str()).unwrap_or("0:00")}</RawText>
-                {progress_slider(progress, seek_enabled, seek)}
-                <RawText color={MUTED} font_size={10.0}>{playback.as_ref().map(|item| item.length.as_str()).unwrap_or("0:00")}</RawText>
-                {media_button(">|", next)}
-            </Flex>
         </Flex>
     })
 }
@@ -77,7 +90,7 @@ fn progress_slider(progress: f32, enabled: bool, seek: Rc<dyn Fn(f64)>) -> Boxed
         RawSlider::new(
             Style::new()
                 .layout(LayoutStyle {
-                    size: fixed(154.0, 26.0),
+                    size: fixed(112.0, 18.0),
                     ..Default::default()
                 })
                 .focus(StateStyle::new().outline(Color::rgba(0, 0, 0, 0), 0.0)),
@@ -87,20 +100,37 @@ fn progress_slider(progress: f32, enabled: bool, seek: Rc<dyn Fn(f64)>) -> Boxed
             TEXT,
             seek,
         )
-        .track(8.0, 4.0)
-        .handle(14.0, 7.0)
+        .track(6.0, 3.0)
+        .handle(11.0, 6.0)
         .hover_handle_color(Color::rgb(255, 255, 255))
         .pressed_handle_color(FILL)
         .disabled(!enabled),
     )
 }
 
-fn media_button(label: &str, on_click: Rc<dyn Fn()>) -> BoxedWidget {
-    let label = label.to_owned();
+fn time_label(value: &str, align: TextAlign) -> BoxedWidget {
+    Box::new(jsx! {
+        <Flex size={(34.0, 18.0)} align={Align::Center} justify={Justify::Center}>
+            <RawText color={MUTED} font_size={10.0} align={align}>{value}</RawText>
+        </Flex>
+    })
+}
+
+fn media_button(icon: &'static str, on_click: Rc<dyn Fn()>) -> BoxedWidget {
     Box::new(jsx! {
         <RawButton style={small_control_style()} on_click={move || on_click()}>
             <Flex size={(24.0, 28.0)} align={Align::Center} justify={Justify::Center}>
-                <RawText color={TEXT} font_size={11.0}>{label}</RawText>
+                {pixel_icon(icon, 13.0)}
+            </Flex>
+        </RawButton>
+    })
+}
+
+fn play_button(icon: &'static str, on_click: Rc<dyn Fn()>) -> BoxedWidget {
+    Box::new(jsx! {
+        <RawButton style={control_style()} on_click={move || on_click()}>
+            <Flex size={(30.0, 28.0)} align={Align::Center} justify={Justify::Center}>
+                {pixel_icon(icon, 14.0)}
             </Flex>
         </RawButton>
     })
@@ -143,11 +173,11 @@ fn safe_image_data(path: &std::path::PathBuf) -> Option<ImageData> {
 fn control_style() -> creamui_core::Style {
     creamui_core::Style::new()
         .layout(creamui_core::layout::Style {
-            size: creamui_widgets::layout::fixed(38.0, 38.0),
+            size: creamui_widgets::layout::fixed(30.0, 28.0),
             ..Default::default()
         })
         .background(ACCENT)
-        .corner_radius(11.0)
+        .corner_radius(8.0)
 }
 
 fn small_control_style() -> creamui_core::Style {

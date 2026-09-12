@@ -244,7 +244,7 @@ fn launch_app(app: &AppEntry) {
             command.args(args);
             command
         };
-        let _ = command.spawn();
+        let _ = crate::process::spawn_detached(&mut command);
     });
 }
 
