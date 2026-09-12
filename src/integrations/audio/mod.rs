@@ -8,6 +8,10 @@ use crate::platform::Playback;
 pub trait AudioIntegration {
     fn playback(&self) -> Option<Playback>;
     fn toggle_playback(&self);
+
+    fn seek(&self, _position: f64) {}
+    fn previous(&self) {}
+    fn next(&self) {}
 }
 
 pub struct Fallback;

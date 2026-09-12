@@ -12,7 +12,7 @@ creamui-image = { path = "../creamui/crates/image", features = ["webp", "jpeg"] 
 creamui-jsx = { path = "../creamui/crates/jsx" }
 creamui-macros = { path = "../creamui/crates/macros" }
 creamui-reactive = { path = "../creamui/crates/reactive" }
-creamui-render = { path = "../creamui/crates/render" }
+creamui-render = { path = "../creamui/crates/render", features = ["platform-wayland"] }
 creamui-theme = { path = "../creamui/crates/theme" }
 creamui-widgets = { path = "../creamui/crates/widgets" }
 

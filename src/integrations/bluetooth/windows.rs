@@ -49,6 +49,25 @@ impl BluetoothIntegration for WindowsBluetooth {
     fn device_name(&self) -> Option<String> {
         self.state.lock().ok().and_then(|state| state.name.clone())
     }
+
+    fn set_powered(&self, powered: bool) {
+        if let Ok(mut state) = self.state.lock() {
+            state.powered = powered;
+            if !powered {
+                state.name = None;
+            }
+        }
+        thread::spawn(move || {
+            let action = if powered {
+                "Enable-PnpDevice"
+            } else {
+                "Disable-PnpDevice"
+            };
+            let _ = powershell(&format!(
+                "Get-PnpDevice -Class Bluetooth | Where-Object {{ $_.FriendlyName -match 'Radio|Adapter' }} | Select-Object -First 1 | {action} -Confirm:$false"
+            ));
+        });
+    }
 }
 
 fn query() -> State {

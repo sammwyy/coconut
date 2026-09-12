@@ -7,6 +7,8 @@ pub trait NetworkIntegration {
     fn connected(&self) -> bool;
     fn network_name(&self) -> Option<String>;
     fn strength(&self) -> Option<u8>;
+    fn enabled(&self) -> bool;
+    fn set_enabled(&self, enabled: bool);
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -24,4 +26,8 @@ impl NetworkIntegration for Fallback {
     fn strength(&self) -> Option<u8> {
         None
     }
+    fn enabled(&self) -> bool {
+        false
+    }
+    fn set_enabled(&self, _: bool) {}
 }

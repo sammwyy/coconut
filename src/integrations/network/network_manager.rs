@@ -8,6 +8,7 @@ use std::time::Duration;
 #[derive(Default)]
 struct State {
     connected: bool,
+    enabled: bool,
     name: Option<String>,
     strength: Option<u8>,
 }
@@ -30,6 +31,8 @@ impl NetworkManager {
             let next = State {
                 connected: command(&["-t", "-f", "STATE", "general"])
                     .is_some_and(|state| state == "connected"),
+                enabled: command(&["radio", "wifi"])
+                    .is_some_and(|state| state.eq_ignore_ascii_case("enabled")),
                 name: Self::active_wifi()
                     .map(|(name, _)| name)
                     .or_else(active_connection),
@@ -93,6 +96,27 @@ impl NetworkIntegration for NetworkManager {
 
     fn strength(&self) -> Option<u8> {
         self.state.lock().ok().and_then(|state| state.strength)
+    }
+
+    fn enabled(&self) -> bool {
+        self.state
+            .lock()
+            .map(|state| state.enabled)
+            .unwrap_or(false)
+    }
+
+    fn set_enabled(&self, enabled: bool) {
+        if let Ok(mut state) = self.state.lock() {
+            state.enabled = enabled;
+            if !enabled {
+                state.connected = false;
+                state.name = None;
+                state.strength = None;
+            }
+        }
+        thread::spawn(move || {
+            let _ = command(&["radio", "wifi", if enabled { "on" } else { "off" }]);
+        });
     }
 }
 

@@ -1,27 +1,28 @@
+use crate::icons::pixel_icon;
 use crate::integrations::{
     battery::BatteryIntegration, bluetooth::BluetoothIntegration,
     brightness::BrightnessIntegration, network::NetworkIntegration, volume::VolumeIntegration,
 };
+use crate::panels::chrome::{
+    BORDER, CARD, CARD_RADIUS, FILL, ISLAND_RADIUS, MUTED, PANEL, TEXT, TRACK,
+};
 use creamui_core::layout::{FlexDirection, Style as LayoutStyle};
-use creamui_core::{BoxedWidget, Size, Style};
+use creamui_core::{BoxedWidget, Size, StateStyle, Style, TextAlign};
 use creamui_macros::jsx;
+use creamui_reactive::Signal;
 use creamui_theme::Color;
 use creamui_widgets::{
     layout::{fixed, Align},
-    RawSlider,
+    RawMarquee, RawSlider, RawSwitch,
 };
 use std::rc::Rc;
 
-const CARD: Color = Color::rgba(27, 28, 30, 252);
-const PANEL: Color = Color::rgba(39, 40, 42, 245);
-const TEXT: Color = Color::rgb(244, 244, 245);
-const MUTED: Color = Color::rgb(166, 168, 171);
-const ACCENT: Color = Color::rgba(255, 255, 255, 28);
-const BAR_TRACK: Color = Color::rgba(255, 255, 255, 38);
-const BAR_FILL: Color = Color::rgb(215, 222, 255);
+pub const WIDTH: u32 = 380;
+pub const HEIGHT: u32 = 420;
 
-pub const WIDTH: u32 = 360;
-pub const HEIGHT: u32 = 360;
+const TILE_W: f32 = 169.0;
+const TILE_H: f32 = 86.0;
+const SLIDER_W: f32 = 324.0;
 
 pub fn build_with_integrations(
     _: Size,
@@ -31,37 +32,22 @@ pub fn build_with_integrations(
     volume: Rc<dyn VolumeIntegration>,
     bluetooth: Rc<dyn BluetoothIntegration>,
     toggle_awake: Rc<dyn Fn()>,
+    awake: bool,
+    brightness_level: Signal<f32>,
+    volume_level: Signal<f32>,
+    wifi_enabled: Signal<bool>,
+    bluetooth_powered: Signal<bool>,
 ) -> BoxedWidget {
-    let connected = network.connected();
-    let network_text = if connected {
-        format!(
-            "Wi-Fi · {}",
-            network.network_name().unwrap_or_else(|| "Connected".into())
-        )
+    let wifi_on = wifi_enabled.get();
+    let connected = wifi_on && network.connected();
+    let network_name = if wifi_on {
+        network
+            .network_name()
+            .unwrap_or_else(|| "No network".into())
     } else {
-        "Wi-Fi · Disconnected".into()
+        "Off".into()
     };
-    let brightness_value = brightness.level();
-    let volume_value = volume.level();
-    let brightness_text = format!("{}%", (brightness_value * 100.0).round());
-    let volume_text = format!(
-        "{}%{}",
-        (volume_value * 100.0).round(),
-        if volume.muted() { " · Muted" } else { "" }
-    );
-    let battery_percent = battery
-        .percentage()
-        .map(|percent| format!("{percent}%"))
-        .unwrap_or_else(|| "Unavailable".into());
-    let battery_text = format!(
-        "Battery      {battery_percent} · {}",
-        if battery.charging() {
-            "Charging"
-        } else {
-            "Discharging"
-        }
-    );
-    let wifi_icon = if !connected {
+    let wifi_icon = if !wifi_on {
         "wifi-off"
     } else {
         match network.strength().unwrap_or(100) {
@@ -71,61 +57,69 @@ pub fn build_with_integrations(
             _ => "wifi-none",
         }
     };
+    let wifi_caption = if connected {
+        "Connected"
+    } else if wifi_on {
+        "Disconnected"
+    } else {
+        "Radio off"
+    };
+
+    let bluetooth_on = bluetooth_powered.get();
+    let bluetooth_connected = bluetooth_on && bluetooth.connected();
+    let bluetooth_icon = if bluetooth_connected {
+        "bluetooth-connected"
+    } else if bluetooth_on {
+        "bluetooth-on"
+    } else {
+        "bluetooth-off"
+    };
+    let bluetooth_name = if bluetooth_connected {
+        bluetooth
+            .device_name()
+            .unwrap_or_else(|| "Connected".into())
+    } else if bluetooth_on {
+        "On".into()
+    } else {
+        "Off".into()
+    };
+    let bluetooth_caption = if bluetooth_connected {
+        "Connected"
+    } else if bluetooth_on {
+        "Available"
+    } else {
+        "Powered off"
+    };
+
+    let battery_percent = battery.percentage();
     let battery_icon = if battery.charging() {
         "battery-bolt"
     } else {
-        match battery.percentage().unwrap_or(0) {
+        match battery_percent.unwrap_or(0) {
             80.. => "battery-full",
             50..=79 => "battery-mid",
             20..=49 => "battery-low",
             _ => "battery-empty",
         }
     };
-    let bluetooth_connected = bluetooth.connected();
-    let bluetooth_icon = if bluetooth_connected {
-        "bluetooth-connected"
-    } else if bluetooth.powered() {
-        "bluetooth-on"
+    let battery_value = battery_percent
+        .map(|percent| format!("{percent}%"))
+        .unwrap_or_else(|| "--".into());
+    let battery_caption = if battery_percent.is_none() {
+        "(Unavailable)"
+    } else if battery.charging() {
+        "(Charging)"
     } else {
-        "bluetooth-off"
+        ""
     };
-    let bluetooth_text = if bluetooth_connected {
-        format!(
-            "Bluetooth · {}",
-            bluetooth
-                .device_name()
-                .unwrap_or_else(|| "Connected".into())
-        )
-    } else if bluetooth.powered() {
-        "Bluetooth · On".into()
-    } else {
-        "Bluetooth · Off".into()
-    };
-    let brightness_backend = brightness.clone();
-    let brightness_slider: BoxedWidget = Box::new(
-        RawSlider::new(
-            slider_style(),
-            brightness_value,
-            BAR_TRACK,
-            BAR_FILL,
-            TEXT,
-            move |level| brightness_backend.set_level(level),
-        )
-        .track(5.0, 2.5)
-        .handle(13.0, 6.5),
-    );
-    let volume_backend = volume.clone();
-    let volume_slider: BoxedWidget = Box::new(
-        RawSlider::new(
-            slider_style(),
-            volume_value,
-            BAR_TRACK,
-            BAR_FILL,
-            TEXT,
-            move |level| volume_backend.set_level(level),
-        )
-        .track(5.0, 2.5)
-        .handle(13.0, 6.5),
+
+    let brightness_value = brightness_level.get();
+    let volume_value = volume_level.get();
+    let brightness_text = format!("{}%", (brightness_value * 100.0).round());
+    let volume_text = format!(
+        "{}%{}",
+        (volume_value * 100.0).round(),
+        if volume.muted() { "  M" } else { "" }
     );
     let volume_icon = if volume.muted() || volume_value <= 0.01 {
         "volume-mute"
@@ -136,56 +130,157 @@ pub fn build_with_integrations(
     } else {
         "volume-max"
     };
+
+    let brightness_backend = brightness.clone();
+    let volume_backend = volume.clone();
+    let set_brightness = brightness_level.clone();
+    let set_volume = volume_level.clone();
+    let toggle_wifi = {
+        let network = network.clone();
+        let wifi_enabled = wifi_enabled.clone();
+        Rc::new(move || {
+            let next = !wifi_enabled.get();
+            wifi_enabled.set(next);
+            network.set_enabled(next);
+        })
+    };
+    let toggle_bluetooth = {
+        let bluetooth = bluetooth.clone();
+        let bluetooth_powered = bluetooth_powered.clone();
+        Rc::new(move || {
+            let next = !bluetooth_powered.get();
+            bluetooth_powered.set(next);
+            bluetooth.set_powered(next);
+        })
+    };
+
     Box::new(jsx! {
-        <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={18.0} gap={12.0} background={CARD} corner_radius={16.0}>
-            <RawText color={TEXT} font_size={16.0}>"Control Center"</RawText>
-            <Flex direction={FlexDirection::Column} gap={8.0} padding={12.0} background={PANEL} corner_radius={10.0}>
-                <RawText color={TEXT} font_size={12.0}>"Connections"</RawText>
-                <Flex direction={FlexDirection::Row} gap={6.0} align={Align::Center}>{pixel_icon(wifi_icon, 14.0)}<RawText color={MUTED} font_size={11.0}>{network_text}</RawText></Flex>
-                <Flex direction={FlexDirection::Row} gap={6.0} align={Align::Center}>{pixel_icon(bluetooth_icon, 14.0)}<RawText color={MUTED} font_size={11.0}>{bluetooth_text}</RawText></Flex>
+        <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={16.0} gap={12.0} background={CARD} border={(BORDER, 1.0)} corner_radius={CARD_RADIUS}>
+            <RawText color={MUTED} font_size={14.0}>"CONTROL"</RawText>
+            <Flex direction={FlexDirection::Row} gap={10.0}>
+                {device_tile(wifi_icon, "Wi-Fi", network_name, wifi_caption, wifi_on, toggle_wifi)}
+                {device_tile(bluetooth_icon, "Bluetooth", bluetooth_name, bluetooth_caption, bluetooth_on, toggle_bluetooth)}
             </Flex>
-            <Flex direction={FlexDirection::Column} gap={7.0} padding={12.0} background={PANEL} corner_radius={10.0}>
-                <RawText color={TEXT} font_size={12.0}>"Quick Settings"</RawText>
-                <Flex direction={FlexDirection::Row} gap={8.0} align={Align::Center}>
-                    {pixel_icon("brightness", 15.0)}
-                    <Flex direction={FlexDirection::Column} gap={3.0} grow={1.0}>
-                        <Flex direction={FlexDirection::Row}><RawText color={MUTED} font_size={11.0}>"Brightness"</RawText><Flex grow={1.0}/><RawText color={MUTED} font_size={10.0}>{brightness_text}</RawText></Flex>
-                        {brightness_slider}
-                    </Flex>
-                </Flex>
-                <Flex direction={FlexDirection::Row} gap={8.0} align={Align::Center}>
-                    {pixel_icon(volume_icon, 15.0)}
-                    <Flex direction={FlexDirection::Column} gap={3.0} grow={1.0}>
-                        <Flex direction={FlexDirection::Row}><RawText color={MUTED} font_size={11.0}>"Volume"</RawText><Flex grow={1.0}/><RawText color={MUTED} font_size={10.0}>{volume_text}</RawText></Flex>
-                        {volume_slider}
-                    </Flex>
-                </Flex>
-                <Flex direction={FlexDirection::Row} gap={6.0} align={Align::Center}>{pixel_icon(battery_icon, 14.0)}<RawText color={MUTED} font_size={11.0}>{battery_text}</RawText></Flex>
+            <Flex direction={FlexDirection::Row} gap={10.0}>
+                {status_tile(battery_icon, "Battery", battery_value, battery_caption)}
+                {awake_tile(awake, toggle_awake)}
             </Flex>
-            <Flex direction={FlexDirection::Row} gap={8.0} align={Align::Center} padding={10.0} background={PANEL} corner_radius={10.0}>
-                <RawText color={TEXT} font_size={12.0}>"Profile: Balanced"</RawText>
-                <Flex grow={1.0} />
-                <RawButton style={small_button_style()} on_click={move || toggle_awake()}><RawText color={TEXT} font_size={11.0}>"ON"</RawText></RawButton>
+            <Flex direction={FlexDirection::Column} grow={1.0} padding={12.0} gap={12.0} background={PANEL} border={(BORDER, 1.0)} corner_radius={ISLAND_RADIUS} justify={creamui_widgets::layout::Justify::Center}>
+                {fat_slider("brightness", "Brightness", brightness_value, brightness_text, move |level| {
+                    set_brightness.set(level);
+                    brightness_backend.set_level(level);
+                })}
+                {fat_slider(volume_icon, "Volume", volume_value, volume_text, move |level| {
+                    set_volume.set(level);
+                    volume_backend.set_level(level);
+                })}
             </Flex>
-            <RawText color={MUTED} font_size={10.0}>"Keep awake · Prevents sleep and screen blanking"</RawText>
         </Flex>
     })
 }
 
-fn small_button_style() -> Style {
-    Style::new()
-        .layout(LayoutStyle {
-            size: fixed(30.0, 28.0),
-            ..Default::default()
-        })
-        .background(ACCENT)
-        .corner_radius(7.0)
-}
-
-fn slider_style() -> Style {
-    Style::new().layout(LayoutStyle {
-        size: fixed(250.0, 16.0),
-        ..Default::default()
+fn device_tile(
+    icon: &str,
+    kicker: &str,
+    name: String,
+    caption: &str,
+    enabled: bool,
+    on_toggle: Rc<dyn Fn()>,
+) -> BoxedWidget {
+    let mut name = RawMarquee::new(name, TEXT, 15.0, TILE_W - 20.0);
+    name.style.layout.size.height = creamui_core::layout::Dimension::Length(18.0);
+    let name = Box::new(name) as BoxedWidget;
+    Box::new(jsx! {
+        <Flex direction={FlexDirection::Column} size={(TILE_W, TILE_H)} padding={10.0} gap={7.0} background={PANEL} border={(BORDER, 1.0)} corner_radius={ISLAND_RADIUS}>
+            <Flex direction={FlexDirection::Row} gap={8.0} align={Align::Center}>
+                {pixel_icon(icon, 16.0)}
+                <RawText color={MUTED} font_size={11.0} align={TextAlign::Start}>{kicker}</RawText>
+                <Flex grow={1.0} />
+                {compact_switch(enabled, on_toggle)}
+            </Flex>
+            {name}
+            <RawText color={MUTED} font_size={10.0} align={TextAlign::Start}>{caption}</RawText>
+        </Flex>
     })
 }
-use crate::icons::pixel_icon;
+
+fn compact_switch(checked: bool, on_toggle: Rc<dyn Fn()>) -> BoxedWidget {
+    let mut toggle = RawSwitch::new(checked, FILL, TRACK, TEXT, move || on_toggle())
+        .radii(10.0, 8.0)
+        .thumb_inset(2.0)
+        .hover_colors(Color::rgb(230, 235, 255), TRACK)
+        .pressed_colors(FILL, TRACK);
+    toggle.style = Style::new().layout(LayoutStyle {
+        size: fixed(36.0, 20.0),
+        ..Default::default()
+    });
+    Box::new(toggle)
+}
+
+fn status_tile(icon: &str, kicker: &str, value: String, caption: &str) -> BoxedWidget {
+    Box::new(jsx! {
+        <Flex direction={FlexDirection::Column} size={(TILE_W, TILE_H)} padding={10.0} gap={6.0} background={PANEL} border={(BORDER, 1.0)} corner_radius={ISLAND_RADIUS} justify={creamui_widgets::layout::Justify::Center}>
+            <Flex direction={FlexDirection::Row} gap={8.0} align={Align::Center}>
+                {pixel_icon(icon, 16.0)}
+                <RawText color={MUTED} font_size={11.0} align={TextAlign::Start}>{kicker}</RawText>
+            </Flex>
+            <Flex direction={FlexDirection::Row} align={Align::Center} gap={8.0}>
+                <RawText color={TEXT} font_size={18.0} align={TextAlign::Start}>{value}</RawText>
+                <RawText color={MUTED} font_size={11.0} align={TextAlign::Start}>{caption}</RawText>
+            </Flex>
+        </Flex>
+    })
+}
+
+fn awake_tile(awake: bool, toggle_awake: Rc<dyn Fn()>) -> BoxedWidget {
+    let caption = if awake { "Holding" } else { "Idle" };
+    Box::new(jsx! {
+        <Flex direction={FlexDirection::Column} size={(TILE_W, TILE_H)} padding={10.0} gap={6.0} background={PANEL} border={(BORDER, 1.0)} corner_radius={ISLAND_RADIUS} justify={creamui_widgets::layout::Justify::Center}>
+            <Flex direction={FlexDirection::Row} gap={8.0} align={Align::Center}>
+                <RawText color={MUTED} font_size={11.0} align={TextAlign::Start}>"Keep awake"</RawText>
+                <Flex grow={1.0} />
+                {compact_switch(awake, toggle_awake)}
+            </Flex>
+            <RawText color={TEXT} font_size={15.0} align={TextAlign::Start}>{caption}</RawText>
+        </Flex>
+    })
+}
+
+fn fat_slider(
+    icon: &str,
+    label: &str,
+    value: f32,
+    value_text: String,
+    on_change: impl Fn(f32) + 'static,
+) -> BoxedWidget {
+    let slider: BoxedWidget = Box::new(
+        RawSlider::new(
+            Style::new()
+                .layout(LayoutStyle {
+                    size: fixed(SLIDER_W, 32.0),
+                    ..Default::default()
+                })
+                .focus(StateStyle::new().outline(Color::rgba(0, 0, 0, 0), 0.0)),
+            value,
+            TRACK,
+            FILL,
+            TEXT,
+            on_change,
+        )
+        .track(22.0, 11.0)
+        .handle(22.0, 8.0)
+        .hover_handle_color(Color::rgb(255, 255, 255))
+        .pressed_handle_color(FILL),
+    );
+    Box::new(jsx! {
+        <Flex direction={FlexDirection::Column} gap={8.0}>
+            <Flex direction={FlexDirection::Row} align={Align::Center} gap={8.0}>
+                {pixel_icon(icon, 18.0)}
+                <RawText color={TEXT} font_size={13.0}>{label}</RawText>
+                <Flex grow={1.0} />
+                <RawText color={MUTED} font_size={18.0}>{value_text}</RawText>
+            </Flex>
+            {slider}
+        </Flex>
+    })
+}

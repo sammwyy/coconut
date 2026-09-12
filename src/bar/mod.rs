@@ -2,10 +2,9 @@ pub mod widgets;
 
 use crate::icons::pixel_icon;
 use crate::platform::{OpenWindow, Playback};
-use chrono::Local;
 use creamui_core::layout::{FlexDirection, Style as LayoutStyle};
 use creamui_core::{
-    BoxedWidget, Painter, Rect, Size, StateStyle, Style, Styled, TextAlign, Widget,
+    BoxedWidget, Painter, Point, Rect, Size, StateStyle, Style, Styled, TextAlign, Widget,
 };
 use creamui_image::{Image, ImageData, ImageFit};
 use creamui_macros::jsx;
@@ -41,11 +40,11 @@ pub struct BarActions {
     pub activate_window: Rc<dyn Fn(String)>,
     pub current_playback: Rc<dyn Fn() -> Option<Playback>>,
     pub toggle_playback: Rc<dyn Fn()>,
-    pub open_weather: Rc<dyn Fn()>,
-    pub open_clock: Rc<dyn Fn()>,
-    pub open_current_playing: Rc<dyn Fn()>,
-    pub open_app_drawer: Rc<dyn Fn()>,
-    pub open_control_center: Rc<dyn Fn()>,
+    pub open_weather: Rc<dyn Fn(Point)>,
+    pub open_clock: Rc<dyn Fn(Point)>,
+    pub open_current_playing: Rc<dyn Fn(Point)>,
+    pub open_app_drawer: Rc<dyn Fn(Point)>,
+    pub open_control_center: Rc<dyn Fn(Point)>,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -89,6 +88,7 @@ pub fn build_dock(
     launcher_open: Signal<bool>,
     active_window: Signal<Option<String>>,
     status: SystemStatus,
+    clock_text: Signal<String>,
     actions: BarActions,
 ) -> BoxedWidget {
     let launcher_background = if launcher_open.get() {
@@ -103,7 +103,9 @@ pub fn build_dock(
         actions.refresh_windows.clone(),
     );
     let dock_width = dock_width(task_count);
-    let clock: BoxedWidget = Box::new(LiveClock);
+    let clock: BoxedWidget = Box::new(LiveClock {
+        text: clock_text.get(),
+    });
     let playback = (actions.current_playback)();
     let cover = music_cover(playback.as_ref());
     let section_width = viewport.width / 3.0;
@@ -123,6 +125,68 @@ pub fn build_dock(
     };
     let volume_icon = volume_icon(status.volume, status.volume_muted);
 
+    let weather_button: BoxedWidget = Box::new(
+        RawButton::new(island_button_style(126.0, 32.0), || {})
+            .with_click_position(move |point| weather_click(point))
+            .child(Box::new(jsx! {
+                <Flex direction={FlexDirection::Row} size={(126.0, 32.0)} padding={6.0} gap={4.0} align={Align::Center}>
+                    {pixel_icon("weather-sun-cloud", 14.0)}
+                    <RawText color={MUTED} font_size={10.0} align={TextAlign::Start}>{widgets::weather::DEFAULT_SUMMARY}</RawText>
+                </Flex>
+            })),
+    );
+    let toggle_playback = actions.toggle_playback.clone();
+    let toggle_button: BoxedWidget = Box::new(
+        RawButton::new(media_control_style(), || {})
+            .with_click_position(move |_| toggle_playback())
+            .child(Box::new(jsx! {
+                <Flex size={(18.0, 24.0)} align={Align::Center} justify={Justify::Center}>
+                    {pixel_icon(if playback.as_ref().is_some_and(|item| item.status == "Playing") { "pause" } else { "play" }, 14.0)}
+                </Flex>
+            })),
+    );
+    let music_button: BoxedWidget = Box::new(
+        RawButton::new(island_button_style(206.0, 32.0), || {})
+            .with_click_position(move |point| music_click(point))
+            .child(Box::new(jsx! {
+                <Flex direction={FlexDirection::Row} size={(206.0, 32.0)} padding={5.0} gap={4.0} align={Align::Center}>
+                    {cover}
+                    {toggle_button}
+                    {Box::new(RawMarquee::new(widgets::current_playing::summary(playback.as_ref()), MUTED, 10.0, 142.0)) as BoxedWidget}
+                </Flex>
+            })),
+    );
+    let drawer_button: BoxedWidget = Box::new(
+        RawButton::new(square_style(launcher_background), || {})
+            .with_click_position(move |point| drawer_click(point))
+            .child(Box::new(jsx! {
+                <Flex size={(32.0, 32.0)} align={Align::Center} justify={Justify::Center}>{pixel_icon("appgrid", 21.0)}</Flex>
+            })),
+    );
+    let control_button: BoxedWidget = Box::new(
+        RawButton::new(island_button_style(146.0, 32.0), || {})
+            .with_click_position(move |point| control_click(point))
+            .child(Box::new(jsx! {
+                <Flex direction={FlexDirection::Row} size={(146.0, 32.0)} padding={4.0} gap={7.0} justify={Justify::Center} align={Align::Center}>
+                    {pixel_icon(network_icon, 16.0)}
+                    {pixel_icon("brightness", 16.0)}
+                    {pixel_icon(volume_icon, 16.0)}
+                    {pixel_icon(bluetooth_icon, 16.0)}
+                    {pixel_icon(battery_icon, 16.0)}
+                    {pixel_icon("chevron-up", 13.0)}
+                </Flex>
+            })),
+    );
+    let clock_button: BoxedWidget = Box::new(
+        RawButton::new(island_button_style(68.0, 32.0), || {})
+            .with_click_position(move |point| clock_click(point))
+            .child(Box::new(jsx! {
+                <Flex direction={FlexDirection::Column} size={(68.0, 32.0)} padding={2.0} justify={Justify::Center} align={Align::Center}>
+                    {clock}
+                </Flex>
+            })),
+    );
+
     Box::new(jsx! {
         <Flex direction={FlexDirection::Column} size={(viewport.width, viewport.height)} justify={Justify::End} align={Align::Center} background={Color::rgba(0, 0, 0, 0)}>
             <Flex direction={FlexDirection::Row} size={(viewport.width, BAR_HEIGHT)} align={Align::Center} background={BAR} border={(ISLAND_BORDER, 1.0)}>
@@ -135,45 +199,19 @@ pub fn build_dock(
                         <Flex size={(3.0, 3.0)} background={MUTED} corner_radius={1.5} />
                         <Flex size={(3.0, 3.0)} background={MUTED} corner_radius={1.5} />
                     </Flex>
-                    <RawButton style={island_button_style(126.0, 32.0)} on_click={move || weather_click()}>
-                        <Flex direction={FlexDirection::Row} size={(126.0, 32.0)} padding={6.0} gap={4.0} align={Align::Center}>
-                            {pixel_icon("weather-sun-cloud", 14.0)}
-                            <RawText color={MUTED} font_size={10.0} align={TextAlign::Start}>{widgets::weather::DEFAULT_SUMMARY}</RawText>
-                        </Flex>
-                    </RawButton>
-                    <RawButton style={island_button_style(206.0, 32.0)} on_click={move || music_click()}>
-                        <Flex direction={FlexDirection::Row} size={(206.0, 32.0)} padding={5.0} gap={4.0} align={Align::Center}>
-                            {cover}
-                            <RawButton style={media_control_style()} on_click={move || (actions.toggle_playback)()}><Flex size={(18.0, 24.0)} align={Align::Center} justify={Justify::Center}>{pixel_icon(if playback.as_ref().is_some_and(|item| item.status == "Playing") { "pause" } else { "play" }, 14.0)}</Flex></RawButton>
-                            {Box::new(RawMarquee::new(widgets::current_playing::summary(playback.as_ref()), MUTED, 10.0, 142.0)) as BoxedWidget}
-                        </Flex>
-                    </RawButton>
+                    {weather_button}
+                    {music_button}
                 </Flex>
                 <Flex direction={FlexDirection::Row} size={(section_width, BAR_HEIGHT)} justify={Justify::Center} align={Align::Center}>
                     <Flex direction={FlexDirection::Row} size={(dock_width, 40.0)} padding={4.0} gap={6.0} align={Align::Center} background={ISLAND} border={(ISLAND_BORDER, 1.0)} corner_radius={12.0}>
-                        <RawButton style={square_style(launcher_background)} on_click={move || drawer_click()}>
-                            <Flex size={(32.0, 32.0)} align={Align::Center} justify={Justify::Center}>{pixel_icon("appgrid", 21.0)}</Flex>
-                        </RawButton>
+                        {drawer_button}
                         {tasks}
                     </Flex>
                 </Flex>
                 <Flex direction={FlexDirection::Row} size={(section_width, BAR_HEIGHT)} gap={6.0} justify={Justify::End} align={Align::Center}>
                     <Flex size={(EDGE_GAP, BAR_HEIGHT)} />
-                    <RawButton style={island_button_style(146.0, 32.0)} on_click={move || control_click()}>
-                        <Flex direction={FlexDirection::Row} size={(146.0, 32.0)} padding={4.0} gap={7.0} justify={Justify::Center} align={Align::Center}>
-                            {pixel_icon(network_icon, 16.0)}
-                            {pixel_icon("brightness", 16.0)}
-                            {pixel_icon(volume_icon, 16.0)}
-                            {pixel_icon(bluetooth_icon, 16.0)}
-                            {pixel_icon(battery_icon, 16.0)}
-                            {pixel_icon("chevron-up", 13.0)}
-                        </Flex>
-                    </RawButton>
-                    <RawButton style={island_button_style(68.0, 32.0)} on_click={move || clock_click()}>
-                        <Flex direction={FlexDirection::Column} size={(68.0, 32.0)} padding={2.0} justify={Justify::Center} align={Align::Center}>
-                            {clock}
-                        </Flex>
-                    </RawButton>
+                    {control_button}
+                    {clock_button}
                     <Flex size={(EDGE_GAP, BAR_HEIGHT)} />
                 </Flex>
             </Flex>
@@ -217,7 +255,9 @@ fn volume_icon(level: f32, muted: bool) -> &'static str {
     }
 }
 
-struct LiveClock;
+struct LiveClock {
+    text: String,
+}
 
 impl Widget for LiveClock {
     fn style(&self) -> Style {
@@ -228,12 +268,9 @@ impl Widget for LiveClock {
     }
 
     fn paint(&self, painter: &mut dyn Painter, rect: Rect) {
-        painter.animation_time();
-        let now = Local::now();
-        let time = now.format("%H:%M").to_string();
         painter.fill_text_font(
             rect,
-            &time,
+            &self.text,
             PRIMARY,
             13.0,
             TextAlign::Center,

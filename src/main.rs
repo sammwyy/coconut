@@ -1,5 +1,6 @@
 mod app;
 mod bar;
+mod desktop;
 mod icons;
 mod integrations;
 mod panels;

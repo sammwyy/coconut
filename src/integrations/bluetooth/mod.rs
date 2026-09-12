@@ -7,6 +7,7 @@ pub trait BluetoothIntegration {
     fn powered(&self) -> bool;
     fn connected(&self) -> bool;
     fn device_name(&self) -> Option<String>;
+    fn set_powered(&self, powered: bool);
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -26,4 +27,5 @@ impl BluetoothIntegration for Fallback {
     fn device_name(&self) -> Option<String> {
         None
     }
+    fn set_powered(&self, _: bool) {}
 }

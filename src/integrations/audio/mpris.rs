@@ -27,7 +27,7 @@ impl Mpris {
             if let Ok(mut current) = cache.lock() {
                 *current = next;
             }
-            thread::sleep(Duration::from_secs(1));
+            thread::sleep(Duration::from_millis(500));
         });
         Self { playback }
     }
@@ -44,6 +44,25 @@ impl AudioIntegration for Mpris {
     fn toggle_playback(&self) {
         thread::spawn(|| {
             let _ = playerctl(&["play-pause"]);
+        });
+    }
+
+    fn seek(&self, position: f64) {
+        thread::spawn(move || {
+            let position = position.max(0.0).to_string();
+            let _ = playerctl(&["position", &position]);
+        });
+    }
+
+    fn previous(&self) {
+        thread::spawn(|| {
+            let _ = playerctl(&["previous"]);
+        });
+    }
+
+    fn next(&self) {
+        thread::spawn(|| {
+            let _ = playerctl(&["next"]);
         });
     }
 }

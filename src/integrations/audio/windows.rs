@@ -40,6 +40,22 @@ impl AudioIntegration for WindowsMedia {
             ));
         });
     }
+
+    fn previous(&self) {
+        thread::spawn(|| {
+            let _ = powershell(&media_script(
+                "$session.TrySkipPreviousAsync().GetAwaiter().GetResult() | Out-Null",
+            ));
+        });
+    }
+
+    fn next(&self) {
+        thread::spawn(|| {
+            let _ = powershell(&media_script(
+                "$session.TrySkipNextAsync().GetAwaiter().GetResult() | Out-Null",
+            ));
+        });
+    }
 }
 
 fn query_playback() -> Option<Playback> {

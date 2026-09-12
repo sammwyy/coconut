@@ -11,6 +11,7 @@ pub struct WindowsNetwork {
 #[derive(Default)]
 struct State {
     connected: bool,
+    enabled: bool,
     name: Option<String>,
     strength: Option<u8>,
 }
@@ -46,6 +47,34 @@ impl NetworkIntegration for WindowsNetwork {
     }
     fn strength(&self) -> Option<u8> {
         self.state.lock().ok().and_then(|state| state.strength)
+    }
+
+    fn enabled(&self) -> bool {
+        self.state
+            .lock()
+            .map(|state| state.enabled)
+            .unwrap_or(false)
+    }
+
+    fn set_enabled(&self, enabled: bool) {
+        if let Ok(mut state) = self.state.lock() {
+            state.enabled = enabled;
+            if !enabled {
+                state.connected = false;
+                state.name = None;
+                state.strength = None;
+            }
+        }
+        thread::spawn(move || {
+            let action = if enabled {
+                "Enable-NetAdapter"
+            } else {
+                "Disable-NetAdapter"
+            };
+            let _ = powershell(&format!(
+                "Get-NetAdapter | Where-Object {{ $_.MediaType -eq 'Native 802.11' -or $_.Name -match 'Wi-Fi|Wireless' }} | Select-Object -First 1 | {action} -Confirm:$false"
+            ));
+        });
     }
 }
 
@@ -85,6 +114,11 @@ fn query() -> State {
     }
     State {
         connected,
+        enabled: connected
+            || powershell(
+                "(Get-NetAdapter | Where-Object { $_.MediaType -eq 'Native 802.11' -or $_.Name -match 'Wi-Fi|Wireless' } | Where-Object Status -ne 'Disabled' | Measure-Object).Count",
+            )
+            .is_some_and(|count| count != "0"),
         name,
         strength,
     }

@@ -1,10 +1,14 @@
+use crate::panels::chrome::{
+    ACCENT, BORDER, CARD, CARD_RADIUS, CONTROL, CONTROL_HOVER, ISLAND_RADIUS, MUTED, PANEL,
+    SELECTED, TEXT,
+};
 use creamui_core::layout::{FlexDirection, Style as LayoutStyle};
-use creamui_core::{BoxedWidget, Size, Style, Styled};
+use creamui_core::{BoxedWidget, Size, StateStyle, Style, Styled};
 use creamui_image::{Image, ImageData, ImageFit};
 use creamui_macros::jsx;
 use creamui_reactive::Signal;
 use creamui_render::AppHandle;
-use creamui_theme::Color;
+use creamui_theme::SelectionStyle;
 use creamui_widgets::layout::{fixed, Align, Flex, Justify, Wrap};
 use creamui_widgets::RawButton;
 use creamui_widgets::{
@@ -16,13 +20,10 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::thread;
 
-const CARD: Color = Color::rgba(27, 28, 30, 252);
-const PANEL: Color = Color::rgba(39, 40, 42, 245);
-const TEXT: Color = Color::rgb(244, 244, 245);
-const MUTED: Color = Color::rgb(166, 168, 171);
-const ACCENT: Color = Color::rgba(255, 255, 255, 28);
 pub const WIDTH: u32 = 620;
 pub const HEIGHT: u32 = 480;
+const TILE: f32 = 104.0;
+const TILE_H: f32 = 114.0;
 
 #[derive(Clone)]
 pub struct AppCatalog {
@@ -89,6 +90,7 @@ pub fn build(
 ) -> BoxedWidget {
     let query = state.query.get();
     let selected_tab = state.tab.selected();
+    let loaded = !catalog.apps().is_empty();
     let apps: Vec<_> = catalog
         .apps()
         .into_iter()
@@ -96,13 +98,14 @@ pub fn build(
         .collect();
     let count = apps.len();
     let content: BoxedWidget = if apps.is_empty() {
+        let message = if loaded { "No matches" } else { "Scanning" };
         Box::new(jsx! {
-            <Flex grow={1.0} align={Align::Center} justify={Justify::Center}>
-                <RawText color={MUTED} font_size={12.0}>"Loading applications…"</RawText>
+            <Flex grow={1.0} size={(584.0, 260.0)} align={Align::Center} justify={Justify::Center}>
+                <RawText color={MUTED} font_size={16.0}>{message}</RawText>
             </Flex>
         })
     } else {
-        let mut grid = Flex::row().gap(10.0).wrap(Wrap::Wrap);
+        let mut grid = Flex::row().gap(10.0).wrap(Wrap::Wrap).padding(6.0);
         for app in apps {
             let launch = app.clone();
             let close = on_launch.clone();
@@ -124,27 +127,37 @@ pub fn build(
             search_state.set(next);
             scroll_for_search.set(0.0);
         })
-        .placeholder("Search applications")
+        .placeholder("Search")
+        .background(PANEL)
+        .border(BORDER, 1.0)
+        .corner_radius(ISLAND_RADIUS)
         .layout(search_style()),
     ) as BoxedWidget;
     let tabs = category_tabs(state.clone());
     let scroll = Box::new(
         ScrollView::controlled(scroll_style(), state.scroll.clone())
             .background(PANEL)
-            .corner_radius(10.0)
+            .border(BORDER, 1.0)
+            .corner_radius(ISLAND_RADIUS)
             .child(content),
     ) as BoxedWidget;
+    let subtitle = if !loaded {
+        "Scanning desktop entries".to_owned()
+    } else {
+        format!("{count} apps")
+    };
 
     Box::new(jsx! {
-        <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={18.0} gap={14.0} background={CARD} corner_radius={16.0}>
-            <Flex direction={FlexDirection::Row} align={Align::Center} gap={10.0}>
-                <Flex direction={FlexDirection::Column} gap={2.0}>
-                    <RawText color={TEXT} font_size={17.0}>"Applications"</RawText>
-                    <RawText color={MUTED} font_size={10.0}>{if count == 0 { "Discovering desktop entries".to_owned() } else { format!("{count} installed applications") }}</RawText>
-                </Flex>
+        <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={16.0} gap={12.0} background={CARD} border={(BORDER, 1.0)} corner_radius={CARD_RADIUS}>
+            <Flex direction={FlexDirection::Row} align={Align::Center}>
+                <RawText color={TEXT} font_size={18.0}>"APPS"</RawText>
+                <Flex grow={1.0} />
+                <RawText color={MUTED} font_size={13.0}>{subtitle}</RawText>
             </Flex>
             {search}
-            {tabs}
+            <Flex padding={4.0} background={PANEL} border={(BORDER, 1.0)} corner_radius={ISLAND_RADIUS}>
+                {tabs}
+            </Flex>
             {scroll}
         </Flex>
     })
@@ -158,7 +171,7 @@ fn app_card(app: &AppEntry) -> BoxedWidget {
             Box::new(
                 Image::new(data)
                     .layout(LayoutStyle {
-                        size: fixed(34.0, 34.0),
+                        size: fixed(48.0, 48.0),
                         ..Default::default()
                     })
                     .fit(ImageFit::Contain),
@@ -166,15 +179,15 @@ fn app_card(app: &AppEntry) -> BoxedWidget {
         })
         .unwrap_or_else(|| {
             Box::new(jsx! {
-                <Flex size={(34.0, 34.0)} align={Align::Center} justify={Justify::Center} background={ACCENT} corner_radius={10.0}>
-                    <RawText color={TEXT} font_size={16.0}>{app.name.chars().next().unwrap_or('•').to_uppercase().to_string()}</RawText>
+                <Flex size={(48.0, 48.0)} align={Align::Center} justify={Justify::Center} background={ACCENT} corner_radius={14.0}>
+                    <RawText color={TEXT} font_size={20.0}>{app.name.chars().next().unwrap_or('•').to_uppercase().to_string()}</RawText>
                 </Flex>
             })
         });
     Box::new(jsx! {
-        <Flex direction={FlexDirection::Column} size={(86.0, 94.0)} padding={8.0} gap={6.0} align={Align::Center} justify={Justify::Center}>
+        <Flex direction={FlexDirection::Column} size={(TILE, TILE_H)} padding={10.0} gap={8.0} align={Align::Center} justify={Justify::Center}>
             {icon}
-            <RawText color={MUTED} font_size={10.0}>{short_name(&app.name)}</RawText>
+            <RawText color={MUTED} font_size={11.0}>{short_name(&app.name)}</RawText>
         </Flex>
     })
 }
@@ -182,8 +195,8 @@ fn app_card(app: &AppEntry) -> BoxedWidget {
 const CATEGORIES: [&str; 5] = ["All", "Internet", "Development", "Media", "System"];
 
 fn category_tabs(state: DrawerState) -> BoxedWidget {
-    let colors = TabColors::dark();
-    let styles = creamui_widgets::tab_styles(&CATEGORIES, TabSizing::Fill, 30.0, 6.0);
+    let colors = drawer_tab_colors();
+    let styles = creamui_widgets::tab_styles(&CATEGORIES, TabSizing::Fill, 36.0, 6.0);
     let mut tabs = Tabs::new(colors, tab_bar_style()).gap(4.0);
     for (index, label) in CATEGORIES.into_iter().enumerate() {
         let controller = state.tab.clone();
@@ -490,8 +503,30 @@ fn supported_image(path: &Path) -> bool {
         })
 }
 
+fn drawer_tab_colors() -> TabColors {
+    TabColors {
+        background: PANEL,
+        inactive_background: Some(CONTROL),
+        active_background: SELECTED,
+        hover_background: CONTROL_HOVER,
+        indicator: SELECTED,
+        text: TEXT,
+        active_text: TEXT,
+        muted_text: MUTED,
+        radius: 9.0,
+        container_radius: ISLAND_RADIUS,
+        selection: SelectionStyle::Filled,
+        indicator_thickness: 0.0,
+        gap: 4.0,
+        icon_size: 0.0,
+        icon_radius: 0.0,
+        item_gap: 0.0,
+        separator: BORDER,
+    }
+}
+
 fn short_name(name: &str) -> String {
-    const MAX: usize = 12;
+    const MAX: usize = 14;
     let mut shortened: String = name.chars().take(MAX).collect();
     if name.chars().count() > MAX {
         shortened.push('…');
@@ -502,30 +537,32 @@ fn short_name(name: &str) -> String {
 fn app_style() -> Style {
     Style::new()
         .layout(LayoutStyle {
-            size: fixed(86.0, 94.0),
+            size: fixed(TILE, TILE_H),
             ..Default::default()
         })
         .background(PANEL)
-        .corner_radius(12.0)
+        .corner_radius(14.0)
+        .hover(StateStyle::new().background(CONTROL_HOVER))
+        .pressed(StateStyle::new().background(SELECTED))
 }
 
 fn search_style() -> creamui_core::layout::Style {
     LayoutStyle {
-        size: fixed(584.0, 34.0),
+        size: fixed(588.0, 42.0),
         ..Default::default()
     }
 }
 
 fn tab_bar_style() -> creamui_core::layout::Style {
     LayoutStyle {
-        size: fixed(584.0, 34.0),
+        size: fixed(580.0, 36.0),
         ..Default::default()
     }
 }
 
 fn scroll_style() -> creamui_core::layout::Style {
     LayoutStyle {
-        size: fixed(584.0, 300.0),
+        size: fixed(588.0, 296.0),
         ..Default::default()
     }
 }
