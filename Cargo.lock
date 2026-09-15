@@ -428,14 +428,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "coconut"
-version = "0.1.0"
-dependencies = [
- "coconut-settings-panel",
- "coconut-shell",
-]
-
-[[package]]
 name = "coconut-api"
 version = "0.1.0"
 dependencies = [
@@ -542,7 +534,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "coconut-settings-panel"
+name = "coconut-settings"
 version = "0.1.0"
 dependencies = [
  "coconut-core",

@@ -1,15 +1,14 @@
-use crate::common::{section, update_config};
+use crate::common::{group, row, section, update_config};
 use coconut_core::ShellConfig;
 use creamui_core::layout::FlexDirection;
 use creamui_core::{BoxedWidget, Size};
 use creamui_macros::jsx;
 use creamui_reactive::Signal;
 use creamui_theme::use_theme;
-use creamui_widgets::{FilePicker, Text, TextSize};
+use creamui_widgets::{Button, FilePicker};
 use std::path::PathBuf;
 
 pub fn build(_: Size, config: &Signal<ShellConfig>) -> BoxedWidget {
-    let theme = use_theme();
     let current = config
         .get()
         .desktop
@@ -27,27 +26,21 @@ pub fn build(_: Size, config: &Signal<ShellConfig>) -> BoxedWidget {
     );
 
     let clear_config = config.clone();
-    let clear: BoxedWidget = Box::new(jsx! {
-        <Button on_click={move || update_config(&clear_config, |c| c.desktop.wallpaper = None)}>"Clear"</Button>
-    });
+    let clear: BoxedWidget = Box::new(Button::new("Use default", move || {
+        update_config(&clear_config, |c| c.desktop.wallpaper = None);
+    }));
 
-    let caption = if current.is_empty() {
-        "Using the built-in background.".to_owned()
-    } else {
-        format!("Applies after Coconut's shell restarts. Current: {current}")
-    };
+    let theme = use_theme();
+    let control = Box::new(jsx! {
+        <Flex direction={FlexDirection::Row} gap={theme.spacing_small}>
+            {picker}
+            {clear}
+        </Flex>
+    });
 
     section(
         "Wallpaper",
-        "The desktop background image.",
-        vec![
-            Box::new(jsx! {
-                <Flex direction={FlexDirection::Row} gap={theme.spacing_medium}>
-                    {picker}
-                    {clear}
-                </Flex>
-            }),
-            Box::new(Text::new(caption).size(TextSize::Sm)),
-        ],
+        "The desktop background image. Applies after the shell restarts.",
+        vec![group(vec![row("Image", control)])],
     )
 }

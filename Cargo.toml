@@ -1,21 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/*", "integrations/*"]
-
-[package]
-name = "coconut"
-version = "0.1.0"
-edition = "2021"
-description = "A small, native Wayland dock built with CreamUI"
-license = "Apache-2.0"
-
-[[bin]]
-name = "coconut"
-path = "src/main.rs"
-
-[dependencies]
-coconut-shell = { path = "crates/shell" }
-coconut-settings-panel = { path = "crates/settings-panel" }
+members = ["apps/*", "crates/*", "integrations/*"]
 
 [profile.dev.package."*"]
 opt-level = 2

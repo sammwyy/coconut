@@ -2,12 +2,14 @@ mod common;
 mod sections;
 
 use coconut_core::ShellConfig;
-use creamui_core::layout::{AlignItems, Dimension, FlexDirection, LengthPercentage, Style};
+use creamui_core::layout::{Dimension, FlexDirection, LengthPercentage, Style};
 use creamui_core::{BoxedWidget, Size};
 use creamui_macros::jsx;
 use creamui_reactive::Signal;
 use creamui_render::{platform::WindowRole, AppBuilder, WindowHandle, WindowOptions};
-use creamui_widgets::{nested_sidebar, SidebarNavController, SidebarNode, TabColors};
+use creamui_widgets::{
+    nested_sidebar, SidebarNavController, SidebarNode, Surface, SurfaceRole, Symbol,
+};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -26,19 +28,21 @@ fn tree() -> Vec<SidebarNode<Section>> {
     vec![
         SidebarNode::parent(
             Section::Desktop,
+            Symbol::Display,
             "Desktop",
             vec![
-                SidebarNode::leaf(Section::Appearance, "Appearance"),
-                SidebarNode::leaf(Section::Wallpaper, "Wallpaper"),
+                SidebarNode::leaf(Section::Appearance, Symbol::Appearance, "Appearance"),
+                SidebarNode::leaf(Section::Wallpaper, Symbol::Image, "Wallpaper"),
             ],
         ),
         SidebarNode::parent(
             Section::Shell,
+            Symbol::Controls,
             "Shell",
             vec![
-                SidebarNode::leaf(Section::General, "General"),
-                SidebarNode::leaf(Section::Tray, "Tray"),
-                SidebarNode::leaf(Section::Widgets, "Widgets"),
+                SidebarNode::leaf(Section::General, Symbol::Sliders, "General"),
+                SidebarNode::leaf(Section::Tray, Symbol::Grid, "Tray"),
+                SidebarNode::leaf(Section::Widgets, Symbol::Check, "Widgets"),
             ],
         ),
     ]
@@ -50,7 +54,6 @@ pub fn run() {
     let view = Signal::new(Section::Appearance);
     let nav = SidebarNavController::<Section>::new();
     let window: Rc<RefCell<Option<WindowHandle>>> = Rc::new(RefCell::new(None));
-
     let initial_theme = creamui_theme::active_theme();
 
     AppBuilder::new()
@@ -58,8 +61,8 @@ pub fn run() {
             app.append_window(
                 WindowOptions {
                     title: "Coconut Settings".into(),
-                    width: 760,
-                    height: 520,
+                    width: 800,
+                    height: 540,
                     decorations: true,
                     resizable: true,
                     transparent: false,
@@ -86,34 +89,31 @@ fn build(
     nav: &SidebarNavController<Section>,
     window: &Rc<RefCell<Option<WindowHandle>>>,
 ) -> BoxedWidget {
+    let theme = creamui_theme::use_theme();
+
     let sidebar_style = Style {
+        flex_direction: FlexDirection::Column,
         size: creamui_core::layout::Size {
-            width: Dimension::Length(200.0),
+            width: Dimension::Length(196.0),
             height: Dimension::Percent(1.0),
         },
         flex_shrink: 0.0,
         padding: creamui_core::layout::Rect {
-            left: LengthPercentage::Length(12.0),
-            right: LengthPercentage::Length(12.0),
-            top: LengthPercentage::Length(16.0),
-            bottom: LengthPercentage::Length(16.0),
+            left: LengthPercentage::Length(14.0),
+            right: LengthPercentage::Length(6.0),
+            top: LengthPercentage::Length(20.0),
+            bottom: LengthPercentage::Length(20.0),
         },
-        ..Default::default()
-    };
-    let item_style = Style {
-        size: creamui_core::layout::Size {
-            width: Dimension::Percent(1.0),
-            height: Dimension::Length(36.0),
+        gap: creamui_core::layout::Size {
+            width: LengthPercentage::Length(2.0),
+            height: LengthPercentage::Length(2.0),
         },
-        align_items: Some(AlignItems::Center),
         ..Default::default()
     };
     let current = view.get();
     let select = view.clone();
     let sidebar = nested_sidebar(
-        TabColors::sidebar(),
         sidebar_style,
-        item_style,
         &tree(),
         nav,
         Some(&current),
@@ -126,13 +126,49 @@ fn build(
         Section::General => sections::general::build(size, config),
         Section::Tray => sections::tray::build(size, config),
         Section::Widgets => sections::widgets::build(size, config),
-        Section::Desktop | Section::Shell => sections::appearance::build(size, active_theme_id, window),
+        Section::Desktop | Section::Shell => {
+            sections::appearance::build(size, active_theme_id, window)
+        }
+    };
+
+    let panel_style = Style {
+        flex_direction: FlexDirection::Column,
+        flex_grow: 1.0,
+        size: creamui_core::layout::Size {
+            width: Dimension::Auto,
+            height: Dimension::Percent(1.0),
+        },
+        padding: creamui_core::layout::Rect {
+            left: LengthPercentage::Length(28.0),
+            right: LengthPercentage::Length(28.0),
+            top: LengthPercentage::Length(24.0),
+            bottom: LengthPercentage::Length(24.0),
+        },
+        ..Default::default()
+    };
+    let panel: BoxedWidget = Box::new(Surface::new(SurfaceRole::Panel, panel_style).child(content));
+    let panel_outer_style = Style {
+        flex_direction: FlexDirection::Column,
+        flex_grow: 1.0,
+        size: creamui_core::layout::Size {
+            width: Dimension::Auto,
+            height: Dimension::Percent(1.0),
+        },
+        padding: creamui_core::layout::Rect {
+            left: LengthPercentage::Length(0.0),
+            right: LengthPercentage::Length(20.0),
+            top: LengthPercentage::Length(20.0),
+            bottom: LengthPercentage::Length(20.0),
+        },
+        ..Default::default()
     };
 
     Box::new(jsx! {
-        <Flex direction={FlexDirection::Row} size={(size.width, size.height)}>
+        <Flex direction={FlexDirection::Row} size={(size.width, size.height)} background={theme.surface}>
             {sidebar}
-            {content}
+            <RawView style={panel_outer_style}>
+                {panel}
+            </RawView>
         </Flex>
     })
 }

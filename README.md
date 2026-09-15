@@ -9,6 +9,15 @@ lightweight pop-up panels. It aims to make everyday desktop actions feel
 immediate: launch an app, switch windows, check what is playing, or adjust your
 system without leaving your flow.
 
+## Applications
+
+- `coconut` runs the shell.
+- `coconut settings` opens the settings application.
+- `coconut-settings` opens the settings application directly.
+
+For local development, run `cargo run -p coconut-shell` or
+`cargo run -p coconut-settings`.
+
 ## Highlights
 
 - A centered dock with running applications and active-window feedback

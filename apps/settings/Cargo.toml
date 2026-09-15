@@ -1,12 +1,16 @@
 [package]
-name = "coconut-settings-panel"
+name = "coconut-settings"
 version = "0.1.0"
 edition = "2021"
 description = "Coconut's settings window process"
 license = "Apache-2.0"
 
+[[bin]]
+name = "coconut-settings"
+path = "src/main.rs"
+
 [dependencies]
-coconut-core = { path = "../core" }
+coconut-core = { path = "../../crates/core" }
 creamui-core = { path = "../../../creamui/crates/core" }
 creamui-image = { path = "../../../creamui/crates/image", features = ["webp", "jpeg"] }
 creamui-jsx = { path = "../../../creamui/crates/jsx" }

@@ -5,7 +5,7 @@ use creamui_image::{Image, ImageData, ImageFit};
 use creamui_macros::jsx;
 use creamui_reactive::Signal;
 use creamui_render::WindowHandle;
-use creamui_theme::use_theme;
+use creamui_theme::{use_theme, Color};
 use creamui_widgets::layout::{fixed, Align, Justify, Wrap};
 use creamui_widgets::{Text, TextSize};
 use std::cell::RefCell;
@@ -56,15 +56,10 @@ pub fn build(
                 },
                 ..Default::default()
             };
-            let background = if is_active {
-                theme.colors.surface_hover
-            } else {
-                theme.colors.surface_elevated
-            };
-            Box::new(jsx! {
+            let card: BoxedWidget = Box::new(jsx! {
                 <RawButton
                     style={button_style}
-                    background={background}
+                    background={theme.colors.surface}
                     corner_radius={theme.card_radius}
                     on_click={move || {
                         if creamui_theme::set_active_theme(&id) {
@@ -80,6 +75,25 @@ pub fn build(
                         {Box::new(Text::new(title_case(&info.id)).size(TextSize::Sm)) as BoxedWidget}
                     </Flex>
                 </RawButton>
+            });
+            // A ring around the selected card, mac-style, rather than a
+            // filled highlight: an outer box tinted with the accent color,
+            // showing only as the inset padding around the card inside it.
+            let ring = if is_active {
+                theme.colors.accent
+            } else {
+                Color::rgba(0, 0, 0, 0)
+            };
+            Box::new(jsx! {
+                <Flex
+                    size={(CARD_W + 6.0, CARD_H + 6.0)}
+                    align={Align::Center}
+                    justify={Justify::Center}
+                    background={ring}
+                    corner_radius={theme.card_radius + 3.0}
+                >
+                    {card}
+                </Flex>
             }) as BoxedWidget
         })
         .collect();

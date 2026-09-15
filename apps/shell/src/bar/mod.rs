@@ -770,7 +770,8 @@ mod tests {
 
     #[test]
     fn svg_window_icons_are_decoded() {
-        assert!(decode_svg_icon(Path::new("assets/icons/brightness.svg")).is_some());
+        let icon = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/icons/brightness.svg");
+        assert!(decode_svg_icon(&icon).is_some());
     }
 
     #[test]

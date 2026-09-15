@@ -1,11 +1,8 @@
-use crate::common::{section, update_config};
+use crate::common::{group, row, section, update_config};
 use coconut_core::{ShellConfig, TrayConfig, TrayMode, TrayVisibility};
-use creamui_core::layout::FlexDirection;
 use creamui_core::{BoxedWidget, Size};
-use creamui_macros::jsx;
 use creamui_reactive::Signal;
-use creamui_theme::use_theme;
-use creamui_widgets::{SegmentedControl, Text, TextSize};
+use creamui_widgets::SegmentedControl;
 
 const MODES: [TrayMode; 2] = [TrayMode::Grouped, TrayMode::Individual];
 const VISIBILITIES: [TrayVisibility; 3] = [
@@ -28,29 +25,24 @@ pub fn build(_: Size, config: &Signal<ShellConfig>) -> BoxedWidget {
         .option("Individual"),
     );
 
-    let rows = vec![
-        labeled_row("Mode", mode_control),
-        visibility_row("Wi-Fi", config, |t| t.wifi, |t, v| t.wifi = v),
-        visibility_row(
-            "Bluetooth",
-            config,
-            |t| t.bluetooth,
-            |t, v| t.bluetooth = v,
-        ),
-        visibility_row("Battery", config, |t| t.battery, |t, v| t.battery = v),
-        visibility_row("Volume", config, |t| t.volume, |t, v| t.volume = v),
-        visibility_row(
-            "Brightness",
-            config,
-            |t| t.brightness,
-            |t, v| t.brightness = v,
-        ),
-    ];
-
     section(
         "Tray",
         "How status icons open their controls, and which ones show in the bar.",
-        rows,
+        vec![
+            group(vec![row("Mode", mode_control)]),
+            group(vec![
+                visibility_row("Wi-Fi", config, |t| t.wifi, |t, v| t.wifi = v),
+                visibility_row("Bluetooth", config, |t| t.bluetooth, |t, v| t.bluetooth = v),
+                visibility_row("Battery", config, |t| t.battery, |t, v| t.battery = v),
+                visibility_row("Volume", config, |t| t.volume, |t, v| t.volume = v),
+                visibility_row(
+                    "Brightness",
+                    config,
+                    |t| t.brightness,
+                    |t, v| t.brightness = v,
+                ),
+            ]),
+        ],
     )
 }
 
@@ -73,15 +65,5 @@ fn visibility_row(
         .option("Hidden")
         .option("Off"),
     );
-    labeled_row(label, control)
-}
-
-fn labeled_row(label: &str, control: BoxedWidget) -> BoxedWidget {
-    let theme = use_theme();
-    Box::new(jsx! {
-        <Flex direction={FlexDirection::Column} gap={theme.spacing_small}>
-            {Box::new(Text::new(label.to_owned()).size(TextSize::Sm)) as BoxedWidget}
-            {control}
-        </Flex>
-    })
+    row(label, control)
 }

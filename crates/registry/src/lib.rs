@@ -107,8 +107,7 @@ fn detect_bluetooth() -> Rc<dyn coconut_api::bluetooth::BluetoothIntegration> {
 
 fn detect_power_profile() -> Rc<dyn coconut_api::power_profile::PowerProfileIntegration> {
     #[cfg(feature = "power-profiles-daemon")]
-    if let Some(item) = coconut_integration_power_profiles_daemon::PowerProfilesDaemon::detect()
-    {
+    if let Some(item) = coconut_integration_power_profiles_daemon::PowerProfilesDaemon::detect() {
         return Rc::new(item);
     }
     Rc::new(coconut_api::power_profile::Fallback)

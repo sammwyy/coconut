@@ -312,11 +312,7 @@ pub fn run() {
                     return;
                 };
                 drawer_app.append_popup(
-                    popup_options(
-                        "Coconut App Drawer",
-                        app_drawer::WIDTH,
-                        app_drawer::HEIGHT,
-                    ),
+                    popup_options("Coconut App Drawer", app_drawer::WIDTH, app_drawer::HEIGHT),
                     popup,
                     Color::rgba(0, 0, 0, 0),
                     move |window| {
@@ -569,11 +565,7 @@ pub fn run() {
                     return;
                 };
                 energy_app.append_popup(
-                    popup_options(
-                        "Coconut Energy",
-                        energy_panel::WIDTH,
-                        energy_panel::HEIGHT,
-                    ),
+                    popup_options("Coconut Energy", energy_panel::WIDTH, energy_panel::HEIGHT),
                     popup,
                     Color::rgba(0, 0, 0, 0),
                     move |window| {
@@ -657,11 +649,7 @@ pub fn run() {
                     return;
                 };
                 volume_app.append_popup(
-                    popup_options(
-                        "Coconut Volume",
-                        volume_panel::WIDTH,
-                        volume_panel::HEIGHT,
-                    ),
+                    popup_options("Coconut Volume", volume_panel::WIDTH, volume_panel::HEIGHT),
                     popup,
                     Color::rgba(0, 0, 0, 0),
                     move |window| {

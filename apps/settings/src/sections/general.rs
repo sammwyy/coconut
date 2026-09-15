@@ -1,16 +1,12 @@
-use crate::common::{section, update_config};
+use crate::common::{group, row, section, update_config};
 use coconut_core::{BarPosition, ShellConfig};
-use creamui_core::layout::FlexDirection;
 use creamui_core::{BoxedWidget, Size};
-use creamui_macros::jsx;
 use creamui_reactive::Signal;
-use creamui_theme::use_theme;
-use creamui_widgets::{SegmentedControl, Text, TextSize};
+use creamui_widgets::SegmentedControl;
 
 const POSITIONS: [BarPosition; 2] = [BarPosition::Top, BarPosition::Bottom];
 
 pub fn build(_: Size, config: &Signal<ShellConfig>) -> BoxedWidget {
-    let theme = use_theme();
     let selected = POSITIONS
         .iter()
         .position(|position| *position == config.get().bar.position)
@@ -23,15 +19,10 @@ pub fn build(_: Size, config: &Signal<ShellConfig>) -> BoxedWidget {
         .option("Top")
         .option("Bottom"),
     );
-    let row = jsx! {
-        <Flex direction={FlexDirection::Column} gap={theme.spacing_small}>
-            {Box::new(Text::new("Bar position").size(TextSize::Sm)) as BoxedWidget}
-            {control}
-        </Flex>
-    };
+
     section(
         "General",
         "Where the dock sits on screen.",
-        vec![Box::new(row)],
+        vec![group(vec![row("Bar position", control)])],
     )
 }
