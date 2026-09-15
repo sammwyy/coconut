@@ -30,7 +30,6 @@ pub fn run() {
     let initial_windows = integrations.desktop.windows();
     let windows = Signal::new(initial_windows);
     let launcher_open = Signal::new(false);
-    let active_window = Signal::new(None);
     let ready_backend = integrations.desktop.clone();
     let playback_backend = integrations.audio.clone();
     let playback_state = Signal::new(playback_backend.playback());
@@ -106,13 +105,15 @@ pub fn run() {
             );
             schedule_clock_refresh(app.clone(), clock_text.clone(), clock_format.clone());
             applications.start_loading(&app);
-            for delay in [Duration::from_secs(1), Duration::from_secs(3)] {
-                let backend = bar_windows_backend.clone();
-                let target = windows.clone();
-                app.spawn_background(
-                    move || std::thread::sleep(delay),
-                    move |_| target.set(backend.windows()),
-                );
+            if !schedule_window_events(app.clone(), bar_windows_backend.clone(), windows.clone()) {
+                for delay in [Duration::from_secs(1), Duration::from_secs(3)] {
+                    let backend = bar_windows_backend.clone();
+                    let target = windows.clone();
+                    app.spawn_background(
+                        move || std::thread::sleep(delay),
+                        move |_| target.set(backend.windows()),
+                    );
+                }
             }
             let weather_app = app.clone();
             let weather_handle: Rc<RefCell<Option<WindowHandle>>> = Rc::new(RefCell::new(None));
@@ -407,7 +408,6 @@ pub fn run() {
                             viewport,
                             windows.get(),
                             launcher_open.clone(),
-                            active_window.clone(),
                             status,
                             clock_text.clone(),
                             BarActions {
@@ -442,6 +442,37 @@ pub fn run() {
             );
         })
         .run();
+}
+
+fn schedule_window_events(
+    app: AppHandle,
+    backend: Rc<dyn crate::integrations::desktop::DesktopIntegration>,
+    windows: Signal<Vec<crate::platform::OpenWindow>>,
+) -> bool {
+    let Some(listener) = backend.window_changes() else {
+        return false;
+    };
+    wait_for_window_event(app, backend, windows, listener);
+    true
+}
+
+fn wait_for_window_event(
+    app: AppHandle,
+    backend: Rc<dyn crate::integrations::desktop::DesktopIntegration>,
+    windows: Signal<Vec<crate::platform::OpenWindow>>,
+    listener: crate::integrations::desktop::WindowChangeListener,
+) {
+    let waiting_listener = listener.clone();
+    let next_app = app.clone();
+    app.spawn_background(
+        move || waiting_listener.wait(),
+        move |changed| {
+            if changed {
+                windows.set(backend.windows());
+                wait_for_window_event(next_app, backend, windows, listener);
+            }
+        },
+    );
 }
 
 fn schedule_playback_refresh(

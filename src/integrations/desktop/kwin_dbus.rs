@@ -1,19 +1,34 @@
-use super::DesktopIntegration;
+use super::{DesktopIntegration, WindowChangeListener};
 use crate::platform::OpenWindow;
 use creamui_render::WindowHandle;
+use dbus::{
+    blocking::{Connection as DbusConnection, SyncConnection},
+    channel::MatchingReceiver,
+    message::MatchRule,
+};
+use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs;
+use std::fs::OpenOptions;
+use std::io::Write;
+use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::{Arc, Mutex, OnceLock};
-use std::thread;
+use std::sync::{
+    mpsc::{self, Receiver, SyncSender, TryRecvError},
+    Arc, Mutex, OnceLock,
+};
+use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 /// KWin Wayland exposes its window-control interface over the user D-Bus.
 /// kdotool is a small D-Bus client for that interface; using it avoids the X11
 /// APIs, which cannot enumerate native Wayland windows.
 pub struct KWinDbus {
-    windows: Arc<Mutex<Vec<OpenWindow>>>,
+    windows: Arc<Mutex<WindowCache>>,
+    changes: WindowChangeListener,
+    shutdown: Option<mpsc::Sender<()>>,
+    watcher: Option<JoinHandle<()>>,
 }
 
 impl KWinDbus {
@@ -24,16 +39,32 @@ impl KWinDbus {
     }
 
     fn new() -> Self {
-        let windows = Arc::new(Mutex::new(Vec::new()));
+        let windows = Arc::new(Mutex::new(WindowCache::default()));
         let cache = windows.clone();
-        thread::spawn(move || loop {
-            let next = query_windows();
-            if let Ok(mut current) = cache.lock() {
-                *current = next;
+        let (change_tx, change_rx) = mpsc::sync_channel(1);
+        let (shutdown_tx, shutdown_rx) = mpsc::channel();
+        let watcher = thread::spawn(move || {
+            if let Err(error) = run_window_event_bridge(cache, change_tx, shutdown_rx) {
+                eprintln!("kwin window events: {error}");
             }
-            thread::sleep(Duration::from_millis(700));
         });
-        Self { windows }
+        Self {
+            windows,
+            changes: WindowChangeListener::new(change_rx),
+            shutdown: Some(shutdown_tx),
+            watcher: Some(watcher),
+        }
+    }
+}
+
+impl Drop for KWinDbus {
+    fn drop(&mut self) {
+        if let Some(shutdown) = self.shutdown.take() {
+            let _ = shutdown.send(());
+        }
+        if let Some(watcher) = self.watcher.take() {
+            let _ = watcher.join();
+        }
     }
 }
 
@@ -45,7 +76,7 @@ impl DesktopIntegration for KWinDbus {
     fn windows(&self) -> Vec<OpenWindow> {
         self.windows
             .lock()
-            .map(|windows| windows.clone())
+            .map(|cache| cache.windows.clone())
             .unwrap_or_default()
     }
 
@@ -64,63 +95,310 @@ impl DesktopIntegration for KWinDbus {
             let _ = kdotool(&[command, &id]);
         });
     }
-}
 
-fn query_windows() -> Vec<OpenWindow> {
-    let active = kdotool(&["getactivewindow"]);
-    kdotool(&["search", "--name", ""])
-        .map(|ids| {
-            ids.lines()
-                .filter_map(|id| window_from_id(id.trim(), active.as_deref()))
-                .filter(|window| !window.title.starts_with("CreamShell"))
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
-fn window_from_id(id: &str, active: Option<&str>) -> Option<OpenWindow> {
-    let title = kdotool(&["getwindowname", id])?;
-    if title.is_empty() {
-        return None;
+    fn window_changes(&self) -> Option<WindowChangeListener> {
+        Some(self.changes.clone())
     }
-    let app_name = kdotool(&["getwindowclassname", id])
-        .filter(|name| !name.is_empty())
-        .unwrap_or_else(|| title.clone());
-    Some(OpenWindow {
-        id: id.to_owned(),
-        icon_path: find_icon(
-            &app_name,
-            kdotool(&["getwindowpid", id]).and_then(|pid| pid.parse().ok()),
-        ),
-        app_name,
-        title,
-        active: active == Some(id),
-    })
 }
+
+#[derive(Default)]
+struct WindowCache {
+    revision: u64,
+    windows: Vec<OpenWindow>,
+}
+
+#[derive(Deserialize)]
+struct EventSnapshot {
+    revision: u64,
+    windows: Vec<EventWindow>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct EventWindow {
+    id: String,
+    title: String,
+    app_name: String,
+    #[serde(default)]
+    desktop_file: String,
+    pid: Option<u32>,
+    active: bool,
+}
+
+fn run_window_event_bridge(
+    cache: Arc<Mutex<WindowCache>>,
+    changes: SyncSender<()>,
+    shutdown: Receiver<()>,
+) -> Result<(), String> {
+    let event_connection = SyncConnection::new_session().map_err(|error| error.to_string())?;
+    let destination = event_connection.unique_name().to_string();
+    let callback_cache = cache.clone();
+    let callback_changes = changes.clone();
+    let _receiver = event_connection.start_receive(
+        MatchRule::new_method_call(),
+        Box::new(move |message, connection| {
+            if message.member().is_some_and(|member| member == "snapshot") {
+                if let Some(payload) = message.get1::<String>() {
+                    if apply_event_snapshot(&callback_cache, &callback_changes, &payload) {
+                        let _ = callback_changes.try_send(());
+                    }
+                }
+            }
+            let _ = connection.channel().send(message.method_return());
+            true
+        }),
+    );
+
+    let kwin_connection = DbusConnection::new_session().map_err(|error| error.to_string())?;
+    let scripting =
+        kwin_connection.with_proxy("org.kde.KWin", "/Scripting", Duration::from_secs(2));
+    let _: Result<(bool,), _> = scripting.method_call(
+        "org.kde.kwin.Scripting",
+        "unloadScript",
+        (KWIN_EVENT_SCRIPT_NAME,),
+    );
+
+    let source = KWIN_EVENT_SCRIPT.replace("__DESTINATION__", &destination);
+    let script_file = RuntimeScriptFile::create(&source)?;
+    let (script_id,): (i32,) = scripting
+        .method_call(
+            "org.kde.kwin.Scripting",
+            "loadScript",
+            (
+                script_file.path.to_string_lossy().into_owned(),
+                KWIN_EVENT_SCRIPT_NAME,
+            ),
+        )
+        .map_err(|error| error.to_string())?;
+    if script_id < 0 {
+        return Err("KWin rejected the runtime window-event hook".to_owned());
+    }
+
+    let script = kwin_connection.with_proxy(
+        "org.kde.KWin",
+        format!("/Scripting/Script{script_id}"),
+        Duration::from_secs(2),
+    );
+    let run_result: Result<(), dbus::Error> = script.method_call("org.kde.kwin.Script", "run", ());
+    drop(script_file);
+    if let Err(error) = run_result {
+        let _: Result<(bool,), _> = scripting.method_call(
+            "org.kde.kwin.Scripting",
+            "unloadScript",
+            (KWIN_EVENT_SCRIPT_NAME,),
+        );
+        return Err(error.to_string());
+    }
+
+    let event_result = loop {
+        match shutdown.try_recv() {
+            Ok(()) | Err(TryRecvError::Disconnected) => break Ok(()),
+            Err(TryRecvError::Empty) => {}
+        }
+        if let Err(error) = event_connection.process(Duration::from_millis(100)) {
+            break Err(error.to_string());
+        }
+    };
+
+    let _: Result<(), _> = script.method_call("org.kde.kwin.Script", "stop", ());
+    let _: Result<(bool,), _> = scripting.method_call(
+        "org.kde.kwin.Scripting",
+        "unloadScript",
+        (KWIN_EVENT_SCRIPT_NAME,),
+    );
+    event_result
+}
+
+fn apply_event_snapshot(
+    cache: &Arc<Mutex<WindowCache>>,
+    changes: &SyncSender<()>,
+    payload: &str,
+) -> bool {
+    let Ok(snapshot) = serde_json::from_str::<EventSnapshot>(payload) else {
+        return false;
+    };
+    let Ok(mut current) = cache.lock() else {
+        return false;
+    };
+    if snapshot.revision <= current.revision {
+        return false;
+    }
+    current.revision = snapshot.revision;
+    current.windows = snapshot
+        .windows
+        .into_iter()
+        .filter(|window| !window.title.is_empty() && !window.title.starts_with("CreamShell"))
+        .map(|window| OpenWindow {
+            icon_path: find_icon(
+                &window.id,
+                &window.desktop_file,
+                &window.app_name,
+                window.pid,
+                cache.clone(),
+                changes.clone(),
+            ),
+            id: window.id,
+            app_name: window.app_name,
+            title: window.title,
+            active: window.active,
+        })
+        .collect();
+    true
+}
+
+struct RuntimeScriptFile {
+    path: PathBuf,
+}
+
+impl RuntimeScriptFile {
+    fn create(contents: &str) -> Result<Self, String> {
+        let directory = std::env::var_os("XDG_RUNTIME_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(std::env::temp_dir);
+        let path = directory.join(format!("creamshell-kwin-events-{}.js", std::process::id()));
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(&path)
+            .map_err(|error| error.to_string())?;
+        file.write_all(contents.as_bytes())
+            .map_err(|error| error.to_string())?;
+        Ok(Self { path })
+    }
+}
+
+impl Drop for RuntimeScriptFile {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.path);
+    }
+}
+
+const KWIN_EVENT_SCRIPT_NAME: &str = "creamshell-window-events";
+const KWIN_EVENT_SCRIPT: &str = r#"
+const destination = "__DESTINATION__";
+let revision = 0;
+
+function sendSnapshot() {
+    revision += 1;
+    const windows = workspace.windowList()
+        .filter(window => !window.specialWindow && !window.skipTaskbar)
+        .map(window => ({
+            id: window.internalId.toString(),
+            title: String(window.caption || ""),
+            appName: String(window.resourceClass || window.desktopFileName || window.resourceName || ""),
+            desktopFile: String(window.desktopFileName || ""),
+            pid: Number(window.pid) || null,
+            active: Boolean(window.active)
+        }));
+    callDBus(destination, "/", "", "snapshot", JSON.stringify({ revision, windows }));
+}
+
+function watchWindow(window) {
+    ["captionChanged", "resourceClassChanged", "skipTaskbarChanged"].forEach(name => {
+        if (window[name]) {
+            window[name].connect(sendSnapshot);
+        }
+    });
+}
+
+workspace.windowList().forEach(watchWindow);
+workspace.windowAdded.connect(window => {
+    watchWindow(window);
+    sendSnapshot();
+});
+workspace.windowRemoved.connect(sendSnapshot);
+workspace.windowActivated.connect(sendSnapshot);
+sendSnapshot();
+"#;
 
 /// KWin exposes an application identifier but not a ready-to-paint raster
 /// icon. Resolve it once in the background worker and retain the result.
-fn find_icon(app_name: &str, pid: Option<u32>) -> Option<PathBuf> {
-    let key = format!("{}:{pid:?}", app_name.to_ascii_lowercase());
+fn find_icon(
+    window_id: &str,
+    desktop_file: &str,
+    app_name: &str,
+    pid: Option<u32>,
+    windows: Arc<Mutex<WindowCache>>,
+    changes: SyncSender<()>,
+) -> Option<PathBuf> {
+    let key = format!(
+        "{}:{}",
+        desktop_file.to_ascii_lowercase(),
+        app_name.to_ascii_lowercase()
+    );
     if let Ok(mut cache) = icon_cache().lock() {
         if let Some(icon) = cache.get(&key) {
             return icon.clone();
         }
-        // Avoid blocking KWin's polling worker on recursive icon discovery.
-        // The task initially uses its text fallback, then picks up this cache.
         cache.insert(key.clone(), None);
     }
-    let lookup_key = key.clone();
+    let lookup_window_id = window_id.to_owned();
+    let lookup_desktop_file = desktop_file.to_owned();
     let lookup_app_name = app_name.to_owned();
     thread::spawn(move || {
-        let icon = pid
-            .and_then(declared_process_icon)
-            .or_else(|| scan_icon(&lookup_app_name));
+        let icon = compositor_declared_icon(&lookup_desktop_file)
+            .or_else(|| kde_icon(&lookup_desktop_file))
+            .or_else(|| pid.and_then(declared_process_icon))
+            .or_else(|| kde_icon(&lookup_app_name));
         if let Ok(mut cache) = icon_cache().lock() {
-            cache.insert(lookup_key, icon);
+            cache.insert(key, icon.clone());
+        }
+        if let Some(icon) = icon {
+            if let Ok(mut cache) = windows.lock() {
+                if let Some(window) = cache
+                    .windows
+                    .iter_mut()
+                    .find(|window| window.id == lookup_window_id)
+                {
+                    window.icon_path = Some(icon);
+                    let _ = changes.try_send(());
+                }
+            }
         }
     });
     None
+}
+
+fn compositor_declared_icon(desktop_file: &str) -> Option<PathBuf> {
+    if desktop_file.is_empty() {
+        return None;
+    }
+    let supplied = PathBuf::from(desktop_file);
+    let path = if supplied.is_absolute() {
+        supplied
+    } else {
+        let file_name = if desktop_file.ends_with(".desktop") {
+            desktop_file.to_owned()
+        } else {
+            format!("{desktop_file}.desktop")
+        };
+        desktop_entry_dirs()
+            .into_iter()
+            .map(|directory| directory.join(&file_name))
+            .find(|path| path.is_file())?
+    };
+    parse_desktop_entry(&path).and_then(|entry| resolve_declared_icon(&entry.icon))
+}
+
+fn kde_icon(name: &str) -> Option<PathBuf> {
+    if name.is_empty() {
+        return None;
+    }
+    ["kiconfinder6", "kiconfinder5"]
+        .into_iter()
+        .find_map(|program| {
+            Command::new(program)
+                .arg(name.trim_end_matches(".desktop"))
+                .output()
+                .ok()
+                .filter(|output| output.status.success())
+                .and_then(|output| {
+                    let path = PathBuf::from(String::from_utf8_lossy(&output.stdout).trim());
+                    supported_image(&path).then_some(path)
+                })
+        })
 }
 
 #[derive(Clone)]
@@ -245,7 +523,7 @@ fn resolve_declared_icon(icon: &str) -> Option<PathBuf> {
         .file_stem()
         .and_then(|name| name.to_str())
         .unwrap_or(icon);
-    scan_icon(name)
+    kde_icon(name)
 }
 
 fn supported_image(path: &Path) -> bool {
@@ -255,90 +533,13 @@ fn supported_image(path: &Path) -> bool {
                 || extension.eq_ignore_ascii_case("jpg")
                 || extension.eq_ignore_ascii_case("jpeg")
                 || extension.eq_ignore_ascii_case("webp")
+                || extension.eq_ignore_ascii_case("svg")
         })
 }
 
 fn icon_cache() -> &'static Mutex<HashMap<String, Option<PathBuf>>> {
     static CACHE: OnceLock<Mutex<HashMap<String, Option<PathBuf>>>> = OnceLock::new();
     CACHE.get_or_init(|| Mutex::new(HashMap::new()))
-}
-
-fn scan_icon(app_name: &str) -> Option<PathBuf> {
-    let key = app_name.to_ascii_lowercase();
-    let mut names = vec![key.clone()];
-    if let Some(last) = app_name.rsplit('.').next() {
-        names.push(last.to_ascii_lowercase());
-    }
-    names.sort();
-    names.dedup();
-    icon_roots()
-        .into_iter()
-        .filter_map(|root| find_icon_in(&root, &names))
-        .min_by_key(|path| icon_score(path, &names))
-}
-
-fn icon_roots() -> Vec<PathBuf> {
-    let mut roots = vec![
-        PathBuf::from("/usr/share/icons"),
-        PathBuf::from("/usr/share/pixmaps"),
-    ];
-    if let Some(home) = std::env::var_os("HOME") {
-        let home = PathBuf::from(home);
-        roots.push(home.join(".local/share/icons"));
-        roots.push(home.join(".local/share/flatpak/appstream"));
-    }
-    roots.push(PathBuf::from("/var/lib/flatpak/appstream"));
-    roots
-}
-
-fn find_icon_in(root: &Path, names: &[String]) -> Option<PathBuf> {
-    let mut matches = Vec::new();
-    collect_icons(root, names, &mut matches);
-    matches
-        .into_iter()
-        .min_by_key(|path| icon_score(path, names))
-}
-
-fn collect_icons(directory: &Path, names: &[String], matches: &mut Vec<PathBuf>) {
-    let Ok(entries) = fs::read_dir(directory) else {
-        return;
-    };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.is_dir() {
-            collect_icons(&path, names, matches);
-            continue;
-        }
-        let is_png = path
-            .extension()
-            .is_some_and(|extension| extension.eq_ignore_ascii_case("png"));
-        let stem = path
-            .file_stem()
-            .and_then(|stem| stem.to_str())
-            .map(str::to_ascii_lowercase);
-        if is_png && stem.is_some_and(|stem| names.iter().any(|name| stem.contains(name))) {
-            matches.push(path);
-        }
-    }
-}
-
-fn icon_score(path: &Path, names: &[String]) -> (u8, u16) {
-    let stem = path
-        .file_stem()
-        .and_then(|stem| stem.to_str())
-        .unwrap_or_default()
-        .to_ascii_lowercase();
-    let exact = names.contains(&stem);
-    let size = path
-        .components()
-        .filter_map(|component| component.as_os_str().to_str())
-        .find_map(|part| {
-            part.split('x')
-                .next()
-                .and_then(|size| size.parse::<u16>().ok())
-        })
-        .unwrap_or(256);
-    (u8::from(!exact), size.abs_diff(64))
 }
 
 fn busctl(args: &[&str]) -> Option<String> {
@@ -363,8 +564,11 @@ fn kdotool(args: &[&str]) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{desktop_exec_program, program_matches};
+    use super::{desktop_exec_program, program_matches, DesktopIntegration, KWinDbus};
     use std::path::Path;
+    use std::sync::mpsc;
+    use std::thread;
+    use std::time::Duration;
 
     #[test]
     fn desktop_exec_program_handles_quotes_and_arguments() {
@@ -386,5 +590,19 @@ mod tests {
     fn program_matching_rejects_shared_launchers() {
         assert!(program_matches("firefox", Path::new("/usr/bin/firefox")));
         assert!(!program_matches("flatpak", Path::new("/usr/bin/flatpak")));
+    }
+
+    #[test]
+    #[ignore = "requires a running KDE Plasma 6 session"]
+    fn runtime_hook_delivers_an_initial_window_snapshot() {
+        let integration = KWinDbus::new();
+        let listener = integration.window_changes().expect("event listener");
+        let (result_tx, result_rx) = mpsc::channel();
+        thread::spawn(move || {
+            let _ = result_tx.send(listener.wait());
+        });
+
+        assert_eq!(result_rx.recv_timeout(Duration::from_secs(5)), Ok(true));
+        drop(integration);
     }
 }

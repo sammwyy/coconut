@@ -117,7 +117,6 @@ pub fn build_dock(
     viewport: Size,
     windows: Vec<OpenWindow>,
     launcher_open: Signal<bool>,
-    active_window: Signal<Option<String>>,
     status: SystemStatus,
     clock_text: Signal<String>,
     actions: BarActions,
@@ -130,7 +129,6 @@ pub fn build_dock(
     };
     let (tasks, task_count) = window_strip(
         windows,
-        active_window,
         actions.activate_window.clone(),
         actions.refresh_windows.clone(),
     );
@@ -472,7 +470,6 @@ impl Widget for LiveClock {
 
 fn window_strip(
     windows: Vec<OpenWindow>,
-    active_window: Signal<Option<String>>,
     activate_window: Rc<dyn Fn(String)>,
     refresh_windows: Rc<dyn Fn()>,
 ) -> (BoxedWidget, usize) {
@@ -491,14 +488,12 @@ fn window_strip(
     let mut strip = Flex::row().gap(6.0).align(Align::Center);
     for entry in windows.into_iter().take(MAX_TASKS) {
         let id = entry.id.clone();
-        let selected = active_window.get().as_deref() == Some(entry.id.as_str()) || entry.active;
-        let select = active_window.clone();
+        let selected = entry.active;
         let activate = activate_window.clone();
         let refresh = refresh_windows.clone();
         let icon = task_icon(&entry, selected);
         let item: BoxedWidget = Box::new(
             RawButton::new(window_style(selected), move || {
-                select.set(Some(id.clone()));
                 activate(id.clone());
                 refresh();
             })
@@ -560,11 +555,32 @@ fn cached_icon_data(path: &std::path::PathBuf) -> Option<ImageData> {
         return data;
     }
 
-    let data = ImageData::from_path(path).ok();
+    let data = if path
+        .extension()
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("svg"))
+    {
+        decode_svg_icon(path)
+    } else {
+        ImageData::from_path(path).ok()
+    };
     if let Ok(mut cache) = cache.lock() {
         cache.insert(path.clone(), data.clone());
     }
     data
+}
+
+fn decode_svg_icon(path: &std::path::Path) -> Option<ImageData> {
+    let source = std::fs::read(path).ok()?;
+    let tree = resvg::usvg::Tree::from_data(&source, &resvg::usvg::Options::default()).ok()?;
+    let source_size = tree.size();
+    let scale = 64.0 / source_size.width().max(source_size.height());
+    let mut pixmap = resvg::tiny_skia::Pixmap::new(64, 64)?;
+    resvg::render(
+        &tree,
+        resvg::tiny_skia::Transform::from_scale(scale, scale),
+        &mut pixmap.as_mut(),
+    );
+    ImageData::from_bytes(&pixmap.encode_png().ok()?).ok()
 }
 
 fn music_cover(playback: Option<&Playback>) -> BoxedWidget {
@@ -677,10 +693,11 @@ fn media_control_style() -> Style {
 
 #[cfg(test)]
 mod tests {
-    use super::{bar_section, control_button_width, dock_width, fallback_icon};
+    use super::{bar_section, control_button_width, decode_svg_icon, dock_width, fallback_icon};
     use creamui_core::BoxedWidget;
     use creamui_widgets::layout::{Flex, Justify};
     use std::collections::HashMap;
+    use std::path::Path;
 
     #[test]
     fn dock_fits_visible_tasks() {
@@ -697,6 +714,11 @@ mod tests {
     fn control_button_grows_with_visible_icons() {
         assert!(control_button_width(0) < control_button_width(3));
         assert!(control_button_width(3) < control_button_width(5));
+    }
+
+    #[test]
+    fn svg_window_icons_are_decoded() {
+        assert!(decode_svg_icon(Path::new("assets/icons/brightness.svg")).is_some());
     }
 
     #[test]
