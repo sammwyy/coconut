@@ -1,9 +1,11 @@
 mod bar;
+mod desktop;
 mod tray;
 mod widgets;
 
 pub use bar::{BarConfig, BarLayout, BarPosition};
-pub use tray::{TrayConfig, TrayMode};
+pub use desktop::DesktopConfig;
+pub use tray::{TrayConfig, TrayMode, TrayVisibility};
 pub use widgets::WidgetsConfig;
 
 use serde::{Deserialize, Serialize};
@@ -15,6 +17,7 @@ pub struct ShellConfig {
     pub bar: BarConfig,
     pub tray: TrayConfig,
     pub widgets: WidgetsConfig,
+    pub desktop: DesktopConfig,
 }
 
 impl Default for ShellConfig {
@@ -23,6 +26,7 @@ impl Default for ShellConfig {
             bar: BarConfig::default(),
             tray: TrayConfig::default(),
             widgets: WidgetsConfig::default(),
+            desktop: DesktopConfig::default(),
         }
     }
 }
@@ -78,6 +82,10 @@ enabled = true
 enabled = true
 # strftime pattern for the bar clock, e.g. "%I:%M %p" for a 12-hour clock.
 format = "%H:%M"
+
+[desktop]
+# Path to a wallpaper image. Unset uses the built-in background.
+# wallpaper = "/home/you/Pictures/wallpaper.jpg"
 "#;
 
 impl ShellConfig {
@@ -110,6 +118,18 @@ impl ShellConfig {
                 ShellConfig::default()
             }
         }
+    }
+
+    /// Writes this configuration to `<config dir>/coconut/shell.toml`,
+    /// creating the directory if needed.
+    pub fn save(&self) -> std::io::Result<()> {
+        let path = config_file_path();
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let contents = toml::to_string_pretty(self)
+            .map_err(|error| std::io::Error::other(error.to_string()))?;
+        std::fs::write(path, contents)
     }
 }
 

@@ -262,8 +262,10 @@ fn configured_wallpaper() -> Option<ImageData> {
     static WALLPAPER: OnceLock<Option<ImageData>> = OnceLock::new();
     WALLPAPER
         .get_or_init(|| {
-            std::env::var_os("COCONUT_WALLPAPER")
-                .map(PathBuf::from)
+            coconut_core::ShellConfig::load()
+                .desktop
+                .wallpaper
+                .or_else(|| std::env::var_os("COCONUT_WALLPAPER").map(PathBuf::from))
                 .filter(|path| path.is_file())
                 .and_then(|path| ImageData::from_path(path).ok())
         })

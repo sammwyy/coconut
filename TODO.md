@@ -1,7 +1,9 @@
 # TODO
 
-- `shell.toml` is only read at startup; there is no settings UI or live
-  reload yet, so changes require restarting Coconut.
+- `shell.toml` is only read at startup, including when edited through
+  `coconut settings`; changes there require restarting the shell process to
+  take effect. The active CreamUI theme (`cream/active_theme.toml`) is the
+  exception — the settings window itself updates live when you switch it.
 - `[bar] position = "top"` only anchors correctly on the Wayland layer-shell
   backend (`creamui-platform`'s `WindowRole::TopPanel`/`BottomPanel`
   handling). The Windows backend does not place panel-role windows at all

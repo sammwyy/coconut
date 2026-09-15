@@ -545,10 +545,9 @@ dependencies = [
 name = "coconut-settings-panel"
 version = "0.1.0"
 dependencies = [
- "coconut-api",
  "coconut-core",
- "coconut-registry",
  "creamui-core",
+ "creamui-image",
  "creamui-jsx",
  "creamui-macros",
  "creamui-reactive",
