@@ -274,9 +274,9 @@ fn compact_playback_widget(
         })
         .unwrap_or_else(|| Box::new(Flex::row().size(0.0, 0.0)));
     let play_icon = if playback.status == "Playing" {
-        "pause"
+        "player_pause"
     } else {
-        "play"
+        "player_play"
     };
     Box::new(
         RawButton::new(island_button_style(width, 32.0), || {})
@@ -284,9 +284,9 @@ fn compact_playback_widget(
             .child(Box::new(jsx! {
                 <Flex direction={FlexDirection::Row} size={(width, 32.0)} padding={4.0} gap={3.0} align={Align::Center}>
                     {music_cover(Some(playback))}
-                    {compact_media_button("back", previous)}
+                    {compact_media_button("player_previous", previous)}
                     {compact_media_button(play_icon, toggle)}
-                    {compact_media_button("next", next)}
+                    {compact_media_button("player_next", next)}
                     {duration_widget}
                 </Flex>
             })),

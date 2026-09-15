@@ -3,6 +3,29 @@ mod bluez;
 #[cfg(target_os = "windows")]
 mod windows;
 
+/// One device BlueZ currently knows about, whether paired or only just
+/// discovered by a scan.
+#[derive(Clone)]
+pub struct BluetoothDevice {
+    pub address: String,
+    pub name: String,
+    pub paired: bool,
+    pub connected: bool,
+    pub trusted: bool,
+    /// The device's own reported battery level, when it exposes one (many
+    /// headphones and mice do over `org.bluez.Battery1`).
+    pub battery_percent: Option<u8>,
+    /// A freedesktop icon-naming-spec hint BlueZ derives from the device's
+    /// class/appearance (e.g. `"audio-headset"`, `"input-mouse"`), when it
+    /// has one to offer.
+    pub icon_hint: Option<String>,
+    /// The raw Bluetooth Class of Device bitmask, when the device reports
+    /// one — finer-grained than `icon_hint`, which collapses several minor
+    /// device classes (e.g. a TV's "Set-top box"/"Video Display and
+    /// Loudspeaker") down to the same generic icon.
+    pub class: Option<u32>,
+}
+
 pub trait BluetoothIntegration {
     fn powered(&self) -> bool;
     fn connected(&self) -> bool;
@@ -14,6 +37,23 @@ pub trait BluetoothIntegration {
     fn changes(&self) -> Option<super::ChangeListener> {
         None
     }
+
+    /// Every device BlueZ currently knows about: paired devices plus
+    /// whatever a scan in progress has discovered.
+    fn devices(&self) -> Vec<BluetoothDevice> {
+        Vec::new()
+    }
+    /// Whether the adapter is actively scanning for nearby devices.
+    fn scanning(&self) -> bool {
+        false
+    }
+    fn start_scan(&self) {}
+    fn stop_scan(&self) {}
+    /// Pairs (if needed) and connects to a device by its address.
+    fn connect(&self, _address: &str) {}
+    fn disconnect(&self, _address: &str) {}
+    /// Unpairs a device and removes it from BlueZ's known-device list.
+    fn forget(&self, _address: &str) {}
 }
 
 #[cfg(not(target_os = "windows"))]

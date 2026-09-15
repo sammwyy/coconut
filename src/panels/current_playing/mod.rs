@@ -14,8 +14,9 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::{Mutex, OnceLock};
 
-pub const WIDTH: u32 = 326;
-pub const HEIGHT: u32 = 142;
+pub const WIDTH: u32 = 368;
+pub const HEIGHT: u32 = 156;
+const COVER_SIZE: f32 = 128.0;
 
 pub fn build(
     _: Size,
@@ -40,12 +41,12 @@ pub fn build(
         Some(data) => Box::new(
             Image::new(data)
                 .layout(LayoutStyle {
-                    size: creamui_widgets::layout::fixed(76.0, 76.0),
+                    size: creamui_widgets::layout::fixed(COVER_SIZE, COVER_SIZE),
                     ..Default::default()
                 })
                 .fit(ImageFit::Cover),
         ),
-        None => Box::new(jsx! { <Flex size={(76.0, 76.0)} /> }),
+        None => Box::new(jsx! { <Flex size={(COVER_SIZE, COVER_SIZE)} /> }),
     };
     let position_text = playback
         .as_ref()
@@ -59,25 +60,25 @@ pub fn build(
         .as_ref()
         .is_some_and(|item| item.status == "Playing")
     {
-        "pause"
+        "player_pause"
     } else {
-        "play"
+        "player_play"
     };
     Box::new(jsx! {
         <Flex direction={FlexDirection::Row} size={(WIDTH as f32, HEIGHT as f32)} padding={14.0} gap={12.0} align={Align::Center} background={CARD} border={(BORDER, 1.0)} corner_radius={CARD_RADIUS}>
                 {cover}
                 <Flex direction={FlexDirection::Column} gap={5.0} grow={1.0} justify={Justify::Center}>
                     {Box::new(creamui_widgets::RawMarquee::expanding(playback.as_ref().map(|item| item.title.as_str()).unwrap_or_default(), TEXT, 15.0)) as BoxedWidget}
-                    <RawText color={MUTED} font_size={11.0}>{playback.as_ref().map(|item| item.artist.as_str()).unwrap_or_default()}</RawText>
+                    <RawText color={MUTED} font_size={11.0} align={TextAlign::Start}>{playback.as_ref().map(|item| item.artist.as_str()).unwrap_or_default()}</RawText>
                     <Flex direction={FlexDirection::Row} gap={6.0} align={Align::Center}>
                         {time_label(position_text, TextAlign::Start)}
                         {progress_slider(progress, seek_enabled, seek)}
                         {time_label(length_text, TextAlign::End)}
                     </Flex>
-                    <Flex direction={FlexDirection::Row} gap={6.0} justify={Justify::End} align={Align::Center}>
-                        {media_button("back", previous)}
+                    <Flex direction={FlexDirection::Row} gap={6.0} justify={Justify::Center} align={Align::Center}>
+                        {media_button("player_previous", previous)}
                         {play_button(play_icon, toggle)}
-                        {media_button("next", next)}
+                        {media_button("player_next", next)}
                     </Flex>
                 </Flex>
         </Flex>

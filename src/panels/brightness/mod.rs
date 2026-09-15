@@ -7,7 +7,7 @@ use creamui_reactive::Signal;
 use std::rc::Rc;
 
 pub const WIDTH: u32 = 380;
-pub const HEIGHT: u32 = 420;
+pub const HEIGHT: u32 = 620;
 
 const SLIDER_W: f32 = WIDTH as f32 - 32.0;
 

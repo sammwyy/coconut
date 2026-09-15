@@ -6,6 +6,7 @@ pub mod bluetooth;
 pub mod brightness;
 pub mod desktop;
 pub mod network;
+pub mod power_profile;
 pub mod volume;
 
 #[cfg(target_os = "windows")]
@@ -84,6 +85,7 @@ pub struct IntegrationRegistry {
     pub volume: Rc<dyn volume::VolumeIntegration>,
     pub network: Rc<dyn network::NetworkIntegration>,
     pub bluetooth: Rc<dyn bluetooth::BluetoothIntegration>,
+    pub power_profile: Rc<dyn power_profile::PowerProfileIntegration>,
 }
 
 pub type Registry = IntegrationRegistry;
@@ -147,6 +149,12 @@ impl IntegrationRegistry {
             bluetooth: bluetooth::WindowsBluetooth::detect()
                 .map(|item| Rc::new(item) as Rc<dyn bluetooth::BluetoothIntegration>)
                 .unwrap_or_else(|| Rc::new(bluetooth::Fallback)),
+            #[cfg(not(target_os = "windows"))]
+            power_profile: power_profile::PowerProfilesDaemon::detect()
+                .map(|item| Rc::new(item) as Rc<dyn power_profile::PowerProfileIntegration>)
+                .unwrap_or_else(|| Rc::new(power_profile::Fallback)),
+            #[cfg(target_os = "windows")]
+            power_profile: Rc::new(power_profile::Fallback),
         }
     }
 }

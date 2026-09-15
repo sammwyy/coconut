@@ -15,6 +15,7 @@ use creamui_core::{BoxedWidget, Point, Rect, Size};
 use creamui_reactive::Signal;
 use creamui_render::{AppBuilder, AppHandle, PopupOptions, WindowHandle, WindowOptions};
 use creamui_theme::Color;
+use creamui_widgets::ScrollController;
 use std::rc::Rc;
 use std::{cell::RefCell, process::Child, process::Command, time::Duration};
 
@@ -45,9 +46,11 @@ pub fn run() {
     let control_battery = integrations.battery.clone();
     let control_volume = integrations.volume.clone();
     let control_bluetooth = integrations.bluetooth.clone();
+    let control_power_profile = integrations.power_profile.clone();
     let panel_network = integrations.network.clone();
     let panel_bluetooth = integrations.bluetooth.clone();
     let panel_battery = integrations.battery.clone();
+    let panel_power_profile = integrations.power_profile.clone();
     let panel_brightness = integrations.brightness.clone();
     let panel_volume = integrations.volume.clone();
     let poll_brightness = integrations.brightness.clone();
@@ -55,6 +58,7 @@ pub fn run() {
     let network_changes = integrations.network.changes();
     let bluetooth_changes = integrations.bluetooth.changes();
     let battery_changes = integrations.battery.changes();
+    let power_profile_changes = integrations.power_profile.changes();
     let volume_changes = integrations.volume.changes();
     let brightness_level = Signal::new(integrations.brightness.level());
     let volume_level = Signal::new(integrations.volume.level());
@@ -131,6 +135,12 @@ pub fn run() {
             schedule_change_events(app.clone(), bluetooth_changes, bluetooth_revision.clone());
             let battery_revision = Signal::new(());
             schedule_change_events(app.clone(), battery_changes, battery_revision.clone());
+            let power_profile_revision = Signal::new(());
+            schedule_change_events(
+                app.clone(),
+                power_profile_changes,
+                power_profile_revision.clone(),
+            );
             schedule_brightness_events(app.clone(), poll_brightness, poll_brightness_level);
             schedule_volume_events(app.clone(), poll_volume, volume_changes, poll_volume_level);
             let bar_network_revision = network_revision.clone();
@@ -139,9 +149,11 @@ pub fn run() {
             let control_network_revision = network_revision.clone();
             let control_bluetooth_revision = bluetooth_revision.clone();
             let control_battery_revision = battery_revision.clone();
+            let control_power_profile_revision = power_profile_revision.clone();
             let network_panel_revision = network_revision.clone();
             let bluetooth_panel_revision = bluetooth_revision.clone();
             let energy_panel_revision = battery_revision.clone();
+            let energy_panel_power_profile_revision = power_profile_revision.clone();
             applications.start_loading(&app);
             if !schedule_window_events(app.clone(), bar_windows_backend.clone(), windows.clone()) {
                 for delay in [Duration::from_secs(1), Duration::from_secs(3)] {
@@ -365,6 +377,7 @@ pub fn run() {
                 let battery = control_battery.clone();
                 let volume = control_volume.clone();
                 let bluetooth = control_bluetooth.clone();
+                let power_profile = control_power_profile.clone();
                 let brightness_level = brightness_level.clone();
                 let volume_level = volume_level.clone();
                 let wifi_enabled = wifi_enabled.clone();
@@ -373,7 +386,13 @@ pub fn run() {
                 let network_revision = control_network_revision.clone();
                 let bluetooth_revision = control_bluetooth_revision.clone();
                 let battery_revision = control_battery_revision.clone();
+                let power_profile_revision = control_power_profile_revision.clone();
                 let view = Signal::new(control_center::PanelView::Main);
+                let network_scroll = ScrollController::new(0.0);
+                let bluetooth_scroll = ScrollController::new(0.0);
+                let network_detail = Signal::new(None);
+                let bluetooth_detail = Signal::new(None);
+                let network_password = Signal::new(None);
                 brightness_level.set(brightness.level());
                 volume_level.set(volume.level());
                 wifi_enabled.set(network.enabled());
@@ -399,6 +418,7 @@ pub fn run() {
                         network_revision.get();
                         bluetooth_revision.get();
                         battery_revision.get();
+                        power_profile_revision.get();
                         control_center::build_with_integrations(
                             size,
                             network.clone(),
@@ -406,12 +426,18 @@ pub fn run() {
                             battery.clone(),
                             volume.clone(),
                             bluetooth.clone(),
+                            power_profile.clone(),
                             toggle.clone(),
                             awake.get(),
                             brightness_level.clone(),
                             volume_level.clone(),
                             wifi_enabled.clone(),
                             bluetooth_powered.clone(),
+                            network_scroll.clone(),
+                            bluetooth_scroll.clone(),
+                            network_detail.clone(),
+                            bluetooth_detail.clone(),
+                            network_password.clone(),
                             &control_tray_config.tray,
                             view.clone(),
                         )
@@ -433,6 +459,9 @@ pub fn run() {
                 let network = panel_network.clone();
                 let wifi_enabled = network_wifi_enabled.clone();
                 let revision = network_panel_revision.clone();
+                let scroll = ScrollController::new(0.0);
+                let detail = Signal::new(None);
+                let password = Signal::new(None);
                 wifi_enabled.set(network.enabled());
                 let bar_for_popup = network_bar.clone();
                 let Some(popup) = popup_for(&bar_for_popup, anchor, popup_opens_below) else {
@@ -453,7 +482,15 @@ pub fn run() {
                     },
                     move |size| {
                         revision.get();
-                        network_panel::build(size, network.clone(), wifi_enabled.clone(), None)
+                        network_panel::build(
+                            size,
+                            network.clone(),
+                            wifi_enabled.clone(),
+                            scroll.clone(),
+                            detail.clone(),
+                            password.clone(),
+                            None,
+                        )
                     },
                 );
             });
@@ -472,6 +509,8 @@ pub fn run() {
                 let bluetooth = panel_bluetooth.clone();
                 let bluetooth_powered = bluetooth_panel_powered.clone();
                 let revision = bluetooth_panel_revision.clone();
+                let scroll = ScrollController::new(0.0);
+                let detail = Signal::new(None);
                 bluetooth_powered.set(bluetooth.powered());
                 let bar_for_popup = bluetooth_bar.clone();
                 let Some(popup) = popup_for(&bar_for_popup, anchor, popup_opens_below) else {
@@ -496,6 +535,8 @@ pub fn run() {
                             size,
                             bluetooth.clone(),
                             bluetooth_powered.clone(),
+                            scroll.clone(),
+                            detail.clone(),
                             None,
                         )
                     },
@@ -514,9 +555,11 @@ pub fn run() {
                 }
                 let energy_handle = energy_handle.clone();
                 let battery = panel_battery.clone();
+                let power_profile = panel_power_profile.clone();
                 let toggle_awake = energy_toggle_awake.clone();
                 let awake = energy_awake.clone();
                 let revision = energy_panel_revision.clone();
+                let power_profile_revision = energy_panel_power_profile_revision.clone();
                 let bar_for_popup = energy_bar.clone();
                 let Some(popup) = popup_for(&bar_for_popup, anchor, popup_opens_below) else {
                     return;
@@ -536,9 +579,11 @@ pub fn run() {
                     },
                     move |size| {
                         revision.get();
+                        power_profile_revision.get();
                         energy_panel::build(
                             size,
                             battery.clone(),
+                            power_profile.clone(),
                             awake.get(),
                             toggle_awake.clone(),
                             None,

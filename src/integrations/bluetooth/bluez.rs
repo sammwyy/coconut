@@ -1,8 +1,9 @@
-use super::BluetoothIntegration;
+use super::{BluetoothDevice, BluetoothIntegration};
 use crate::integrations::{spawn_event_bridge, ChangeListener, EventBridgeGuard};
 use dbus::arg::{PropMap, RefArg};
 use dbus::blocking::stdintf::org_freedesktop_dbus::{
-    ObjectManager, Properties, PropertiesPropertiesChanged,
+    ObjectManager, ObjectManagerInterfacesAdded, ObjectManagerInterfacesRemoved, Properties,
+    PropertiesPropertiesChanged,
 };
 use dbus::blocking::{Connection, SyncConnection};
 use dbus::message::SignalArgs;
@@ -10,19 +11,24 @@ use dbus::Path;
 use std::collections::HashMap;
 use std::sync::mpsc::{Receiver, SyncSender, TryRecvError};
 use std::sync::{Arc, Mutex};
+use std::thread;
 use std::time::Duration;
 
 /// BlueZ exposes adapters and devices natively over the system D-Bus; this
-/// reads them straight from there and reacts to its `PropertiesChanged`
-/// signal instead of polling `bluetoothctl`.
+/// reads them straight from there and reacts to its `PropertiesChanged` and
+/// `InterfacesAdded`/`InterfacesRemoved` signals instead of polling
+/// `bluetoothctl`.
 const SERVICE: &str = "org.bluez";
 const ADAPTER_INTERFACE: &str = "org.bluez.Adapter1";
 const DEVICE_INTERFACE: &str = "org.bluez.Device1";
+const BATTERY_INTERFACE: &str = "org.bluez.Battery1";
 
 #[derive(Default)]
 struct State {
     powered: bool,
     device_name: Option<String>,
+    devices: Vec<BluetoothDevice>,
+    scanning: bool,
 }
 
 pub struct BlueZ {
@@ -83,7 +89,7 @@ impl BluetoothIntegration for BlueZ {
                 state.device_name = None;
             }
         }
-        std::thread::spawn(move || {
+        thread::spawn(move || {
             let Ok(connection) = Connection::new_system() else {
                 return;
             };
@@ -101,6 +107,106 @@ impl BluetoothIntegration for BlueZ {
     fn changes(&self) -> Option<ChangeListener> {
         Some(self.changes.clone())
     }
+
+    fn devices(&self) -> Vec<BluetoothDevice> {
+        self.state
+            .lock()
+            .map(|state| state.devices.clone())
+            .unwrap_or_default()
+    }
+
+    fn scanning(&self) -> bool {
+        self.state.lock().map(|state| state.scanning).unwrap_or(false)
+    }
+
+    fn start_scan(&self) {
+        with_adapter(|proxy| {
+            let _: Result<(), _> = proxy.method_call(ADAPTER_INTERFACE, "StartDiscovery", ());
+        });
+    }
+
+    fn stop_scan(&self) {
+        with_adapter(|proxy| {
+            let _: Result<(), _> = proxy.method_call(ADAPTER_INTERFACE, "StopDiscovery", ());
+        });
+    }
+
+    fn connect(&self, address: &str) {
+        let address = address.to_owned();
+        thread::spawn(move || {
+            let Ok(connection) = Connection::new_system() else {
+                return;
+            };
+            let Some(path) = device_path_for(&connection, &address) else {
+                return;
+            };
+            let proxy = connection.with_proxy(SERVICE, path, Duration::from_secs(30));
+            let _: Result<(), _> = proxy.method_call(DEVICE_INTERFACE, "Connect", ());
+        });
+    }
+
+    fn disconnect(&self, address: &str) {
+        let address = address.to_owned();
+        thread::spawn(move || {
+            let Ok(connection) = Connection::new_system() else {
+                return;
+            };
+            let Some(path) = device_path_for(&connection, &address) else {
+                return;
+            };
+            let proxy = connection.with_proxy(SERVICE, path, Duration::from_secs(10));
+            let _: Result<(), _> = proxy.method_call(DEVICE_INTERFACE, "Disconnect", ());
+        });
+    }
+
+    fn forget(&self, address: &str) {
+        let address = address.to_owned();
+        thread::spawn(move || {
+            let Ok(connection) = Connection::new_system() else {
+                return;
+            };
+            let Some(objects) = managed_objects(&connection) else {
+                return;
+            };
+            let Some(adapter) = adapter_path(&objects) else {
+                return;
+            };
+            let Some(device) = device_path_for(&connection, &address) else {
+                return;
+            };
+            let proxy = connection.with_proxy(SERVICE, adapter, Duration::from_secs(10));
+            let _: Result<(), _> =
+                proxy.method_call(ADAPTER_INTERFACE, "RemoveDevice", (device,));
+        });
+    }
+}
+
+/// Runs `action` against the system adapter on a background thread; used by
+/// the fire-and-forget scan controls, whose resulting `Discovering` state
+/// change is picked up reactively through the bridge's own signal match.
+fn with_adapter(action: impl FnOnce(&dbus::blocking::Proxy<'_, &Connection>) + Send + 'static) {
+    thread::spawn(move || {
+        let Ok(connection) = Connection::new_system() else {
+            return;
+        };
+        let Some(objects) = managed_objects(&connection) else {
+            return;
+        };
+        let Some(path) = adapter_path(&objects) else {
+            return;
+        };
+        let proxy = connection.with_proxy(SERVICE, path, Duration::from_secs(5));
+        action(&proxy);
+    });
+}
+
+fn device_path_for(connection: &Connection, address: &str) -> Option<Path<'static>> {
+    let objects = managed_objects(connection)?;
+    objects.into_iter().find_map(|(path, interfaces)| {
+        let device = interfaces.get(DEVICE_INTERFACE)?;
+        let matches = device.get("Address")?.0.as_str()? == address;
+        matches.then_some(path)
+    })
 }
 
 type ManagedObjects = HashMap<Path<'static>, HashMap<String, PropMap>>;
@@ -128,11 +234,45 @@ fn run_event_bridge(
     refresh(&connection, &state);
 
     let sender = dbus::strings::BusName::new(SERVICE).map_err(|error| error.to_string())?;
-    let rule = PropertiesPropertiesChanged::match_rule(Some(&sender), None).static_clone();
-    let _token = connection
+
+    let properties_changes = changes.clone();
+    let properties_state = state.clone();
+    let properties_rule =
+        PropertiesPropertiesChanged::match_rule(Some(&sender), None).static_clone();
+    let _properties_token = connection
         .add_match(
-            rule,
+            properties_rule,
             move |_: PropertiesPropertiesChanged, connection, _| {
+                refresh(connection, &properties_state);
+                let _ = properties_changes.try_send(());
+                true
+            },
+        )
+        .map_err(|error| error.to_string())?;
+
+    // Newly discovered devices arrive as `InterfacesAdded`/`InterfacesRemoved`
+    // on the object manager, not as `PropertiesChanged`, so a scan needs its
+    // own pair of match rules to populate the device list live.
+    let added_changes = changes.clone();
+    let added_state = state.clone();
+    let added_rule = ObjectManagerInterfacesAdded::match_rule(Some(&sender), None).static_clone();
+    let _added_token = connection
+        .add_match(
+            added_rule,
+            move |_: ObjectManagerInterfacesAdded, connection, _| {
+                refresh(connection, &added_state);
+                let _ = added_changes.try_send(());
+                true
+            },
+        )
+        .map_err(|error| error.to_string())?;
+
+    let removed_rule =
+        ObjectManagerInterfacesRemoved::match_rule(Some(&sender), None).static_clone();
+    let _removed_token = connection
+        .add_match(
+            removed_rule,
+            move |_: ObjectManagerInterfacesRemoved, connection, _| {
                 refresh(connection, &state);
                 let _ = changes.try_send(());
                 true
@@ -168,25 +308,82 @@ fn refresh(connection: &SyncConnection, state: &Arc<Mutex<State>>) {
         .map(|value| value != 0)
         .unwrap_or(false);
 
-    let device_name = objects.values().find_map(|interfaces| {
-        let device = interfaces.get(DEVICE_INTERFACE)?;
-        let connected = device
-            .get("Connected")
-            .and_then(|value| value.0.as_u64())
-            .unwrap_or(0)
-            != 0;
-        if !connected {
-            return None;
-        }
-        device
-            .get("Name")
-            .and_then(|value| value.0.as_str())
-            .map(|name| name.to_owned())
+    let scanning = objects
+        .values()
+        .find_map(|interfaces| interfaces.get(ADAPTER_INTERFACE))
+        .and_then(|props| props.get("Discovering"))
+        .and_then(|value| value.0.as_u64())
+        .map(|value| value != 0)
+        .unwrap_or(false);
+
+    let mut devices: Vec<BluetoothDevice> = objects
+        .values()
+        .filter_map(|interfaces| {
+            let device = interfaces.get(DEVICE_INTERFACE)?;
+            let address = device.get("Address")?.0.as_str()?.to_owned();
+            let name = device
+                .get("Alias")
+                .or_else(|| device.get("Name"))
+                .and_then(|value| value.0.as_str())
+                .map(str::to_owned)
+                .unwrap_or_else(|| address.clone());
+            let paired = device
+                .get("Paired")
+                .and_then(|value| value.0.as_u64())
+                .map(|value| value != 0)
+                .unwrap_or(false);
+            let connected = device
+                .get("Connected")
+                .and_then(|value| value.0.as_u64())
+                .map(|value| value != 0)
+                .unwrap_or(false);
+            let trusted = device
+                .get("Trusted")
+                .and_then(|value| value.0.as_u64())
+                .map(|value| value != 0)
+                .unwrap_or(false);
+            let battery_percent = interfaces
+                .get(BATTERY_INTERFACE)
+                .and_then(|props| props.get("Percentage"))
+                .and_then(|value| value.0.as_u64())
+                .map(|value| value as u8);
+            let icon_hint = device
+                .get("Icon")
+                .and_then(|value| value.0.as_str())
+                .map(str::to_owned);
+            let class = device
+                .get("Class")
+                .and_then(|value| value.0.as_u64())
+                .map(|value| value as u32);
+            Some(BluetoothDevice {
+                address,
+                name,
+                paired,
+                connected,
+                trusted,
+                battery_percent,
+                icon_hint,
+                class,
+            })
+        })
+        .collect();
+    devices.sort_by(|a, b| {
+        b.connected
+            .cmp(&a.connected)
+            .then(b.paired.cmp(&a.paired))
+            .then(a.name.to_ascii_lowercase().cmp(&b.name.to_ascii_lowercase()))
     });
+
+    let device_name = devices
+        .iter()
+        .find(|device| device.connected)
+        .map(|device| device.name.clone());
 
     let next = State {
         powered,
         device_name,
+        devices,
+        scanning,
     };
     if let Ok(mut current) = state.lock() {
         *current = next;

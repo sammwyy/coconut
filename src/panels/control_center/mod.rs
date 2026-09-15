@@ -2,11 +2,12 @@ use crate::config::TrayConfig;
 use crate::icons::pixel_icon;
 use crate::integrations::{
     battery::BatteryIntegration, bluetooth::BluetoothIntegration,
-    brightness::BrightnessIntegration, network::NetworkIntegration, volume::VolumeIntegration,
+    brightness::BrightnessIntegration, network::NetworkIntegration,
+    power_profile::PowerProfileIntegration, volume::VolumeIntegration,
 };
 use crate::panels::chrome::{
-    compact_switch, fat_slider, BORDER, CARD, CARD_RADIUS, CONTROL_HOVER, ISLAND_RADIUS, MUTED,
-    PANEL, SELECTED, TEXT,
+    compact_switch, fat_slider, wifi_strength_icon, BORDER, CARD, CARD_RADIUS, CONTROL_HOVER,
+    ISLAND_RADIUS, MUTED, PANEL, SELECTED, TEXT,
 };
 use crate::panels::{
     bluetooth as bluetooth_panel, brightness as brightness_panel, energy as energy_panel,
@@ -18,12 +19,12 @@ use creamui_macros::jsx;
 use creamui_reactive::Signal;
 use creamui_widgets::{
     layout::{fixed, Align, Flex},
-    RawButton, RawMarquee,
+    RawButton, RawMarquee, ScrollController,
 };
 use std::rc::Rc;
 
 pub const WIDTH: u32 = 380;
-pub const HEIGHT: u32 = 420;
+pub const HEIGHT: u32 = 620;
 
 const TILE_W: f32 = 169.0;
 const TILE_H: f32 = 86.0;
@@ -49,27 +50,55 @@ pub fn build_with_integrations(
     battery: Rc<dyn BatteryIntegration>,
     volume: Rc<dyn VolumeIntegration>,
     bluetooth: Rc<dyn BluetoothIntegration>,
+    power_profile: Rc<dyn PowerProfileIntegration>,
     toggle_awake: Rc<dyn Fn()>,
     awake: bool,
     brightness_level: Signal<f32>,
     volume_level: Signal<f32>,
     wifi_enabled: Signal<bool>,
     bluetooth_powered: Signal<bool>,
+    network_scroll: ScrollController,
+    bluetooth_scroll: ScrollController,
+    network_detail: Signal<Option<String>>,
+    bluetooth_detail: Signal<Option<String>>,
+    network_password: Signal<Option<String>>,
     tray: &TrayConfig,
     view: Signal<PanelView>,
 ) -> BoxedWidget {
     match view.get() {
         PanelView::Network => {
             let back = back_to_main(view.clone());
-            return network_panel::build(size, network, wifi_enabled, Some(back));
+            return network_panel::build(
+                size,
+                network,
+                wifi_enabled,
+                network_scroll,
+                network_detail,
+                network_password,
+                Some(back),
+            );
         }
         PanelView::Bluetooth => {
             let back = back_to_main(view.clone());
-            return bluetooth_panel::build(size, bluetooth, bluetooth_powered, Some(back));
+            return bluetooth_panel::build(
+                size,
+                bluetooth,
+                bluetooth_powered,
+                bluetooth_scroll,
+                bluetooth_detail,
+                Some(back),
+            );
         }
         PanelView::Energy => {
             let back = back_to_main(view.clone());
-            return energy_panel::build(size, battery, awake, toggle_awake, Some(back));
+            return energy_panel::build(
+                size,
+                battery,
+                power_profile,
+                awake,
+                toggle_awake,
+                Some(back),
+            );
         }
         PanelView::Brightness => {
             let back = back_to_main(view.clone());
@@ -94,12 +123,7 @@ pub fn build_with_integrations(
     let wifi_icon = if !wifi_on {
         "wifi-slash"
     } else {
-        match network.strength().unwrap_or(100) {
-            75.. => "wifi-excellent",
-            50..=74 => "wifi-good",
-            25..=49 => "wifi-fair",
-            _ => "wifi-weak",
-        }
+        wifi_strength_icon(network.strength().unwrap_or(100))
     };
     let wifi_caption = if connected {
         "Connected"
@@ -255,16 +279,8 @@ pub fn build_with_integrations(
     }
     status_row = status_row.child(awake_tile(awake, toggle_awake));
 
-    let mut sliders = Flex::column()
-        .grow(1.0)
-        .padding(12.0)
-        .gap(12.0)
-        .justify(creamui_widgets::layout::Justify::Center)
-        .property(StyleProp::Background(PANEL.into()))
-        .property(StyleProp::Border(Border::new(BORDER, 1.0)))
-        .property(StyleProp::CornerRadius(ISLAND_RADIUS));
-    if tray.brightness.shows_in_panel() {
-        sliders = sliders.child(fat_slider(
+    let brightness_card: BoxedWidget = if tray.brightness.shows_in_panel() {
+        Box::new(slider_container().child(fat_slider(
             "brightness",
             "Brightness",
             brightness_value,
@@ -275,10 +291,12 @@ pub fn build_with_integrations(
                 set_brightness.set(level);
                 brightness_backend.set_level(level);
             },
-        ));
-    }
-    if tray.volume.shows_in_panel() {
-        sliders = sliders.child(fat_slider(
+        )))
+    } else {
+        Box::new(jsx! { <Flex/> })
+    };
+    let volume_card: BoxedWidget = if tray.volume.shows_in_panel() {
+        Box::new(slider_container().child(fat_slider(
             volume_icon,
             "Volume",
             volume_value,
@@ -289,17 +307,33 @@ pub fn build_with_integrations(
                 set_volume.set(level);
                 volume_backend.set_level(level);
             },
-        ));
-    }
+        )))
+    } else {
+        Box::new(jsx! { <Flex/> })
+    };
 
     Box::new(jsx! {
         <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={16.0} gap={12.0} background={CARD} border={(BORDER, 1.0)} corner_radius={CARD_RADIUS}>
             <RawText color={MUTED} font_size={14.0}>"CONTROL"</RawText>
             {Box::new(device_row) as BoxedWidget}
             {Box::new(status_row) as BoxedWidget}
-            {Box::new(sliders) as BoxedWidget}
+            {brightness_card}
+            {volume_card}
         </Flex>
     })
+}
+
+/// A single slider's own full-width card — brightness and volume each get
+/// one, rather than sharing a single box, but both still grow to fill
+/// whatever vertical space is left, split evenly between them.
+fn slider_container() -> Flex {
+    Flex::column()
+        .grow(1.0)
+        .padding(12.0)
+        .justify(creamui_widgets::layout::Justify::Center)
+        .property(StyleProp::Background(PANEL.into()))
+        .property(StyleProp::Border(Border::new(BORDER, 1.0)))
+        .property(StyleProp::CornerRadius(ISLAND_RADIUS))
 }
 
 fn device_tile(
