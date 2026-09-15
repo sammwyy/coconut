@@ -49,9 +49,9 @@ desktop services installed.
 - **Now Playing** — view current media and control playback
 - **Control Center** — quick system controls and status, with links into
   the dedicated panels below
-- **Network**, **Bluetooth**, **Energy** — dedicated panels for each
-  device, reachable from the control center or, per `shell.toml`, directly
-  from their own tray icon
+- **Network**, **Bluetooth**, **Energy**, **Brightness**, **Volume** —
+  dedicated panels for each device, reachable from the control center or,
+  per `shell.toml`, directly from their own tray icon
 - **Clock** — a focused time panel
 - **Weather** — at-a-glance conditions
 

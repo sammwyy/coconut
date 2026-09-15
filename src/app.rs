@@ -5,8 +5,9 @@ use crate::config::{BarPosition, ShellConfig};
 use crate::desktop;
 use crate::integrations::{audio::AudioIntegration, Registry};
 use crate::panels::{
-    app_drawer, bluetooth as bluetooth_panel, clock, control_center, current_playing,
-    energy as energy_panel, network as network_panel, weather,
+    app_drawer, bluetooth as bluetooth_panel, brightness as brightness_panel, clock,
+    control_center, current_playing, energy as energy_panel, network as network_panel,
+    volume as volume_panel, weather,
 };
 use crate::platform::Playback;
 use chrono::Local;
@@ -48,6 +49,7 @@ pub fn run() {
     let panel_bluetooth = integrations.bluetooth.clone();
     let panel_battery = integrations.battery.clone();
     let panel_brightness = integrations.brightness.clone();
+    let panel_volume = integrations.volume.clone();
     let brightness_level = Signal::new(integrations.brightness.level());
     let volume_level = Signal::new(integrations.volume.level());
     let wifi_enabled = Signal::new(integrations.network.enabled());
@@ -55,6 +57,7 @@ pub fn run() {
     let network_wifi_enabled = wifi_enabled.clone();
     let bluetooth_panel_powered = bluetooth_powered.clone();
     let energy_brightness_level = brightness_level.clone();
+    let panel_volume_level = volume_level.clone();
     let clock_format = Rc::new(config.widgets.clock.format.clone());
     let clock_text = Signal::new(Local::now().format(&clock_format).to_string());
     let status_network = integrations.network.clone();
@@ -476,11 +479,8 @@ pub fn run() {
                 }
                 let energy_handle = energy_handle.clone();
                 let battery = panel_battery.clone();
-                let brightness = panel_brightness.clone();
-                let brightness_level = energy_brightness_level.clone();
                 let toggle_awake = energy_toggle_awake.clone();
                 let awake = energy_awake.clone();
-                brightness_level.set(brightness.level());
                 let bar_for_popup = energy_bar.clone();
                 let Some(popup) = popup_for(&bar_for_popup, anchor, popup_opens_below) else {
                     return;
@@ -502,12 +502,89 @@ pub fn run() {
                         energy_panel::build(
                             size,
                             battery.clone(),
-                            brightness.clone(),
-                            brightness_level.clone(),
                             awake.get(),
                             toggle_awake.clone(),
                             None,
                         )
+                    },
+                );
+            });
+
+            let brightness_app = app.clone();
+            let brightness_handle: Rc<RefCell<Option<WindowHandle>>> = Rc::new(RefCell::new(None));
+            let brightness_bar = bar_window.clone();
+            let open_brightness = Rc::new(move |anchor: Point| {
+                if let Some(handle) = brightness_handle.borrow_mut().take() {
+                    if handle.is_open() {
+                        handle.close();
+                        return;
+                    }
+                }
+                let brightness_handle = brightness_handle.clone();
+                let brightness = panel_brightness.clone();
+                let brightness_level = energy_brightness_level.clone();
+                brightness_level.set(brightness.level());
+                let bar_for_popup = brightness_bar.clone();
+                let Some(popup) = popup_for(&bar_for_popup, anchor, popup_opens_below) else {
+                    return;
+                };
+                brightness_app.append_popup(
+                    popup_options(
+                        "CreamShell Brightness",
+                        brightness_panel::WIDTH,
+                        brightness_panel::HEIGHT,
+                    ),
+                    popup,
+                    Color::rgba(0, 0, 0, 0),
+                    move |window| {
+                        *brightness_handle.borrow_mut() = Some(window.clone());
+                        window.set_always_on_top(true);
+                        close_on_focus_lost(&window);
+                    },
+                    move |size| {
+                        brightness_panel::build(
+                            size,
+                            brightness.clone(),
+                            brightness_level.clone(),
+                            None,
+                        )
+                    },
+                );
+            });
+
+            let volume_app = app.clone();
+            let volume_handle: Rc<RefCell<Option<WindowHandle>>> = Rc::new(RefCell::new(None));
+            let volume_bar = bar_window.clone();
+            let open_volume = Rc::new(move |anchor: Point| {
+                if let Some(handle) = volume_handle.borrow_mut().take() {
+                    if handle.is_open() {
+                        handle.close();
+                        return;
+                    }
+                }
+                let volume_handle = volume_handle.clone();
+                let volume = panel_volume.clone();
+                let volume_level = panel_volume_level.clone();
+                volume_level.set(volume.level());
+                let bar_for_popup = volume_bar.clone();
+                let Some(popup) = popup_for(&bar_for_popup, anchor, popup_opens_below) else {
+                    return;
+                };
+                volume_app.append_popup(
+                    popup_options(
+                        "CreamShell Volume",
+                        volume_panel::WIDTH,
+                        volume_panel::HEIGHT,
+                    ),
+                    popup,
+                    Color::rgba(0, 0, 0, 0),
+                    move |window| {
+                        *volume_handle.borrow_mut() = Some(window.clone());
+                        window.set_always_on_top(true);
+                        close_on_focus_lost(&window);
+                    },
+                    move |size| {
+                        volume_panel::build(size, volume.clone(), volume_level.clone(), None)
                     },
                 );
             });
@@ -578,6 +655,8 @@ pub fn run() {
                                 open_network: open_network.clone(),
                                 open_bluetooth: open_bluetooth.clone(),
                                 open_energy: open_energy.clone(),
+                                open_brightness: open_brightness.clone(),
+                                open_volume: open_volume.clone(),
                             },
                             &config,
                         )

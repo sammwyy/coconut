@@ -52,6 +52,8 @@ pub struct BarActions {
     pub open_network: Rc<dyn Fn(Point)>,
     pub open_bluetooth: Rc<dyn Fn(Point)>,
     pub open_energy: Rc<dyn Fn(Point)>,
+    pub open_brightness: Rc<dyn Fn(Point)>,
+    pub open_volume: Rc<dyn Fn(Point)>,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -181,7 +183,8 @@ pub fn build_dock(
             actions.open_network.clone(),
             actions.open_bluetooth.clone(),
             actions.open_energy.clone(),
-            control_click,
+            actions.open_brightness.clone(),
+            actions.open_volume.clone(),
         ),
     };
     let clock_button: BoxedWidget = Box::new(
@@ -428,7 +431,8 @@ fn individual_tray_row(
     open_network: Rc<dyn Fn(Point)>,
     open_bluetooth: Rc<dyn Fn(Point)>,
     open_energy: Rc<dyn Fn(Point)>,
-    open_control_center: Rc<dyn Fn(Point)>,
+    open_brightness: Rc<dyn Fn(Point)>,
+    open_volume: Rc<dyn Fn(Point)>,
 ) -> BoxedWidget {
     let network_icon = network_icon(status.network_connected, status.network_strength);
     let battery_icon = battery_icon(status.battery_percentage, status.battery_charging);
@@ -446,10 +450,10 @@ fn individual_tray_row(
         row = row.child(tray_icon_button(network_icon, open_network));
     }
     if tray.brightness.shows_in_bar() {
-        row = row.child(tray_icon_button("brightness", open_energy.clone()));
+        row = row.child(tray_icon_button("brightness", open_brightness));
     }
     if tray.volume.shows_in_bar() {
-        row = row.child(tray_icon_button(volume_icon, open_control_center));
+        row = row.child(tray_icon_button(volume_icon, open_volume));
     }
     if tray.bluetooth.shows_in_bar() {
         row = row.child(tray_icon_button(bluetooth_icon, open_bluetooth));

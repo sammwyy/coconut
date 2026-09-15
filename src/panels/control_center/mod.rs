@@ -9,7 +9,8 @@ use crate::panels::chrome::{
     PANEL, SELECTED, TEXT,
 };
 use crate::panels::{
-    bluetooth as bluetooth_panel, energy as energy_panel, network as network_panel,
+    bluetooth as bluetooth_panel, brightness as brightness_panel, energy as energy_panel,
+    network as network_panel, volume as volume_panel,
 };
 use creamui_core::layout::{FlexDirection, Style as LayoutStyle};
 use creamui_core::{Border, BoxedWidget, Size, StateStyle, Style, StyleProp, Styled, TextAlign};
@@ -37,6 +38,8 @@ pub enum PanelView {
     Network,
     Bluetooth,
     Energy,
+    Brightness,
+    Volume,
 }
 
 pub fn build_with_integrations(
@@ -66,15 +69,15 @@ pub fn build_with_integrations(
         }
         PanelView::Energy => {
             let back = back_to_main(view.clone());
-            return energy_panel::build(
-                size,
-                battery,
-                brightness,
-                brightness_level,
-                awake,
-                toggle_awake,
-                Some(back),
-            );
+            return energy_panel::build(size, battery, awake, toggle_awake, Some(back));
+        }
+        PanelView::Brightness => {
+            let back = back_to_main(view.clone());
+            return brightness_panel::build(size, brightness, brightness_level, Some(back));
+        }
+        PanelView::Volume => {
+            let back = back_to_main(view.clone());
+            return volume_panel::build(size, volume, volume_level, Some(back));
         }
         PanelView::Main => {}
     }
@@ -207,6 +210,14 @@ pub fn build_with_integrations(
         let view = view.clone();
         Rc::new(move || view.set(PanelView::Energy))
     };
+    let open_brightness_view = {
+        let view = view.clone();
+        Rc::new(move || view.set(PanelView::Brightness))
+    };
+    let open_volume_view = {
+        let view = view.clone();
+        Rc::new(move || view.set(PanelView::Volume))
+    };
 
     let mut device_row = Flex::row().gap(10.0);
     if tray.wifi.shows_in_panel() {
@@ -259,6 +270,7 @@ pub fn build_with_integrations(
             brightness_value,
             brightness_text,
             SLIDER_W,
+            Some(open_brightness_view),
             move |level| {
                 set_brightness.set(level);
                 brightness_backend.set_level(level);
@@ -272,6 +284,7 @@ pub fn build_with_integrations(
             volume_value,
             volume_text,
             SLIDER_W,
+            Some(open_volume_view),
             move |level| {
                 set_volume.set(level);
                 volume_backend.set_level(level);

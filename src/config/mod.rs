@@ -49,9 +49,9 @@ right = ["control_center", "clock"]
 
 [tray]
 # How tray icons open their controls: "grouped" (one button opens the
-# control center, whose device tiles link to their dedicated panels) or
-# "individual" (each icon opens its own panel directly; icons without a
-# dedicated panel, like volume, still open the control center).
+# control center, whose device tiles and sliders link to their dedicated
+# panels) or "individual" (each icon opens its own dedicated panel
+# directly).
 mode = "grouped"
 # Visibility of each status icon: "always" (shown in the bar), "hidden"
 # (not in the bar, but still available when the control center is opened),

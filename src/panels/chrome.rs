@@ -71,13 +71,16 @@ pub fn hero_card(icon: &str, title: String, caption: String) -> BoxedWidget {
 }
 
 /// A labeled slider with its live value shown alongside, shared by the
-/// control center and the energy panel.
+/// control center and the dedicated brightness/volume panels. With
+/// `on_open`, the icon and label become a link into that device's panel,
+/// independent of the slider's own drag handling.
 pub fn fat_slider(
     icon: &str,
     label: &str,
     value: f32,
     value_text: String,
     width: f32,
+    on_open: Option<Rc<dyn Fn()>>,
     on_change: impl Fn(f32) + 'static,
 ) -> BoxedWidget {
     let slider: BoxedWidget = Box::new(
@@ -102,14 +105,33 @@ pub fn fat_slider(
     Box::new(jsx! {
         <Flex direction={FlexDirection::Column} gap={8.0}>
             <Flex direction={FlexDirection::Row} align={Align::Center} gap={8.0}>
-                {pixel_icon(icon, 18.0)}
-                <RawText color={TEXT} font_size={13.0}>{label.to_owned()}</RawText>
+                {slider_title(icon, label, on_open)}
                 <Flex grow={1.0} />
                 <RawText color={MUTED} font_size={18.0}>{value_text}</RawText>
             </Flex>
             {slider}
         </Flex>
     })
+}
+
+fn slider_title(icon: &str, label: &str, on_open: Option<Rc<dyn Fn()>>) -> BoxedWidget {
+    let content = Box::new(jsx! {
+        <Flex direction={FlexDirection::Row} align={Align::Center} gap={8.0}>
+            {pixel_icon(icon, 18.0)}
+            <RawText color={TEXT} font_size={13.0}>{label.to_owned()}</RawText>
+        </Flex>
+    });
+    let Some(on_open) = on_open else {
+        return content;
+    };
+    Box::new(RawButton::new(slider_title_style(), move || on_open()).child(content))
+}
+
+fn slider_title_style() -> Style {
+    Style::new()
+        .corner_radius(6.0)
+        .hover(StateStyle::new().background(CONTROL_HOVER))
+        .pressed(StateStyle::new().background(SELECTED))
 }
 
 /// A panel's title row. With `on_back`, a back arrow is shown ahead of the

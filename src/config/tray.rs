@@ -36,8 +36,7 @@ pub enum TrayMode {
     /// control center; its device tiles link to their dedicated panels.
     Grouped,
     /// Each enabled icon is its own button and opens its device's dedicated
-    /// panel directly. Icons without a dedicated panel (volume) fall back
-    /// to the grouped control center.
+    /// panel directly.
     Individual,
 }
 
