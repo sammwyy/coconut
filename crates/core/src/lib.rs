@@ -1,10 +1,11 @@
 mod bar;
 mod desktop;
+pub mod ipc;
 mod tray;
 mod widgets;
 
 pub use bar::{BarConfig, BarLayout, BarPosition};
-pub use desktop::DesktopConfig;
+pub use desktop::{DesktopColor, DesktopConfig, WallpaperMode};
 pub use tray::{TrayConfig, TrayMode, TrayVisibility};
 pub use widgets::WidgetsConfig;
 
@@ -35,9 +36,9 @@ impl Default for ShellConfig {
 /// so the file is comfortable to open and edit by hand right away. Keep this
 /// in sync with the `Default` impls above when a field's default changes.
 const DEFAULT_SHELL_TOML: &str = r#"# Coconut configuration.
-# Edit this file and restart Coconut (or, in the future, use the settings
-# panel) to apply changes. Missing keys fall back to their defaults, so you
-# only need to list what you want to change.
+# Edit this file before launching the desktop session, or use Settings for
+# changes that apply immediately. Missing keys fall back to their defaults,
+# so you only need to list what you want to change.
 
 [bar]
 # Where the bar sits on screen: "top" or "bottom".

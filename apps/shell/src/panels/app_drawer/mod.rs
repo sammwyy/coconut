@@ -8,22 +8,21 @@ use creamui_image::{Image, ImageData, ImageFit};
 use creamui_macros::jsx;
 use creamui_reactive::Signal;
 use creamui_render::AppHandle;
-use creamui_theme::SelectionStyle;
-use creamui_widgets::layout::{fixed, Align, Flex, Justify, Wrap};
+use creamui_widgets::layout::{fixed, padding_xy, Align, Flex, Justify, Wrap};
 use creamui_widgets::RawButton;
 use creamui_widgets::{
-    ScrollController, ScrollView, Tab, TabColors, TabController, TabSizing, Tabs, TextInput,
+    Icon, ScrollController, ScrollView, SidebarItem, Symbol, TabColors, TextController, TextInput,
 };
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::thread;
 
-pub const WIDTH: u32 = 620;
-pub const HEIGHT: u32 = 480;
+pub const WIDTH: u32 = 760;
+pub const HEIGHT: u32 = 520;
 const TILE: f32 = 104.0;
-const TILE_H: f32 = 114.0;
+const TILE_H: f32 = 110.0;
 
 #[derive(Clone)]
 pub struct AppCatalog {
@@ -32,17 +31,26 @@ pub struct AppCatalog {
 
 #[derive(Clone)]
 pub struct DrawerState {
-    query: Signal<String>,
-    tab: TabController,
+    query: TextController,
+    category: Signal<String>,
     scroll: ScrollController,
+    category_scroll: ScrollController,
 }
 
 impl Default for DrawerState {
     fn default() -> Self {
+        let query = TextController::default();
+        let scroll = ScrollController::default();
+        let search_scroll = scroll.clone();
+        query.on_change(move |_, next| {
+            search_scroll.set(0.0);
+            Some(next.to_owned())
+        });
         Self {
-            query: Signal::new(String::new()),
-            tab: TabController::default(),
-            scroll: ScrollController::default(),
+            query,
+            category: Signal::new("All".into()),
+            scroll,
+            category_scroll: ScrollController::default(),
         }
     }
 }
@@ -88,24 +96,28 @@ pub fn build(
     state: DrawerState,
     on_launch: std::rc::Rc<dyn Fn()>,
 ) -> BoxedWidget {
-    let query = state.query.get();
-    let selected_tab = state.tab.selected();
-    let loaded = !catalog.apps().is_empty();
-    let apps: Vec<_> = catalog
-        .apps()
+    let query = state.query.value();
+    let selected_category = state.category.get();
+    let catalog_apps = catalog.apps();
+    let loaded = !catalog_apps.is_empty();
+    let categories = categories(&catalog_apps);
+    let apps: Vec<_> = catalog_apps
         .into_iter()
-        .filter(|app| app_matches(app, &query, selected_tab))
+        .filter(|app| app_matches(app, &query, &selected_category))
         .collect();
-    let count = apps.len();
     let content: BoxedWidget = if apps.is_empty() {
         let message = if loaded { "No matches" } else { "Scanning" };
         Box::new(jsx! {
-            <Flex grow={1.0} size={(584.0, 260.0)} align={Align::Center} justify={Justify::Center}>
+            <Flex grow={1.0} size={(580.0, 396.0)} align={Align::Center} justify={Justify::Center}>
                 <RawText color={MUTED} font_size={16.0}>{message}</RawText>
             </Flex>
         })
     } else {
-        let mut grid = Flex::row().gap(10.0).wrap(Wrap::Wrap).padding(6.0);
+        let mut grid = Flex::row()
+            .gap(8.0)
+            .justify(Justify::Start)
+            .wrap(Wrap::Wrap)
+            .padding(6.0);
         for app in apps {
             let launch = app.clone();
             let close = on_launch.clone();
@@ -120,20 +132,18 @@ pub fn build(
         Box::new(grid)
     };
 
-    let search_state = state.query.clone();
-    let scroll_for_search = state.scroll.clone();
     let search = Box::new(
-        TextInput::new(query, move |next| {
-            search_state.set(next);
-            scroll_for_search.set(0.0);
-        })
-        .placeholder("Search")
-        .background(PANEL)
-        .border(BORDER, 1.0)
-        .corner_radius(ISLAND_RADIUS)
-        .layout(search_style()),
+        TextInput::controlled_with_style(search_style(), &state.query)
+            .placeholder("Search apps")
+            .background(PANEL)
+            .border(BORDER, 1.0)
+            .corner_radius(ISLAND_RADIUS)
+            .layout(search_style()),
     ) as BoxedWidget;
-    let tabs = category_tabs(state.clone());
+    let sidebar = category_sidebar(state.clone(), &categories);
+    let settings = settings_program()
+        .map(settings_button)
+        .unwrap_or_else(|| Box::new(Flex::row().size(34.0, 34.0)) as BoxedWidget);
     let scroll = Box::new(
         ScrollView::controlled(scroll_style(), state.scroll.clone())
             .background(PANEL)
@@ -141,24 +151,22 @@ pub fn build(
             .corner_radius(ISLAND_RADIUS)
             .child(content),
     ) as BoxedWidget;
-    let subtitle = if !loaded {
-        "Scanning desktop entries".to_owned()
-    } else {
-        format!("{count} apps")
-    };
+    let title = user_name();
 
     Box::new(jsx! {
-        <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={16.0} gap={12.0} background={CARD} border={(BORDER, 1.0)} corner_radius={CARD_RADIUS}>
+        <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={14.0} gap={10.0} background={CARD} border={(BORDER, 1.0)} corner_radius={CARD_RADIUS}>
             <Flex direction={FlexDirection::Row} align={Align::Center}>
-                <RawText color={TEXT} font_size={18.0}>"APPS"</RawText>
+                <RawText color={TEXT} font_size={18.0}>{title}</RawText>
                 <Flex grow={1.0} />
-                <RawText color={MUTED} font_size={13.0}>{subtitle}</RawText>
+                {settings}
             </Flex>
-            {search}
-            <Flex padding={4.0} background={PANEL} border={(BORDER, 1.0)} corner_radius={ISLAND_RADIUS}>
-                {tabs}
+            <Flex direction={FlexDirection::Row} grow={1.0} gap={10.0}>
+                {sidebar}
+                <Flex direction={FlexDirection::Column} grow={1.0} gap={10.0}>
+                    {scroll}
+                    {search}
+                </Flex>
             </Flex>
-            {scroll}
         </Flex>
     })
 }
@@ -192,35 +200,68 @@ fn app_card(app: &AppEntry) -> BoxedWidget {
     })
 }
 
-const CATEGORIES: [&str; 5] = ["All", "Internet", "Development", "Media", "System"];
-
-fn category_tabs(state: DrawerState) -> BoxedWidget {
-    let colors = drawer_tab_colors();
-    let styles = creamui_widgets::tab_styles(&CATEGORIES, TabSizing::Fill, 36.0, 6.0);
-    let mut tabs = Tabs::new(colors, tab_bar_style()).gap(4.0);
-    for (index, label) in CATEGORIES.into_iter().enumerate() {
-        let controller = state.tab.clone();
+fn category_sidebar(state: DrawerState, categories: &[String]) -> BoxedWidget {
+    let selected = state.category.get();
+    let colors = TabColors::sidebar();
+    let mut category_list = Flex::column().gap(4.0);
+    for label in categories {
+        let category = state.category.clone();
         let scroll = state.scroll.clone();
-        tabs = tabs.child(Box::new(Tab::new(
+        let label = label.clone();
+        category_list = category_list.child(Box::new(SidebarItem::new(
             colors,
-            styles[index].clone(),
-            label,
-            state.tab.is_selected(index),
+            category_item_style(),
+            label.clone(),
+            selected == label,
             move || {
-                controller.select(index);
+                category.set(label.clone());
                 scroll.set(0.0);
             },
-        )));
+        )) as BoxedWidget);
     }
-    Box::new(tabs)
+    let list = Box::new(
+        ScrollView::controlled(category_scroll_style(), state.category_scroll.clone())
+            .child(Box::new(category_list)),
+    ) as BoxedWidget;
+    let mut sidebar = Flex::column()
+        .width(142.0)
+        .full_height()
+        .padding(6.0)
+        .gap(4.0);
+    sidebar = sidebar.child(list);
+    Box::new(sidebar)
 }
 
-fn app_matches(app: &AppEntry, query: &str, category: usize) -> bool {
+fn categories(apps: &[AppEntry]) -> Vec<String> {
+    const ORDER: [&str; 13] = [
+        "All",
+        "Multimedia",
+        "Internet",
+        "Graphics",
+        "Office",
+        "Development",
+        "Education",
+        "Science",
+        "Games",
+        "Accessories",
+        "Settings",
+        "System Tools",
+        "Other",
+    ];
+    let present: BTreeSet<_> = apps.iter().map(|app| app.category.as_str()).collect();
+    ORDER
+        .into_iter()
+        .filter(|category| *category == "All" || present.contains(category))
+        .map(str::to_owned)
+        .collect()
+}
+
+fn app_matches(app: &AppEntry, query: &str, category: &str) -> bool {
     let query = query.trim().to_ascii_lowercase();
     let query_matches = query.is_empty()
         || app.name.to_ascii_lowercase().contains(&query)
         || app.category.to_ascii_lowercase().contains(&query);
-    query_matches && (category == 0 || app.category == CATEGORIES[category])
+    query_matches && (category == "All" || app.category == category)
 }
 
 fn launch_app(app: &AppEntry) {
@@ -310,7 +351,7 @@ fn load_windows_apps() -> Vec<AppEntry> {
                 name: name.to_owned(),
                 exec: vec!["explorer.exe".into(), format!("shell:AppsFolder\\{app_id}")],
                 terminal: false,
-                category: "System".into(),
+                category: "System Tools".into(),
                 icon_name: None,
                 icon: None,
             })
@@ -381,14 +422,33 @@ fn parse_desktop_entry(path: &Path) -> Option<AppEntry> {
 #[cfg(not(target_os = "windows"))]
 fn category_for(categories: Option<&str>) -> String {
     let categories = categories.unwrap_or_default();
-    if categories.contains("Development") {
-        "Development"
-    } else if categories.contains("AudioVideo") {
-        "Media"
-    } else if categories.contains("Network") || categories.contains("WebBrowser") {
+    if categories.contains("AudioVideo")
+        || categories.contains("Audio;")
+        || categories.contains("Video;")
+    {
+        "Multimedia"
+    } else if categories.contains("Network") {
         "Internet"
+    } else if categories.contains("Development") {
+        "Development"
+    } else if categories.contains("Graphics") {
+        "Graphics"
+    } else if categories.contains("Office") {
+        "Office"
+    } else if categories.contains("Education") {
+        "Education"
+    } else if categories.contains("Science") {
+        "Science"
+    } else if categories.contains("Game") {
+        "Games"
+    } else if categories.contains("Settings") {
+        "Settings"
+    } else if categories.contains("System") {
+        "System Tools"
+    } else if categories.contains("Utility") {
+        "Accessories"
     } else {
-        "System"
+        "Other"
     }
     .into()
 }
@@ -503,28 +563,6 @@ fn supported_image(path: &Path) -> bool {
         })
 }
 
-fn drawer_tab_colors() -> TabColors {
-    TabColors {
-        background: PANEL,
-        inactive_background: Some(CONTROL),
-        active_background: SELECTED,
-        hover_background: CONTROL_HOVER,
-        indicator: SELECTED,
-        text: TEXT,
-        active_text: TEXT,
-        muted_text: MUTED,
-        radius: 9.0,
-        container_radius: ISLAND_RADIUS,
-        selection: SelectionStyle::Filled,
-        indicator_thickness: 0.0,
-        gap: 4.0,
-        icon_size: 0.0,
-        icon_radius: 0.0,
-        item_gap: 0.0,
-        separator: BORDER,
-    }
-}
-
 fn short_name(name: &str) -> String {
     const MAX: usize = 14;
     let mut shortened: String = name.chars().take(MAX).collect();
@@ -548,23 +586,86 @@ fn app_style() -> Style {
 
 fn search_style() -> creamui_core::layout::Style {
     LayoutStyle {
-        size: fixed(588.0, 42.0),
-        ..Default::default()
-    }
-}
-
-fn tab_bar_style() -> creamui_core::layout::Style {
-    LayoutStyle {
-        size: fixed(580.0, 36.0),
+        size: fixed(580.0, 42.0),
         ..Default::default()
     }
 }
 
 fn scroll_style() -> creamui_core::layout::Style {
     LayoutStyle {
-        size: fixed(588.0, 296.0),
+        size: fixed(580.0, 396.0),
         ..Default::default()
     }
+}
+
+fn category_scroll_style() -> creamui_core::layout::Style {
+    LayoutStyle {
+        size: creamui_core::layout::Size {
+            width: creamui_core::layout::Dimension::Length(130.0),
+            height: creamui_core::layout::Dimension::Auto,
+        },
+        flex_grow: 1.0,
+        ..Default::default()
+    }
+}
+
+fn category_item_style() -> LayoutStyle {
+    padding_xy(
+        LayoutStyle {
+            size: fixed(130.0, 36.0),
+            ..Default::default()
+        },
+        12.0,
+        0.0,
+    )
+}
+
+fn settings_button_style() -> Style {
+    Style::new()
+        .layout(LayoutStyle {
+            size: fixed(34.0, 34.0),
+            ..Default::default()
+        })
+        .background(CONTROL)
+        .corner_radius(9.0)
+        .hover(StateStyle::new().background(CONTROL_HOVER))
+        .pressed(StateStyle::new().background(SELECTED))
+}
+
+fn settings_button(program: PathBuf) -> BoxedWidget {
+    Box::new(
+        RawButton::new(settings_button_style(), move || {
+            open_settings(program.clone())
+        })
+        .child(Box::new(Icon::new(Symbol::Sliders, MUTED).size(18.0)) as BoxedWidget),
+    )
+}
+
+fn user_name() -> String {
+    std::env::var("USER")
+        .or_else(|_| std::env::var("USERNAME"))
+        .unwrap_or_else(|_| "User".into())
+}
+
+fn settings_program() -> Option<PathBuf> {
+    let name = format!("coconut-settings{}", std::env::consts::EXE_SUFFIX);
+    let beside_shell = std::env::current_exe()
+        .ok()
+        .and_then(|path| path.parent().map(|directory| directory.join(&name)));
+    beside_shell.filter(|path| path.is_file()).or_else(|| {
+        std::env::var_os("PATH").and_then(|paths| {
+            std::env::split_paths(&paths)
+                .map(|directory| directory.join(&name))
+                .find(|path| path.is_file())
+        })
+    })
+}
+
+fn open_settings(program: PathBuf) {
+    thread::spawn(move || {
+        let mut command = Command::new(program);
+        let _ = crate::process::spawn_detached(&mut command);
+    });
 }
 
 #[cfg(all(test, not(target_os = "windows")))]

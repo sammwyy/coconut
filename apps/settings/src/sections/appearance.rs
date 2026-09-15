@@ -67,10 +67,13 @@ pub fn build(
                             if let Some(handle) = window.borrow().as_ref() {
                                 handle.set_theme(creamui_theme::active_theme());
                             }
+                            if let Err(error) = coconut_core::ipc::publish_theme_reload() {
+                                eprintln!("settings: failed to publish theme reload: {error}");
+                            }
                         }
                     }}
                 >
-                    <Flex direction={FlexDirection::Column} align={Align::Center} justify={Justify::Center} gap={6.0} padding={4.0}>
+                    <Flex direction={FlexDirection::Column} align={Align::Start} justify={Justify::Start} gap={6.0} padding={4.0}>
                         {preview}
                         {Box::new(Text::new(title_case(&info.id)).size(TextSize::Sm)) as BoxedWidget}
                     </Flex>
@@ -100,7 +103,7 @@ pub fn build(
 
     section(
         "Appearance",
-        "The color theme shared by Coconut and every other CreamUI app.",
+        "Choose the color theme used across compatible apps.",
         vec![Box::new(jsx! {
             <Flex direction={FlexDirection::Row} wrap={Wrap::Wrap} gap={theme.spacing_medium} children={cards} />
         })],

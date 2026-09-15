@@ -438,6 +438,7 @@ dependencies = [
 name = "coconut-core"
 version = "0.1.0"
 dependencies = [
+ "dbus",
  "serde",
  "toml 0.9.12+spec-1.1.0",
 ]
@@ -546,6 +547,8 @@ dependencies = [
  "creamui-render",
  "creamui-theme",
  "creamui-widgets",
+ "image",
+ "rfd",
 ]
 
 [[package]]

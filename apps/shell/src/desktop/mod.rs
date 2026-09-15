@@ -1,5 +1,6 @@
 use crate::bar::DOCK_HEIGHT;
 use crate::icons::pixel_icon;
+use coconut_core::{ShellConfig, WallpaperMode};
 use creamui_core::layout::{
     Dimension, LengthPercentageAuto, Position, Rect as LayoutRect, Size as LayoutSize,
     Style as LayoutStyle,
@@ -18,7 +19,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::rc::Rc;
-use std::sync::OnceLock;
 
 pub const BACKGROUND: Color = Color::rgb(29, 37, 48);
 
@@ -92,7 +92,7 @@ struct DragPreview {
     entry: DesktopEntry,
 }
 
-pub fn build(viewport: Size, state: DesktopState) -> BoxedWidget {
+pub fn build(viewport: Size, state: DesktopState, config: Signal<ShellConfig>) -> BoxedWidget {
     Box::new(
         RawView::new(
             Style::new()
@@ -103,7 +103,7 @@ pub fn build(viewport: Size, state: DesktopState) -> BoxedWidget {
                 .background(BACKGROUND),
         )
         .with_children(vec![
-            wallpaper_layer(),
+            wallpaper_layer(config.get().desktop),
             widget_layer(),
             icon_layer(viewport, state),
         ]),
@@ -129,8 +129,15 @@ pub fn build_drag_overlay(viewport: Size, state: DesktopState) -> BoxedWidget {
     )
 }
 
-fn wallpaper_layer() -> BoxedWidget {
-    configured_wallpaper()
+fn wallpaper_layer(config: coconut_core::DesktopConfig) -> BoxedWidget {
+    if config.wallpaper_mode == WallpaperMode::SolidColor {
+        return Box::new(RawView::new(fill_layout()).background(Color::rgb(
+            config.solid_color.r,
+            config.solid_color.g,
+            config.solid_color.b,
+        )));
+    }
+    configured_wallpaper(config.wallpaper)
         .map(|data| {
             Box::new(Image::new(data).layout(fill_layout()).fit(ImageFit::Cover)) as BoxedWidget
         })
@@ -258,18 +265,11 @@ fn entry_icon(entry: &DesktopEntry) -> BoxedWidget {
     )
 }
 
-fn configured_wallpaper() -> Option<ImageData> {
-    static WALLPAPER: OnceLock<Option<ImageData>> = OnceLock::new();
-    WALLPAPER
-        .get_or_init(|| {
-            coconut_core::ShellConfig::load()
-                .desktop
-                .wallpaper
-                .or_else(|| std::env::var_os("COCONUT_WALLPAPER").map(PathBuf::from))
-                .filter(|path| path.is_file())
-                .and_then(|path| ImageData::from_path(path).ok())
-        })
-        .clone()
+fn configured_wallpaper(wallpaper: Option<PathBuf>) -> Option<ImageData> {
+    wallpaper
+        .or_else(|| std::env::var_os("COCONUT_WALLPAPER").map(PathBuf::from))
+        .filter(|path| path.is_file())
+        .and_then(|path| ImageData::from_path(path).ok())
 }
 
 fn load_entries() -> Vec<DesktopEntry> {

@@ -19,3 +19,5 @@ creamui-reactive = { path = "../../../creamui/crates/reactive" }
 creamui-render = { path = "../../../creamui/crates/render", features = ["platform-wayland"] }
 creamui-theme = { path = "../../../creamui/crates/theme" }
 creamui-widgets = { path = "../../../creamui/crates/widgets" }
+image-rs = { package = "image", version = "0.25.10", default-features = false, features = ["png", "jpeg", "webp"] }
+rfd = "0.17"

@@ -21,8 +21,8 @@ pub fn build(_: Size, config: &Signal<ShellConfig>) -> BoxedWidget {
     );
 
     section(
-        "General",
-        "Where the dock sits on screen.",
+        "Bar",
+        "Choose where the bar sits on screen.",
         vec![group(vec![row("Bar position", control)])],
     )
 }

@@ -72,14 +72,22 @@ fn divider() -> BoxedWidget {
 /// Writes `config` to `shell.toml`, logging (not panicking) on failure —
 /// matches `ShellConfig::load`'s own tolerance for a config file that can't
 /// be written.
-pub fn persist(config: &Signal<ShellConfig>) {
-    if let Err(error) = config.peek().save() {
-        eprintln!("settings: failed to save shell.toml: {error}");
+pub fn persist(config: &Signal<ShellConfig>) -> bool {
+    match config.peek().save() {
+        Ok(()) => true,
+        Err(error) => {
+            eprintln!("settings: failed to save shell.toml: {error}");
+            false
+        }
     }
 }
 
 /// Mutates the shared config and immediately persists the result.
 pub fn update_config(config: &Signal<ShellConfig>, mutate: impl FnOnce(&mut ShellConfig)) {
     config.update(mutate);
-    persist(config);
+    if persist(config) {
+        if let Err(error) = coconut_core::ipc::publish_shell_config(&config.peek()) {
+            eprintln!("settings: failed to notify the desktop process about the update: {error}");
+        }
+    }
 }

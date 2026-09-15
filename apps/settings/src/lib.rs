@@ -8,51 +8,50 @@ use creamui_macros::jsx;
 use creamui_reactive::Signal;
 use creamui_render::{platform::WindowRole, AppBuilder, WindowHandle, WindowOptions};
 use creamui_widgets::{
-    nested_sidebar, SidebarNavController, SidebarNode, Surface, SurfaceRole, Symbol,
+    nested_sidebar, ColorPickerController, SidebarNavController, SidebarNode, Surface, SurfaceRole,
+    Symbol,
 };
 use std::cell::RefCell;
 use std::rc::Rc;
 
 #[derive(Clone, Copy, PartialEq)]
 enum Section {
-    Desktop,
     Appearance,
+    Theme,
     Wallpaper,
-    Shell,
+    Taskbar,
     General,
     Tray,
     Widgets,
 }
 
 fn tree() -> Vec<SidebarNode<Section>> {
-    vec![
-        SidebarNode::parent(
-            Section::Desktop,
-            Symbol::Display,
-            "Desktop",
-            vec![
-                SidebarNode::leaf(Section::Appearance, Symbol::Appearance, "Appearance"),
-                SidebarNode::leaf(Section::Wallpaper, Symbol::Image, "Wallpaper"),
-            ],
-        ),
-        SidebarNode::parent(
-            Section::Shell,
-            Symbol::Controls,
-            "Shell",
-            vec![
-                SidebarNode::leaf(Section::General, Symbol::Sliders, "General"),
-                SidebarNode::leaf(Section::Tray, Symbol::Grid, "Tray"),
-                SidebarNode::leaf(Section::Widgets, Symbol::Check, "Widgets"),
-            ],
-        ),
-    ]
+    vec![SidebarNode::parent(
+        Section::Appearance,
+        Symbol::Appearance,
+        "Appearance",
+        vec![
+            SidebarNode::leaf(Section::Theme, Symbol::Appearance, "Theme"),
+            SidebarNode::leaf(Section::Wallpaper, Symbol::Image, "Wallpaper"),
+            SidebarNode::group(
+                Section::Taskbar,
+                "Taskbar",
+                vec![
+                    SidebarNode::leaf(Section::General, Symbol::Sliders, "Position"),
+                    SidebarNode::leaf(Section::Tray, Symbol::Grid, "Status area"),
+                    SidebarNode::leaf(Section::Widgets, Symbol::Check, "Widgets"),
+                ],
+            ),
+        ],
+    )]
 }
 
 pub fn run() {
     let config = Signal::new(ShellConfig::load());
     let active_theme_id = Signal::new(creamui_theme::active_theme_id());
-    let view = Signal::new(Section::Appearance);
-    let nav = SidebarNavController::<Section>::new();
+    let view = Signal::new(Section::Theme);
+    let nav = SidebarNavController::new();
+    let wallpaper_color_picker = ColorPickerController::new();
     let window: Rc<RefCell<Option<WindowHandle>>> = Rc::new(RefCell::new(None));
     let initial_theme = creamui_theme::active_theme();
 
@@ -60,7 +59,7 @@ pub fn run() {
         .on_started(move |app| {
             app.append_window(
                 WindowOptions {
-                    title: "Coconut Settings".into(),
+                    title: "Settings".into(),
                     width: 800,
                     height: 540,
                     decorations: true,
@@ -75,7 +74,17 @@ pub fn run() {
                     let window = window.clone();
                     move |handle| *window.borrow_mut() = Some(handle)
                 },
-                move |size| build(size, &config, &active_theme_id, &view, &nav, &window),
+                move |size| {
+                    build(
+                        size,
+                        &config,
+                        &active_theme_id,
+                        &view,
+                        &nav,
+                        &window,
+                        &wallpaper_color_picker,
+                    )
+                },
             );
         })
         .run();
@@ -88,6 +97,7 @@ fn build(
     view: &Signal<Section>,
     nav: &SidebarNavController<Section>,
     window: &Rc<RefCell<Option<WindowHandle>>>,
+    wallpaper_color_picker: &ColorPickerController,
 ) -> BoxedWidget {
     let theme = creamui_theme::use_theme();
 
@@ -100,7 +110,7 @@ fn build(
         flex_shrink: 0.0,
         padding: creamui_core::layout::Rect {
             left: LengthPercentage::Length(14.0),
-            right: LengthPercentage::Length(6.0),
+            right: LengthPercentage::Length(10.0),
             top: LengthPercentage::Length(20.0),
             bottom: LengthPercentage::Length(20.0),
         },
@@ -117,17 +127,19 @@ fn build(
         &tree(),
         nav,
         Some(&current),
-        move |section| select.set(section),
+        move |section| {
+            select.set(section);
+        },
     );
 
     let content = match current {
-        Section::Appearance => sections::appearance::build(size, active_theme_id, window),
-        Section::Wallpaper => sections::wallpaper::build(size, config),
+        Section::Theme => sections::appearance::build(size, active_theme_id, window),
+        Section::Wallpaper => sections::wallpaper::build(size, config, wallpaper_color_picker),
         Section::General => sections::general::build(size, config),
         Section::Tray => sections::tray::build(size, config),
         Section::Widgets => sections::widgets::build(size, config),
-        Section::Desktop | Section::Shell => {
-            sections::appearance::build(size, active_theme_id, window)
+        Section::Appearance | Section::Taskbar => {
+            unreachable!("sidebar parents are not selectable")
         }
     };
 
