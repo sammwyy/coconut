@@ -1,6 +1,6 @@
 pub mod widgets;
 
-use crate::config::{BarLayout, ShellConfig, TrayConfig};
+use crate::config::{BarLayout, ShellConfig, TrayConfig, TrayMode};
 use crate::icons::pixel_icon;
 use crate::platform::{OpenWindow, Playback};
 use creamui_core::layout::{FlexDirection, Style as LayoutStyle};
@@ -49,6 +49,9 @@ pub struct BarActions {
     pub open_current_playing: Rc<dyn Fn(Point)>,
     pub open_app_drawer: Rc<dyn Fn(Point)>,
     pub open_control_center: Rc<dyn Fn(Point)>,
+    pub open_network: Rc<dyn Fn(Point)>,
+    pub open_bluetooth: Rc<dyn Fn(Point)>,
+    pub open_energy: Rc<dyn Fn(Point)>,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -170,7 +173,17 @@ pub fn build_dock(
                 <Flex size={(32.0, 32.0)} align={Align::Center} justify={Justify::Center}>{pixel_icon("appgrid", 21.0)}</Flex>
             })),
     );
-    let control_button = control_button_widget(&status, &config.tray, control_click);
+    let control_button = match config.tray.mode {
+        TrayMode::Grouped => control_button_widget(&status, &config.tray, control_click),
+        TrayMode::Individual => individual_tray_row(
+            &status,
+            &config.tray,
+            actions.open_network.clone(),
+            actions.open_bluetooth.clone(),
+            actions.open_energy.clone(),
+            control_click,
+        ),
+    };
     let clock_button: BoxedWidget = Box::new(
         RawButton::new(island_button_style(68.0, 32.0), || {})
             .with_click_position(move |point| clock_click(point))
@@ -403,6 +416,57 @@ fn control_button_widget(
         RawButton::new(island_button_style(width, 32.0), || {})
             .with_click_position(move |point| on_click(point))
             .child(Box::new(row)),
+    )
+}
+
+/// One island per enabled tray icon, each opening its device's dedicated
+/// panel directly. Icons without a dedicated panel (volume) fall back to
+/// the grouped control center.
+fn individual_tray_row(
+    status: &SystemStatus,
+    tray: &TrayConfig,
+    open_network: Rc<dyn Fn(Point)>,
+    open_bluetooth: Rc<dyn Fn(Point)>,
+    open_energy: Rc<dyn Fn(Point)>,
+    open_control_center: Rc<dyn Fn(Point)>,
+) -> BoxedWidget {
+    let network_icon = network_icon(status.network_connected, status.network_strength);
+    let battery_icon = battery_icon(status.battery_percentage, status.battery_charging);
+    let bluetooth_icon = if status.bluetooth_connected {
+        "bluetooth-connected"
+    } else if status.bluetooth_powered {
+        "bluetooth-on"
+    } else {
+        "bluetooth-off"
+    };
+    let volume_icon = volume_icon(status.volume, status.volume_muted);
+
+    let mut row = Flex::row().gap(6.0).align(Align::Center);
+    if tray.wifi.shows_in_bar() {
+        row = row.child(tray_icon_button(network_icon, open_network));
+    }
+    if tray.brightness.shows_in_bar() {
+        row = row.child(tray_icon_button("brightness", open_energy.clone()));
+    }
+    if tray.volume.shows_in_bar() {
+        row = row.child(tray_icon_button(volume_icon, open_control_center));
+    }
+    if tray.bluetooth.shows_in_bar() {
+        row = row.child(tray_icon_button(bluetooth_icon, open_bluetooth));
+    }
+    if tray.battery.shows_in_bar() {
+        row = row.child(tray_icon_button(battery_icon, open_energy));
+    }
+    Box::new(row)
+}
+
+fn tray_icon_button(icon: &str, on_click: Rc<dyn Fn(Point)>) -> BoxedWidget {
+    Box::new(
+        RawButton::new(island_button_style(32.0, 32.0), || {})
+            .with_click_position(move |point| on_click(point))
+            .child(Box::new(jsx! {
+                <Flex size={(32.0, 32.0)} align={Align::Center} justify={Justify::Center}>{pixel_icon(icon, 16.0)}</Flex>
+            })),
     )
 }
 

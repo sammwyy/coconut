@@ -3,7 +3,7 @@ mod tray;
 mod widgets;
 
 pub use bar::{BarConfig, BarLayout, BarPosition};
-pub use tray::TrayConfig;
+pub use tray::{TrayConfig, TrayMode};
 pub use widgets::WidgetsConfig;
 
 use serde::{Deserialize, Serialize};
@@ -48,6 +48,11 @@ center = ["app_launcher"]
 right = ["control_center", "clock"]
 
 [tray]
+# How tray icons open their controls: "grouped" (one button opens the
+# control center, whose device tiles link to their dedicated panels) or
+# "individual" (each icon opens its own panel directly; icons without a
+# dedicated panel, like volume, still open the control center).
+mode = "grouped"
 # Visibility of each status icon: "always" (shown in the bar), "hidden"
 # (not in the bar, but still available when the control center is opened),
 # or "off" (never shown).

@@ -5,16 +5,19 @@ use crate::integrations::{
     brightness::BrightnessIntegration, network::NetworkIntegration, volume::VolumeIntegration,
 };
 use crate::panels::chrome::{
-    BORDER, CARD, CARD_RADIUS, FILL, ISLAND_RADIUS, MUTED, PANEL, TEXT, TRACK,
+    compact_switch, fat_slider, BORDER, CARD, CARD_RADIUS, CONTROL_HOVER, ISLAND_RADIUS, MUTED,
+    PANEL, SELECTED, TEXT,
+};
+use crate::panels::{
+    bluetooth as bluetooth_panel, energy as energy_panel, network as network_panel,
 };
 use creamui_core::layout::{FlexDirection, Style as LayoutStyle};
 use creamui_core::{Border, BoxedWidget, Size, StateStyle, Style, StyleProp, Styled, TextAlign};
 use creamui_macros::jsx;
 use creamui_reactive::Signal;
-use creamui_theme::Color;
 use creamui_widgets::{
     layout::{fixed, Align, Flex},
-    RawMarquee, RawSlider, RawSwitch,
+    RawButton, RawMarquee,
 };
 use std::rc::Rc;
 
@@ -25,8 +28,19 @@ const TILE_W: f32 = 169.0;
 const TILE_H: f32 = 86.0;
 const SLIDER_W: f32 = 324.0;
 
+/// Which content the control center popup currently shows. Navigating into
+/// a device's dedicated panel and back is just a signal flip, so the popup
+/// window never has to be closed and reopened.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum PanelView {
+    Main,
+    Network,
+    Bluetooth,
+    Energy,
+}
+
 pub fn build_with_integrations(
-    _: Size,
+    size: Size,
     network: Rc<dyn NetworkIntegration>,
     brightness: Rc<dyn BrightnessIntegration>,
     battery: Rc<dyn BatteryIntegration>,
@@ -39,7 +53,32 @@ pub fn build_with_integrations(
     wifi_enabled: Signal<bool>,
     bluetooth_powered: Signal<bool>,
     tray: &TrayConfig,
+    view: Signal<PanelView>,
 ) -> BoxedWidget {
+    match view.get() {
+        PanelView::Network => {
+            let back = back_to_main(view.clone());
+            return network_panel::build(size, network, wifi_enabled, Some(back));
+        }
+        PanelView::Bluetooth => {
+            let back = back_to_main(view.clone());
+            return bluetooth_panel::build(size, bluetooth, bluetooth_powered, Some(back));
+        }
+        PanelView::Energy => {
+            let back = back_to_main(view.clone());
+            return energy_panel::build(
+                size,
+                battery,
+                brightness,
+                brightness_level,
+                awake,
+                toggle_awake,
+                Some(back),
+            );
+        }
+        PanelView::Main => {}
+    }
+
     let wifi_on = wifi_enabled.get();
     let connected = wifi_on && network.connected();
     let network_name = if wifi_on {
@@ -156,6 +195,19 @@ pub fn build_with_integrations(
         })
     };
 
+    let open_network_view = {
+        let view = view.clone();
+        Rc::new(move || view.set(PanelView::Network))
+    };
+    let open_bluetooth_view = {
+        let view = view.clone();
+        Rc::new(move || view.set(PanelView::Bluetooth))
+    };
+    let open_energy_view = {
+        let view = view.clone();
+        Rc::new(move || view.set(PanelView::Energy))
+    };
+
     let mut device_row = Flex::row().gap(10.0);
     if tray.wifi.shows_in_panel() {
         device_row = device_row.child(device_tile(
@@ -165,6 +217,7 @@ pub fn build_with_integrations(
             wifi_caption,
             wifi_on,
             toggle_wifi,
+            open_network_view,
         ));
     }
     if tray.bluetooth.shows_in_panel() {
@@ -175,6 +228,7 @@ pub fn build_with_integrations(
             bluetooth_caption,
             bluetooth_on,
             toggle_bluetooth,
+            open_bluetooth_view,
         ));
     }
 
@@ -185,6 +239,7 @@ pub fn build_with_integrations(
             "Battery",
             battery_value,
             battery_caption,
+            open_energy_view,
         ));
     }
     status_row = status_row.child(awake_tile(awake, toggle_awake));
@@ -203,6 +258,7 @@ pub fn build_with_integrations(
             "Brightness",
             brightness_value,
             brightness_text,
+            SLIDER_W,
             move |level| {
                 set_brightness.set(level);
                 brightness_backend.set_level(level);
@@ -215,6 +271,7 @@ pub fn build_with_integrations(
             "Volume",
             volume_value,
             volume_text,
+            SLIDER_W,
             move |level| {
                 set_volume.set(level);
                 volume_backend.set_level(level);
@@ -239,12 +296,13 @@ fn device_tile(
     caption: &str,
     enabled: bool,
     on_toggle: Rc<dyn Fn()>,
+    on_open: Rc<dyn Fn()>,
 ) -> BoxedWidget {
     let mut name = RawMarquee::new(name, TEXT, 15.0, TILE_W - 20.0);
     name.style.layout.size.height = creamui_core::layout::Dimension::Length(18.0);
     let name = Box::new(name) as BoxedWidget;
-    Box::new(jsx! {
-        <Flex direction={FlexDirection::Column} size={(TILE_W, TILE_H)} padding={10.0} gap={7.0} background={PANEL} border={(BORDER, 1.0)} corner_radius={ISLAND_RADIUS}>
+    let content = Box::new(jsx! {
+        <Flex direction={FlexDirection::Column} size={(TILE_W, TILE_H)} padding={10.0} gap={7.0}>
             <Flex direction={FlexDirection::Row} gap={8.0} align={Align::Center}>
                 {pixel_icon(icon, 16.0)}
                 <RawText color={MUTED} font_size={11.0} align={TextAlign::Start}>{kicker}</RawText>
@@ -254,25 +312,19 @@ fn device_tile(
             {name}
             <RawText color={MUTED} font_size={10.0} align={TextAlign::Start}>{caption}</RawText>
         </Flex>
-    })
-}
-
-fn compact_switch(checked: bool, on_toggle: Rc<dyn Fn()>) -> BoxedWidget {
-    let mut toggle = RawSwitch::new(checked, FILL, TRACK, TEXT, move || on_toggle())
-        .radii(10.0, 8.0)
-        .thumb_inset(2.0)
-        .hover_colors(Color::rgb(230, 235, 255), TRACK)
-        .pressed_colors(FILL, TRACK);
-    toggle.style = Style::new().layout(LayoutStyle {
-        size: fixed(36.0, 20.0),
-        ..Default::default()
     });
-    Box::new(toggle)
+    Box::new(RawButton::new(tile_style(), move || on_open()).child(content))
 }
 
-fn status_tile(icon: &str, kicker: &str, value: String, caption: &str) -> BoxedWidget {
-    Box::new(jsx! {
-        <Flex direction={FlexDirection::Column} size={(TILE_W, TILE_H)} padding={10.0} gap={6.0} background={PANEL} border={(BORDER, 1.0)} corner_radius={ISLAND_RADIUS} justify={creamui_widgets::layout::Justify::Center}>
+fn status_tile(
+    icon: &str,
+    kicker: &str,
+    value: String,
+    caption: &str,
+    on_open: Rc<dyn Fn()>,
+) -> BoxedWidget {
+    let content = Box::new(jsx! {
+        <Flex direction={FlexDirection::Column} size={(TILE_W, TILE_H)} padding={10.0} gap={6.0} justify={creamui_widgets::layout::Justify::Center}>
             <Flex direction={FlexDirection::Row} gap={8.0} align={Align::Center}>
                 {pixel_icon(icon, 16.0)}
                 <RawText color={MUTED} font_size={11.0} align={TextAlign::Start}>{kicker}</RawText>
@@ -282,7 +334,25 @@ fn status_tile(icon: &str, kicker: &str, value: String, caption: &str) -> BoxedW
                 <RawText color={MUTED} font_size={11.0} align={TextAlign::Start}>{caption}</RawText>
             </Flex>
         </Flex>
-    })
+    });
+    Box::new(RawButton::new(tile_style(), move || on_open()).child(content))
+}
+
+fn tile_style() -> Style {
+    Style::new()
+        .layout(LayoutStyle {
+            size: fixed(TILE_W, TILE_H),
+            ..Default::default()
+        })
+        .background(PANEL)
+        .border(BORDER, 1.0)
+        .corner_radius(ISLAND_RADIUS)
+        .hover(StateStyle::new().background(CONTROL_HOVER))
+        .pressed(StateStyle::new().background(SELECTED))
+}
+
+fn back_to_main(view: Signal<PanelView>) -> Rc<dyn Fn()> {
+    Rc::new(move || view.set(PanelView::Main))
 }
 
 fn awake_tile(awake: bool, toggle_awake: Rc<dyn Fn()>) -> BoxedWidget {
@@ -295,45 +365,6 @@ fn awake_tile(awake: bool, toggle_awake: Rc<dyn Fn()>) -> BoxedWidget {
                 {compact_switch(awake, toggle_awake)}
             </Flex>
             <RawText color={TEXT} font_size={15.0} align={TextAlign::Start}>{caption}</RawText>
-        </Flex>
-    })
-}
-
-fn fat_slider(
-    icon: &str,
-    label: &str,
-    value: f32,
-    value_text: String,
-    on_change: impl Fn(f32) + 'static,
-) -> BoxedWidget {
-    let slider: BoxedWidget = Box::new(
-        RawSlider::new(
-            Style::new()
-                .layout(LayoutStyle {
-                    size: fixed(SLIDER_W, 32.0),
-                    ..Default::default()
-                })
-                .focus(StateStyle::new().outline(Color::rgba(0, 0, 0, 0), 0.0)),
-            value,
-            TRACK,
-            FILL,
-            TEXT,
-            on_change,
-        )
-        .track(22.0, 11.0)
-        .handle(22.0, 8.0)
-        .hover_handle_color(Color::rgb(255, 255, 255))
-        .pressed_handle_color(FILL),
-    );
-    Box::new(jsx! {
-        <Flex direction={FlexDirection::Column} gap={8.0}>
-            <Flex direction={FlexDirection::Row} align={Align::Center} gap={8.0}>
-                {pixel_icon(icon, 18.0)}
-                <RawText color={TEXT} font_size={13.0}>{label}</RawText>
-                <Flex grow={1.0} />
-                <RawText color={MUTED} font_size={18.0}>{value_text}</RawText>
-            </Flex>
-            {slider}
         </Flex>
     })
 }

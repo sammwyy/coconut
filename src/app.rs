@@ -4,7 +4,10 @@ use crate::bar::{
 use crate::config::{BarPosition, ShellConfig};
 use crate::desktop;
 use crate::integrations::{audio::AudioIntegration, Registry};
-use crate::panels::{app_drawer, clock, control_center, current_playing, weather};
+use crate::panels::{
+    app_drawer, bluetooth as bluetooth_panel, clock, control_center, current_playing,
+    energy as energy_panel, network as network_panel, weather,
+};
 use crate::platform::Playback;
 use chrono::Local;
 use creamui_core::{BoxedWidget, Point, Rect, Size};
@@ -41,10 +44,17 @@ pub fn run() {
     let control_battery = integrations.battery.clone();
     let control_volume = integrations.volume.clone();
     let control_bluetooth = integrations.bluetooth.clone();
+    let panel_network = integrations.network.clone();
+    let panel_bluetooth = integrations.bluetooth.clone();
+    let panel_battery = integrations.battery.clone();
+    let panel_brightness = integrations.brightness.clone();
     let brightness_level = Signal::new(integrations.brightness.level());
     let volume_level = Signal::new(integrations.volume.level());
     let wifi_enabled = Signal::new(integrations.network.enabled());
     let bluetooth_powered = Signal::new(integrations.bluetooth.powered());
+    let network_wifi_enabled = wifi_enabled.clone();
+    let bluetooth_panel_powered = bluetooth_powered.clone();
+    let energy_brightness_level = brightness_level.clone();
     let clock_format = Rc::new(config.widgets.clock.format.clone());
     let clock_text = Signal::new(Local::now().format(&clock_format).to_string());
     let status_network = integrations.network.clone();
@@ -305,6 +315,8 @@ pub fn run() {
                     }
                 })
             };
+            let energy_awake = awake.clone();
+            let energy_toggle_awake = keep_awake.clone();
             let control_app = app.clone();
             let control_handle: Rc<RefCell<Option<WindowHandle>>> = Rc::new(RefCell::new(None));
             let dock_volume = volume_level.clone();
@@ -330,6 +342,7 @@ pub fn run() {
                 let wifi_enabled = wifi_enabled.clone();
                 let bluetooth_powered = bluetooth_powered.clone();
                 let control_tray_config = control_tray_config.clone();
+                let view = Signal::new(control_center::PanelView::Main);
                 brightness_level.set(brightness.level());
                 volume_level.set(volume.level());
                 wifi_enabled.set(network.enabled());
@@ -366,6 +379,134 @@ pub fn run() {
                             wifi_enabled.clone(),
                             bluetooth_powered.clone(),
                             &control_tray_config.tray,
+                            view.clone(),
+                        )
+                    },
+                );
+            });
+
+            let network_app = app.clone();
+            let network_handle: Rc<RefCell<Option<WindowHandle>>> = Rc::new(RefCell::new(None));
+            let network_bar = bar_window.clone();
+            let open_network = Rc::new(move |anchor: Point| {
+                if let Some(handle) = network_handle.borrow_mut().take() {
+                    if handle.is_open() {
+                        handle.close();
+                        return;
+                    }
+                }
+                let network_handle = network_handle.clone();
+                let network = panel_network.clone();
+                let wifi_enabled = network_wifi_enabled.clone();
+                wifi_enabled.set(network.enabled());
+                let bar_for_popup = network_bar.clone();
+                let Some(popup) = popup_for(&bar_for_popup, anchor, popup_opens_below) else {
+                    return;
+                };
+                network_app.append_popup(
+                    popup_options(
+                        "CreamShell Network",
+                        network_panel::WIDTH,
+                        network_panel::HEIGHT,
+                    ),
+                    popup,
+                    Color::rgba(0, 0, 0, 0),
+                    move |window| {
+                        *network_handle.borrow_mut() = Some(window.clone());
+                        window.set_always_on_top(true);
+                        close_on_focus_lost(&window);
+                    },
+                    move |size| {
+                        network_panel::build(size, network.clone(), wifi_enabled.clone(), None)
+                    },
+                );
+            });
+
+            let bluetooth_app = app.clone();
+            let bluetooth_handle: Rc<RefCell<Option<WindowHandle>>> = Rc::new(RefCell::new(None));
+            let bluetooth_bar = bar_window.clone();
+            let open_bluetooth = Rc::new(move |anchor: Point| {
+                if let Some(handle) = bluetooth_handle.borrow_mut().take() {
+                    if handle.is_open() {
+                        handle.close();
+                        return;
+                    }
+                }
+                let bluetooth_handle = bluetooth_handle.clone();
+                let bluetooth = panel_bluetooth.clone();
+                let bluetooth_powered = bluetooth_panel_powered.clone();
+                bluetooth_powered.set(bluetooth.powered());
+                let bar_for_popup = bluetooth_bar.clone();
+                let Some(popup) = popup_for(&bar_for_popup, anchor, popup_opens_below) else {
+                    return;
+                };
+                bluetooth_app.append_popup(
+                    popup_options(
+                        "CreamShell Bluetooth",
+                        bluetooth_panel::WIDTH,
+                        bluetooth_panel::HEIGHT,
+                    ),
+                    popup,
+                    Color::rgba(0, 0, 0, 0),
+                    move |window| {
+                        *bluetooth_handle.borrow_mut() = Some(window.clone());
+                        window.set_always_on_top(true);
+                        close_on_focus_lost(&window);
+                    },
+                    move |size| {
+                        bluetooth_panel::build(
+                            size,
+                            bluetooth.clone(),
+                            bluetooth_powered.clone(),
+                            None,
+                        )
+                    },
+                );
+            });
+
+            let energy_app = app.clone();
+            let energy_handle: Rc<RefCell<Option<WindowHandle>>> = Rc::new(RefCell::new(None));
+            let energy_bar = bar_window.clone();
+            let open_energy = Rc::new(move |anchor: Point| {
+                if let Some(handle) = energy_handle.borrow_mut().take() {
+                    if handle.is_open() {
+                        handle.close();
+                        return;
+                    }
+                }
+                let energy_handle = energy_handle.clone();
+                let battery = panel_battery.clone();
+                let brightness = panel_brightness.clone();
+                let brightness_level = energy_brightness_level.clone();
+                let toggle_awake = energy_toggle_awake.clone();
+                let awake = energy_awake.clone();
+                brightness_level.set(brightness.level());
+                let bar_for_popup = energy_bar.clone();
+                let Some(popup) = popup_for(&bar_for_popup, anchor, popup_opens_below) else {
+                    return;
+                };
+                energy_app.append_popup(
+                    popup_options(
+                        "CreamShell Energy",
+                        energy_panel::WIDTH,
+                        energy_panel::HEIGHT,
+                    ),
+                    popup,
+                    Color::rgba(0, 0, 0, 0),
+                    move |window| {
+                        *energy_handle.borrow_mut() = Some(window.clone());
+                        window.set_always_on_top(true);
+                        close_on_focus_lost(&window);
+                    },
+                    move |size| {
+                        energy_panel::build(
+                            size,
+                            battery.clone(),
+                            brightness.clone(),
+                            brightness_level.clone(),
+                            awake.get(),
+                            toggle_awake.clone(),
+                            None,
                         )
                     },
                 );
@@ -434,6 +575,9 @@ pub fn run() {
                                 open_current_playing: open_current_playing.clone(),
                                 open_app_drawer: open_app_drawer.clone(),
                                 open_control_center: open_control_center.clone(),
+                                open_network: open_network.clone(),
+                                open_bluetooth: open_bluetooth.clone(),
+                                open_energy: open_energy.clone(),
                             },
                             &config,
                         )

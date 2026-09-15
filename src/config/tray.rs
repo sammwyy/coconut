@@ -28,9 +28,29 @@ impl TrayVisibility {
     }
 }
 
+/// How the tray icons in the bar open their controls.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TrayMode {
+    /// A single button shows every enabled icon and opens the grouped
+    /// control center; its device tiles link to their dedicated panels.
+    Grouped,
+    /// Each enabled icon is its own button and opens its device's dedicated
+    /// panel directly. Icons without a dedicated panel (volume) fall back
+    /// to the grouped control center.
+    Individual,
+}
+
+impl Default for TrayMode {
+    fn default() -> Self {
+        TrayMode::Grouped
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct TrayConfig {
+    pub mode: TrayMode,
     pub wifi: TrayVisibility,
     pub bluetooth: TrayVisibility,
     pub battery: TrayVisibility,
@@ -41,6 +61,7 @@ pub struct TrayConfig {
 impl Default for TrayConfig {
     fn default() -> Self {
         Self {
+            mode: TrayMode::default(),
             wifi: TrayVisibility::default(),
             bluetooth: TrayVisibility::default(),
             battery: TrayVisibility::default(),

@@ -1,6 +1,9 @@
 pub mod app_drawer;
+pub mod bluetooth;
 pub mod chrome;
 pub mod clock;
 pub mod control_center;
 pub mod current_playing;
+pub mod energy;
+pub mod network;
 pub mod weather;
