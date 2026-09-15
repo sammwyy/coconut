@@ -1,4 +1,4 @@
-use creamshell_api::desktop::{DesktopIntegration, OpenWindow, WindowChangeListener};
+use coconut_api::desktop::{DesktopIntegration, OpenWindow, WindowChangeListener};
 use creamui_render::WindowHandle;
 use dbus::{
     blocking::{Connection as DbusConnection, SyncConnection},
@@ -226,7 +226,7 @@ fn apply_event_snapshot(
     current.windows = snapshot
         .windows
         .into_iter()
-        .filter(|window| !window.title.is_empty() && !window.title.starts_with("CreamShell"))
+        .filter(|window| !window.title.is_empty() && !window.title.starts_with("Coconut"))
         .map(|window| OpenWindow {
             icon_path: find_icon(
                 &window.id,
@@ -254,7 +254,7 @@ impl RuntimeScriptFile {
         let directory = std::env::var_os("XDG_RUNTIME_DIR")
             .map(PathBuf::from)
             .unwrap_or_else(std::env::temp_dir);
-        let path = directory.join(format!("creamshell-kwin-events-{}.js", std::process::id()));
+        let path = directory.join(format!("coconut-kwin-events-{}.js", std::process::id()));
         let mut file = OpenOptions::new()
             .write(true)
             .create(true)
@@ -274,7 +274,7 @@ impl Drop for RuntimeScriptFile {
     }
 }
 
-const KWIN_EVENT_SCRIPT_NAME: &str = "creamshell-window-events";
+const KWIN_EVENT_SCRIPT_NAME: &str = "coconut-window-events";
 const KWIN_EVENT_SCRIPT: &str = r#"
 const destination = "__DESTINATION__";
 let revision = 0;

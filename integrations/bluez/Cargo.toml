@@ -1,9 +1,9 @@
 [package]
-name = "creamshell-integration-bluez"
+name = "coconut-integration-bluez"
 version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
 
 [dependencies]
-creamshell-api = { path = "../../crates/api" }
+coconut-api = { path = "../../crates/api" }
 dbus = "0.9"

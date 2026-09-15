@@ -1,5 +1,5 @@
-use creamshell_api::battery::BatteryIntegration;
-use creamshell_api::{spawn_event_bridge, ChangeListener, EventBridgeGuard};
+use coconut_api::battery::BatteryIntegration;
+use coconut_api::{spawn_event_bridge, ChangeListener, EventBridgeGuard};
 use dbus::blocking::stdintf::org_freedesktop_dbus::{Properties, PropertiesPropertiesChanged};
 use dbus::blocking::{Connection, SyncConnection};
 use dbus::message::SignalArgs;

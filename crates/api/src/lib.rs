@@ -75,7 +75,7 @@ impl Drop for EventBridgeGuard {
 }
 
 /// The set of device/service integrations the shell and settings panel
-/// consume, wired up by `creamshell-registry`'s `detect()` to whichever
+/// consume, wired up by `coconut-registry`'s `detect()` to whichever
 /// concrete backends are compiled in.
 pub struct IntegrationRegistry {
     pub desktop: Rc<dyn desktop::DesktopIntegration>,

@@ -1,5 +1,5 @@
 use crate::powershell::powershell;
-use creamshell_api::network::NetworkIntegration;
+use coconut_api::network::NetworkIntegration;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;

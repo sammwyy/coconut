@@ -1,11 +1,11 @@
 [package]
-name = "creamshell-integration-kwin"
+name = "coconut-integration-kwin"
 version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
 
 [dependencies]
-creamshell-api = { path = "../../crates/api" }
+coconut-api = { path = "../../crates/api" }
 creamui-render = { path = "../../../creamui/crates/render" }
 dbus = "0.9"
 serde = { version = "1", features = ["derive"] }

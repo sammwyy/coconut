@@ -1,5 +1,5 @@
 use crate::powershell::powershell;
-use creamshell_api::bluetooth::BluetoothIntegration;
+use coconut_api::bluetooth::BluetoothIntegration;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;

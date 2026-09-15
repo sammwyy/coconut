@@ -7,12 +7,12 @@ use crate::panels::{
     bluetooth as bluetooth_panel, brightness as brightness_panel, energy as energy_panel,
     network as network_panel, volume as volume_panel,
 };
-use creamshell_api::{
+use coconut_api::{
     battery::BatteryIntegration, bluetooth::BluetoothIntegration,
     brightness::BrightnessIntegration, network::NetworkIntegration,
     power_profile::PowerProfileIntegration, volume::VolumeIntegration,
 };
-use creamshell_core::TrayConfig;
+use coconut_core::TrayConfig;
 use creamui_core::layout::{FlexDirection, Style as LayoutStyle};
 use creamui_core::{Border, BoxedWidget, Size, StateStyle, Style, StyleProp, Styled, TextAlign};
 use creamui_macros::jsx;

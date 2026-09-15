@@ -1,5 +1,5 @@
-use creamshell_api::brightness::BrightnessIntegration;
-use creamshell_api::{spawn_event_bridge, ChangeListener, EventBridgeGuard};
+use coconut_api::brightness::BrightnessIntegration;
+use coconut_api::{spawn_event_bridge, ChangeListener, EventBridgeGuard};
 use std::ffi::CString;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};

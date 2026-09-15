@@ -1,5 +1,5 @@
 use crate::panels::chrome::{fat_slider, hero_card, panel_header, BORDER, CARD, CARD_RADIUS};
-use creamshell_api::volume::VolumeIntegration;
+use coconut_api::volume::VolumeIntegration;
 use creamui_core::layout::FlexDirection;
 use creamui_core::{BoxedWidget, Size};
 use creamui_macros::jsx;

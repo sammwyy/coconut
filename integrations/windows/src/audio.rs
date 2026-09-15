@@ -1,5 +1,5 @@
 use crate::powershell::powershell;
-use creamshell_api::audio::{AudioIntegration, Playback};
+use coconut_api::audio::{AudioIntegration, Playback};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;

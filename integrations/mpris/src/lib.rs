@@ -1,4 +1,4 @@
-use creamshell_api::audio::{AudioIntegration, Playback};
+use coconut_api::audio::{AudioIntegration, Playback};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
@@ -116,12 +116,12 @@ fn resolve_art(value: &str) -> Option<PathBuf> {
     }
     let mut hasher = DefaultHasher::new();
     value.hash(&mut hasher);
-    let path = std::env::temp_dir().join(format!("creamshell-art-{:x}", hasher.finish()));
+    let path = std::env::temp_dir().join(format!("coconut-art-{:x}", hasher.finish()));
     if path.is_file() {
         return Some(path);
     }
     let output = Command::new("timeout")
-        .args(["4s", "curl", "-LfsS", "-A", "CreamShell/1.0", value])
+        .args(["4s", "curl", "-LfsS", "-A", "Coconut/1.0", value])
         .output()
         .ok()
         .filter(|result| result.status.success())?;

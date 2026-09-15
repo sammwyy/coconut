@@ -3,7 +3,7 @@ use crate::panels::chrome::{
     action_button, compact_switch, detail_row, icon_button, list_row, panel_header, section_label,
     BORDER, CARD, CARD_RADIUS, ISLAND_RADIUS, LIST_WIDTH, MUTED, PANEL,
 };
-use creamshell_api::bluetooth::{BluetoothDevice, BluetoothIntegration};
+use coconut_api::bluetooth::{BluetoothDevice, BluetoothIntegration};
 use creamui_core::layout::{Dimension, FlexDirection, Style as LayoutStyle};
 use creamui_core::{BoxedWidget, Size, Styled, TextAlign};
 use creamui_macros::jsx;

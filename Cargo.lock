@@ -428,6 +428,155 @@ dependencies = [
 ]
 
 [[package]]
+name = "coconut"
+version = "0.1.0"
+dependencies = [
+ "coconut-settings-panel",
+ "coconut-shell",
+]
+
+[[package]]
+name = "coconut-api"
+version = "0.1.0"
+dependencies = [
+ "creamui-render",
+]
+
+[[package]]
+name = "coconut-core"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "toml 0.9.12+spec-1.1.0",
+]
+
+[[package]]
+name = "coconut-integration-bluez"
+version = "0.1.0"
+dependencies = [
+ "coconut-api",
+ "dbus",
+]
+
+[[package]]
+name = "coconut-integration-brightnessctl"
+version = "0.1.0"
+dependencies = [
+ "coconut-api",
+ "libc",
+]
+
+[[package]]
+name = "coconut-integration-kwin"
+version = "0.1.0"
+dependencies = [
+ "coconut-api",
+ "creamui-render",
+ "dbus",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "coconut-integration-mpris"
+version = "0.1.0"
+dependencies = [
+ "coconut-api",
+]
+
+[[package]]
+name = "coconut-integration-network-manager"
+version = "0.1.0"
+dependencies = [
+ "coconut-api",
+ "dbus",
+]
+
+[[package]]
+name = "coconut-integration-pipewire"
+version = "0.1.0"
+dependencies = [
+ "coconut-api",
+ "pipewire",
+]
+
+[[package]]
+name = "coconut-integration-power-profiles-daemon"
+version = "0.1.0"
+dependencies = [
+ "coconut-api",
+ "dbus",
+]
+
+[[package]]
+name = "coconut-integration-upower"
+version = "0.1.0"
+dependencies = [
+ "coconut-api",
+ "dbus",
+]
+
+[[package]]
+name = "coconut-integration-windows"
+version = "0.1.0"
+dependencies = [
+ "coconut-api",
+ "creamui-render",
+ "windows",
+]
+
+[[package]]
+name = "coconut-registry"
+version = "0.1.0"
+dependencies = [
+ "coconut-api",
+ "coconut-integration-bluez",
+ "coconut-integration-brightnessctl",
+ "coconut-integration-kwin",
+ "coconut-integration-mpris",
+ "coconut-integration-network-manager",
+ "coconut-integration-pipewire",
+ "coconut-integration-power-profiles-daemon",
+ "coconut-integration-upower",
+ "coconut-integration-windows",
+]
+
+[[package]]
+name = "coconut-settings-panel"
+version = "0.1.0"
+dependencies = [
+ "coconut-api",
+ "coconut-core",
+ "coconut-registry",
+ "creamui-core",
+ "creamui-jsx",
+ "creamui-macros",
+ "creamui-reactive",
+ "creamui-render",
+ "creamui-theme",
+ "creamui-widgets",
+]
+
+[[package]]
+name = "coconut-shell"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "coconut-api",
+ "coconut-core",
+ "coconut-registry",
+ "creamui-core",
+ "creamui-image",
+ "creamui-jsx",
+ "creamui-macros",
+ "creamui-reactive",
+ "creamui-render",
+ "creamui-theme",
+ "creamui-widgets",
+ "resvg",
+]
+
+[[package]]
 name = "codespan-reporting"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -564,155 +713,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "creamshell"
-version = "0.1.0"
-dependencies = [
- "creamshell-settings-panel",
- "creamshell-shell",
-]
-
-[[package]]
-name = "creamshell-api"
-version = "0.1.0"
-dependencies = [
- "creamui-render",
-]
-
-[[package]]
-name = "creamshell-core"
-version = "0.1.0"
-dependencies = [
- "serde",
- "toml 0.9.12+spec-1.1.0",
-]
-
-[[package]]
-name = "creamshell-integration-bluez"
-version = "0.1.0"
-dependencies = [
- "creamshell-api",
- "dbus",
-]
-
-[[package]]
-name = "creamshell-integration-brightnessctl"
-version = "0.1.0"
-dependencies = [
- "creamshell-api",
- "libc",
-]
-
-[[package]]
-name = "creamshell-integration-kwin"
-version = "0.1.0"
-dependencies = [
- "creamshell-api",
- "creamui-render",
- "dbus",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "creamshell-integration-mpris"
-version = "0.1.0"
-dependencies = [
- "creamshell-api",
-]
-
-[[package]]
-name = "creamshell-integration-network-manager"
-version = "0.1.0"
-dependencies = [
- "creamshell-api",
- "dbus",
-]
-
-[[package]]
-name = "creamshell-integration-pipewire"
-version = "0.1.0"
-dependencies = [
- "creamshell-api",
- "pipewire",
-]
-
-[[package]]
-name = "creamshell-integration-power-profiles-daemon"
-version = "0.1.0"
-dependencies = [
- "creamshell-api",
- "dbus",
-]
-
-[[package]]
-name = "creamshell-integration-upower"
-version = "0.1.0"
-dependencies = [
- "creamshell-api",
- "dbus",
-]
-
-[[package]]
-name = "creamshell-integration-windows"
-version = "0.1.0"
-dependencies = [
- "creamshell-api",
- "creamui-render",
- "windows",
-]
-
-[[package]]
-name = "creamshell-registry"
-version = "0.1.0"
-dependencies = [
- "creamshell-api",
- "creamshell-integration-bluez",
- "creamshell-integration-brightnessctl",
- "creamshell-integration-kwin",
- "creamshell-integration-mpris",
- "creamshell-integration-network-manager",
- "creamshell-integration-pipewire",
- "creamshell-integration-power-profiles-daemon",
- "creamshell-integration-upower",
- "creamshell-integration-windows",
-]
-
-[[package]]
-name = "creamshell-settings-panel"
-version = "0.1.0"
-dependencies = [
- "creamshell-api",
- "creamshell-core",
- "creamshell-registry",
- "creamui-core",
- "creamui-jsx",
- "creamui-macros",
- "creamui-reactive",
- "creamui-render",
- "creamui-theme",
- "creamui-widgets",
-]
-
-[[package]]
-name = "creamshell-shell"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "creamshell-api",
- "creamshell-core",
- "creamshell-registry",
- "creamui-core",
- "creamui-image",
- "creamui-jsx",
- "creamui-macros",
- "creamui-reactive",
- "creamui-render",
- "creamui-theme",
- "creamui-widgets",
- "resvg",
-]
-
-[[package]]
 name = "creamui-core"
 version = "0.1.2"
 dependencies = [
@@ -803,6 +803,8 @@ version = "0.1.1"
 dependencies = [
  "creamui-fonts",
  "creamui-reactive",
+ "serde",
+ "toml 0.9.12+spec-1.1.0",
 ]
 
 [[package]]

@@ -2,8 +2,8 @@ use crate::icons::pixel_icon;
 use crate::panels::chrome::{
     compact_hero_card, list_row, panel_header, section_label, toggle_row, BORDER, CARD, CARD_RADIUS,
 };
-use creamshell_api::battery::BatteryIntegration;
-use creamshell_api::power_profile::{PowerProfile, PowerProfileIntegration};
+use coconut_api::battery::BatteryIntegration;
+use coconut_api::power_profile::{PowerProfile, PowerProfileIntegration};
 use creamui_core::layout::FlexDirection;
 use creamui_core::{BoxedWidget, Size};
 use creamui_macros::jsx;

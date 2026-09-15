@@ -1,5 +1,5 @@
-use creamshell_api::network::{NetworkDevice, NetworkDeviceKind, NetworkIntegration, WifiNetwork};
-use creamshell_api::{spawn_event_bridge, ChangeListener, EventBridgeGuard};
+use coconut_api::network::{NetworkDevice, NetworkDeviceKind, NetworkIntegration, WifiNetwork};
+use coconut_api::{spawn_event_bridge, ChangeListener, EventBridgeGuard};
 use dbus::arg::{PropMap, RefArg, Variant};
 use dbus::blocking::stdintf::org_freedesktop_dbus::{Properties, PropertiesPropertiesChanged};
 use dbus::blocking::{Connection, SyncConnection};

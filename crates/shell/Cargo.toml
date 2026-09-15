@@ -1,13 +1,13 @@
 [package]
-name = "creamshell-shell"
+name = "coconut-shell"
 version = "0.1.0"
 edition = "2021"
-description = "CreamShell's dock/bar process"
+description = "Coconut's dock/bar process"
 license = "Apache-2.0"
 
 [dependencies]
-creamshell-api = { path = "../api" }
-creamshell-core = { path = "../core" }
+coconut-api = { path = "../api" }
+coconut-core = { path = "../core" }
 chrono = "0.4"
 creamui-core = { path = "../../../creamui/crates/core" }
 creamui-image = { path = "../../../creamui/crates/image", features = ["webp", "jpeg"] }
@@ -20,10 +20,10 @@ creamui-widgets = { path = "../../../creamui/crates/widgets" }
 resvg = "0.45.1"
 
 [target.'cfg(not(target_os = "windows"))'.dependencies]
-creamshell-registry = { path = "../registry" }
+coconut-registry = { path = "../registry" }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-creamshell-registry = { path = "../registry", default-features = false, features = ["windows"] }
+coconut-registry = { path = "../registry", default-features = false, features = ["windows"] }
 
 [build-dependencies]
 resvg = "0.45.1"

@@ -1,5 +1,5 @@
 use crate::powershell::powershell;
-use creamshell_api::battery::BatteryIntegration;
+use coconut_api::battery::BatteryIntegration;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;

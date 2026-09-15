@@ -1,20 +1,20 @@
 [package]
-name = "creamshell-registry"
+name = "coconut-registry"
 version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
 
 [dependencies]
-creamshell-api = { path = "../api" }
-creamshell-integration-mpris = { path = "../../integrations/mpris", optional = true }
-creamshell-integration-upower = { path = "../../integrations/upower", optional = true }
-creamshell-integration-bluez = { path = "../../integrations/bluez", optional = true }
-creamshell-integration-brightnessctl = { path = "../../integrations/brightnessctl", optional = true }
-creamshell-integration-network-manager = { path = "../../integrations/network-manager", optional = true }
-creamshell-integration-power-profiles-daemon = { path = "../../integrations/power-profiles-daemon", optional = true }
-creamshell-integration-pipewire = { path = "../../integrations/pipewire", optional = true }
-creamshell-integration-kwin = { path = "../../integrations/kwin", optional = true }
-creamshell-integration-windows = { path = "../../integrations/windows", optional = true }
+coconut-api = { path = "../api" }
+coconut-integration-mpris = { path = "../../integrations/mpris", optional = true }
+coconut-integration-upower = { path = "../../integrations/upower", optional = true }
+coconut-integration-bluez = { path = "../../integrations/bluez", optional = true }
+coconut-integration-brightnessctl = { path = "../../integrations/brightnessctl", optional = true }
+coconut-integration-network-manager = { path = "../../integrations/network-manager", optional = true }
+coconut-integration-power-profiles-daemon = { path = "../../integrations/power-profiles-daemon", optional = true }
+coconut-integration-pipewire = { path = "../../integrations/pipewire", optional = true }
+coconut-integration-kwin = { path = "../../integrations/kwin", optional = true }
+coconut-integration-windows = { path = "../../integrations/windows", optional = true }
 
 [features]
 default = [
@@ -27,12 +27,12 @@ default = [
     "pipewire",
     "kwin",
 ]
-mpris = ["dep:creamshell-integration-mpris"]
-upower = ["dep:creamshell-integration-upower"]
-bluez = ["dep:creamshell-integration-bluez"]
-brightnessctl = ["dep:creamshell-integration-brightnessctl"]
-network-manager = ["dep:creamshell-integration-network-manager"]
-power-profiles-daemon = ["dep:creamshell-integration-power-profiles-daemon"]
-pipewire = ["dep:creamshell-integration-pipewire"]
-kwin = ["dep:creamshell-integration-kwin"]
-windows = ["dep:creamshell-integration-windows"]
+mpris = ["dep:coconut-integration-mpris"]
+upower = ["dep:coconut-integration-upower"]
+bluez = ["dep:coconut-integration-bluez"]
+brightnessctl = ["dep:coconut-integration-brightnessctl"]
+network-manager = ["dep:coconut-integration-network-manager"]
+power-profiles-daemon = ["dep:coconut-integration-power-profiles-daemon"]
+pipewire = ["dep:coconut-integration-pipewire"]
+kwin = ["dep:coconut-integration-kwin"]
+windows = ["dep:coconut-integration-windows"]

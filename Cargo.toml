@@ -3,19 +3,19 @@ resolver = "2"
 members = ["crates/*", "integrations/*"]
 
 [package]
-name = "creamshell"
+name = "coconut"
 version = "0.1.0"
 edition = "2021"
 description = "A small, native Wayland dock built with CreamUI"
 license = "Apache-2.0"
 
 [[bin]]
-name = "creamshell"
+name = "coconut"
 path = "src/main.rs"
 
 [dependencies]
-creamshell-shell = { path = "crates/shell" }
-creamshell-settings-panel = { path = "crates/settings-panel" }
+coconut-shell = { path = "crates/shell" }
+coconut-settings-panel = { path = "crates/settings-panel" }
 
 [profile.dev.package."*"]
 opt-level = 2

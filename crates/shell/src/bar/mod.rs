@@ -1,9 +1,9 @@
 pub mod widgets;
 
 use crate::icons::pixel_icon;
-use creamshell_api::audio::Playback;
-use creamshell_api::desktop::OpenWindow;
-use creamshell_core::{BarLayout, ShellConfig, TrayConfig, TrayMode};
+use coconut_api::audio::Playback;
+use coconut_api::desktop::OpenWindow;
+use coconut_core::{BarLayout, ShellConfig, TrayConfig, TrayMode};
 use creamui_core::layout::{FlexDirection, Style as LayoutStyle};
 use creamui_core::{
     BoxedWidget, Painter, Point, Rect, Size, StateStyle, Style, Styled, TextAlign, Widget,
@@ -11,7 +11,7 @@ use creamui_core::{
 use creamui_image::{Image, ImageData, ImageFit};
 use creamui_macros::jsx;
 use creamui_reactive::Signal;
-use creamui_theme::{Color, ColorScheme, Theme};
+use creamui_theme::{Color, Theme};
 use creamui_widgets::layout::{fixed, Align, Flex, Justify};
 use creamui_widgets::RawButton;
 use std::collections::HashMap;
@@ -71,24 +71,7 @@ pub struct SystemStatus {
 
 impl CreamTheme {
     pub fn theme() -> Theme {
-        Theme::dark().with_colors(ColorScheme {
-            surface: BAR,
-            surface_elevated: CONTROL,
-            surface_hover: CONTROL_HOVER,
-            accent: PRIMARY,
-            accent_hover: Color::rgb(255, 255, 255),
-            accent_pressed: Color::rgb(205, 206, 208),
-            selection_background: SELECTED,
-            selection_text: PRIMARY,
-            text_primary: PRIMARY,
-            text_secondary: MUTED,
-            text_disabled: Color::rgb(104, 106, 109),
-            border: ISLAND_BORDER,
-            border_strong: Color::rgba(255, 255, 255, 36),
-            danger: Color::rgb(220, 220, 220),
-            warning: Color::rgb(220, 220, 220),
-            success: Color::rgb(220, 220, 220),
-        })
+        creamui_theme::active_theme()
     }
 }
 

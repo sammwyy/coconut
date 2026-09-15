@@ -1,10 +1,10 @@
-# CreamShell
+# Coconut
 
 > [!WARNING]
-> CreamShell is a work in progress. It is still being shaped, polished, and
+> Coconut is a work in progress. It is still being shaped, polished, and
 > tested for everyday desktop use.
 
-CreamShell is a small, modern desktop shell built around a clean bottom bar and
+Coconut is a small, modern desktop shell built around a clean bottom bar and
 lightweight pop-up panels. It aims to make everyday desktop actions feel
 immediate: launch an app, switch windows, check what is playing, or adjust your
 system without leaving your flow.
@@ -57,6 +57,6 @@ desktop services installed.
 
 ## Status
 
-CreamShell is not ready for installation or daily use yet. There is no
+Coconut is not ready for installation or daily use yet. There is no
 installation guide at this stage; the project is evolving quickly and its
 packaging story will arrive once the shell is ready for it.

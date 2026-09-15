@@ -1,9 +1,9 @@
 [package]
-name = "creamshell-integration-brightnessctl"
+name = "coconut-integration-brightnessctl"
 version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
 
 [dependencies]
-creamshell-api = { path = "../../crates/api" }
+coconut-api = { path = "../../crates/api" }
 libc = "0.2"

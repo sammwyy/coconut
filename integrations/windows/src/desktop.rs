@@ -1,5 +1,5 @@
 use crate::powershell::powershell;
-use creamshell_api::desktop::{DesktopIntegration, OpenWindow};
+use coconut_api::desktop::{DesktopIntegration, OpenWindow};
 use creamui_render::WindowHandle;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -60,7 +60,7 @@ fn query_windows() -> Vec<OpenWindow> {
                     let id = fields.next()?.trim();
                     let app_name = fields.next()?.trim();
                     let title = fields.next()?.trim();
-                    (!title.is_empty() && !title.starts_with("CreamShell")).then(|| OpenWindow {
+                    (!title.is_empty() && !title.starts_with("Coconut")).then(|| OpenWindow {
                         id: id.to_owned(),
                         app_name: app_name.to_owned(),
                         title: title.to_owned(),

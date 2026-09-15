@@ -1,7 +1,7 @@
 # TODO
 
 - `shell.toml` is only read at startup; there is no settings UI or live
-  reload yet, so changes require restarting CreamShell.
+  reload yet, so changes require restarting Coconut.
 - `[bar] position = "top"` only anchors correctly on the Wayland layer-shell
   backend (`creamui-platform`'s `WindowRole::TopPanel`/`BottomPanel`
   handling). The Windows backend does not place panel-role windows at all

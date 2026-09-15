@@ -1,5 +1,5 @@
-use creamshell_api::bluetooth::{BluetoothDevice, BluetoothIntegration};
-use creamshell_api::{spawn_event_bridge, ChangeListener, EventBridgeGuard};
+use coconut_api::bluetooth::{BluetoothDevice, BluetoothIntegration};
+use coconut_api::{spawn_event_bridge, ChangeListener, EventBridgeGuard};
 use dbus::arg::{PropMap, RefArg};
 use dbus::blocking::stdintf::org_freedesktop_dbus::{
     ObjectManager, ObjectManagerInterfacesAdded, ObjectManagerInterfacesRemoved, Properties,

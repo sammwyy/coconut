@@ -13,8 +13,8 @@ use crate::panels::{
     volume as volume_panel, weather,
 };
 use chrono::Local;
-use creamshell_api::audio::{AudioIntegration, Playback};
-use creamshell_core::{BarPosition, ShellConfig};
+use coconut_api::audio::{AudioIntegration, Playback};
+use coconut_core::{BarPosition, ShellConfig};
 use creamui_core::{BoxedWidget, Point, Rect, Size};
 use creamui_reactive::Signal;
 use creamui_render::{AppBuilder, AppHandle, PopupOptions, WindowHandle, WindowOptions};
@@ -32,7 +32,7 @@ pub fn run() {
     };
     let popup_opens_below = matches!(config.bar.position, BarPosition::Top);
 
-    let integrations = creamshell_registry::detect();
+    let integrations = coconut_registry::detect();
     let applications = app_drawer::AppCatalog::new();
     let drawer_state = app_drawer::DrawerState::default();
     let desktop_state = desktop::DesktopState::default();
@@ -97,7 +97,7 @@ pub fn run() {
             let drag_overlay_state = desktop_state.clone();
             app.append_window(
                 WindowOptions {
-                    title: "CreamShell Desktop".into(),
+                    title: "Coconut Desktop".into(),
                     width: 1280,
                     height: 720,
                     decorations: false,
@@ -113,7 +113,7 @@ pub fn run() {
             );
             app.append_window(
                 WindowOptions {
-                    title: "CreamShell Drag Overlay".into(),
+                    title: "Coconut Drag Overlay".into(),
                     width: 1280,
                     height: 720,
                     decorations: false,
@@ -185,7 +185,7 @@ pub fn run() {
                     return;
                 };
                 weather_app.append_popup(
-                    popup_options("CreamShell Weather", weather::WIDTH, weather::HEIGHT),
+                    popup_options("Coconut Weather", weather::WIDTH, weather::HEIGHT),
                     popup,
                     Color::rgba(0, 0, 0, 0),
                     move |window| {
@@ -212,7 +212,7 @@ pub fn run() {
                     return;
                 };
                 clock_app.append_popup(
-                    popup_options("CreamShell Clock", clock::WIDTH, clock::HEIGHT),
+                    popup_options("Coconut Clock", clock::WIDTH, clock::HEIGHT),
                     popup,
                     Color::rgba(0, 0, 0, 0),
                     move |window| {
@@ -243,7 +243,7 @@ pub fn run() {
                 };
                 music_app.append_popup(
                     popup_options(
-                        "CreamShell Current Playing",
+                        "Coconut Current Playing",
                         current_playing::WIDTH,
                         current_playing::HEIGHT,
                     ),
@@ -313,7 +313,7 @@ pub fn run() {
                 };
                 drawer_app.append_popup(
                     popup_options(
-                        "CreamShell App Drawer",
+                        "Coconut App Drawer",
                         app_drawer::WIDTH,
                         app_drawer::HEIGHT,
                     ),
@@ -347,7 +347,7 @@ pub fn run() {
                     } else if let Ok(child) = Command::new("systemd-inhibit")
                         .args([
                             "--what=idle:sleep",
-                            "--why=CreamShell",
+                            "--why=Coconut",
                             "--mode=block",
                             "sleep",
                             "infinity",
@@ -407,7 +407,7 @@ pub fn run() {
                 };
                 control_app.append_popup(
                     popup_options(
-                        "CreamShell Control Center",
+                        "Coconut Control Center",
                         control_center::WIDTH,
                         control_center::HEIGHT,
                     ),
@@ -473,7 +473,7 @@ pub fn run() {
                 };
                 network_app.append_popup(
                     popup_options(
-                        "CreamShell Network",
+                        "Coconut Network",
                         network_panel::WIDTH,
                         network_panel::HEIGHT,
                     ),
@@ -522,7 +522,7 @@ pub fn run() {
                 };
                 bluetooth_app.append_popup(
                     popup_options(
-                        "CreamShell Bluetooth",
+                        "Coconut Bluetooth",
                         bluetooth_panel::WIDTH,
                         bluetooth_panel::HEIGHT,
                     ),
@@ -570,7 +570,7 @@ pub fn run() {
                 };
                 energy_app.append_popup(
                     popup_options(
-                        "CreamShell Energy",
+                        "Coconut Energy",
                         energy_panel::WIDTH,
                         energy_panel::HEIGHT,
                     ),
@@ -616,7 +616,7 @@ pub fn run() {
                 };
                 brightness_app.append_popup(
                     popup_options(
-                        "CreamShell Brightness",
+                        "Coconut Brightness",
                         brightness_panel::WIDTH,
                         brightness_panel::HEIGHT,
                     ),
@@ -658,7 +658,7 @@ pub fn run() {
                 };
                 volume_app.append_popup(
                     popup_options(
-                        "CreamShell Volume",
+                        "Coconut Volume",
                         volume_panel::WIDTH,
                         volume_panel::HEIGHT,
                     ),
@@ -677,7 +677,7 @@ pub fn run() {
 
             app.append_window(
                 WindowOptions {
-                    title: "CreamShell".into(),
+                    title: "Coconut".into(),
                     width: 800,
                     height: DOCK_HEIGHT,
                     decorations: false,
@@ -761,8 +761,8 @@ pub fn run() {
 
 fn schedule_window_events(
     app: AppHandle,
-    backend: Rc<dyn creamshell_api::desktop::DesktopIntegration>,
-    windows: Signal<Vec<creamshell_api::desktop::OpenWindow>>,
+    backend: Rc<dyn coconut_api::desktop::DesktopIntegration>,
+    windows: Signal<Vec<coconut_api::desktop::OpenWindow>>,
 ) -> bool {
     let Some(listener) = backend.window_changes() else {
         return false;
@@ -773,9 +773,9 @@ fn schedule_window_events(
 
 fn wait_for_window_event(
     app: AppHandle,
-    backend: Rc<dyn creamshell_api::desktop::DesktopIntegration>,
-    windows: Signal<Vec<creamshell_api::desktop::OpenWindow>>,
-    listener: creamshell_api::desktop::WindowChangeListener,
+    backend: Rc<dyn coconut_api::desktop::DesktopIntegration>,
+    windows: Signal<Vec<coconut_api::desktop::OpenWindow>>,
+    listener: coconut_api::desktop::WindowChangeListener,
 ) {
     let waiting_listener = listener.clone();
     let next_app = app.clone();
@@ -812,7 +812,7 @@ fn schedule_playback_refresh(
 /// couple-second poll for integrations that expose no such hook.
 fn schedule_change_events(
     app: AppHandle,
-    listener: Option<creamshell_api::ChangeListener>,
+    listener: Option<coconut_api::ChangeListener>,
     revision: Signal<()>,
 ) {
     match listener {
@@ -823,7 +823,7 @@ fn schedule_change_events(
 
 fn wait_for_change_event(
     app: AppHandle,
-    listener: creamshell_api::ChangeListener,
+    listener: coconut_api::ChangeListener,
     revision: Signal<()>,
 ) {
     let next_app = app.clone();
@@ -864,7 +864,7 @@ fn schedule_poll_refresh(app: AppHandle, tick: Signal<()>) {
 /// reads, rather than just poking a separate rebuild pulse.
 fn schedule_brightness_events(
     app: AppHandle,
-    backend: Rc<dyn creamshell_api::brightness::BrightnessIntegration>,
+    backend: Rc<dyn coconut_api::brightness::BrightnessIntegration>,
     level: Signal<f32>,
 ) {
     match backend.changes() {
@@ -875,8 +875,8 @@ fn schedule_brightness_events(
 
 fn wait_for_brightness_event(
     app: AppHandle,
-    backend: Rc<dyn creamshell_api::brightness::BrightnessIntegration>,
-    listener: creamshell_api::ChangeListener,
+    backend: Rc<dyn coconut_api::brightness::BrightnessIntegration>,
+    listener: coconut_api::ChangeListener,
     level: Signal<f32>,
 ) {
     let next_app = app.clone();
@@ -896,7 +896,7 @@ fn wait_for_brightness_event(
 
 fn schedule_brightness_poll(
     app: AppHandle,
-    backend: Rc<dyn creamshell_api::brightness::BrightnessIntegration>,
+    backend: Rc<dyn coconut_api::brightness::BrightnessIntegration>,
     level: Signal<f32>,
 ) {
     let next_app = app.clone();
@@ -918,8 +918,8 @@ fn schedule_brightness_poll(
 /// rather than just poking a separate rebuild pulse.
 fn schedule_volume_events(
     app: AppHandle,
-    backend: Rc<dyn creamshell_api::volume::VolumeIntegration>,
-    listener: Option<creamshell_api::ChangeListener>,
+    backend: Rc<dyn coconut_api::volume::VolumeIntegration>,
+    listener: Option<coconut_api::ChangeListener>,
     level: Signal<f32>,
 ) {
     match listener {
@@ -930,8 +930,8 @@ fn schedule_volume_events(
 
 fn wait_for_volume_event(
     app: AppHandle,
-    backend: Rc<dyn creamshell_api::volume::VolumeIntegration>,
-    listener: creamshell_api::ChangeListener,
+    backend: Rc<dyn coconut_api::volume::VolumeIntegration>,
+    listener: coconut_api::ChangeListener,
     level: Signal<f32>,
 ) {
     let next_app = app.clone();
@@ -951,7 +951,7 @@ fn wait_for_volume_event(
 
 fn schedule_volume_poll(
     app: AppHandle,
-    backend: Rc<dyn creamshell_api::volume::VolumeIntegration>,
+    backend: Rc<dyn coconut_api::volume::VolumeIntegration>,
     level: Signal<f32>,
 ) {
     let next_app = app.clone();

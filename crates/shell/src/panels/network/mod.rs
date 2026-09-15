@@ -4,7 +4,7 @@ use crate::panels::chrome::{
     icon_button, list_row, panel_header, section_label, wifi_strength_icon, BORDER, CARD,
     CARD_RADIUS, ISLAND_RADIUS, LIST_WIDTH, MUTED, PANEL,
 };
-use creamshell_api::network::{NetworkDevice, NetworkDeviceKind, NetworkIntegration, WifiNetwork};
+use coconut_api::network::{NetworkDevice, NetworkDeviceKind, NetworkIntegration, WifiNetwork};
 use creamui_core::layout::{Dimension, FlexDirection, Style as LayoutStyle};
 use creamui_core::{BoxedWidget, Size, Styled, TextAlign};
 use creamui_macros::jsx;

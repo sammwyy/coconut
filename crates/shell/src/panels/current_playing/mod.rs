@@ -1,6 +1,6 @@
 use crate::icons::pixel_icon;
 use crate::panels::chrome::{ACCENT, BORDER, CARD, CARD_RADIUS, FILL, MUTED, TEXT, TRACK};
-use creamshell_api::audio::Playback;
+use coconut_api::audio::Playback;
 use creamui_core::layout::{FlexDirection, Style as LayoutStyle};
 use creamui_core::{BoxedWidget, Size, StateStyle, Style, Styled, TextAlign};
 use creamui_image::{Image, ImageData, ImageFit};

@@ -1,5 +1,5 @@
-use creamshell_api::volume::VolumeIntegration;
-use creamshell_api::{spawn_event_bridge, ChangeListener, EventBridgeGuard};
+use coconut_api::volume::VolumeIntegration;
+use coconut_api::{spawn_event_bridge, ChangeListener, EventBridgeGuard};
 use pipewire::context::ContextRc;
 use pipewire::main_loop::MainLoopRc;
 use pipewire::metadata::{Metadata, MetadataListener};

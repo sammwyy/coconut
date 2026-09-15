@@ -27,11 +27,11 @@ impl Default for ShellConfig {
     }
 }
 
-/// The commented template written to disk the first time CreamShell runs,
+/// The commented template written to disk the first time Coconut runs,
 /// so the file is comfortable to open and edit by hand right away. Keep this
 /// in sync with the `Default` impls above when a field's default changes.
-const DEFAULT_SHELL_TOML: &str = r#"# CreamShell configuration.
-# Edit this file and restart CreamShell (or, in the future, use the settings
+const DEFAULT_SHELL_TOML: &str = r#"# Coconut configuration.
+# Edit this file and restart Coconut (or, in the future, use the settings
 # panel) to apply changes. Missing keys fall back to their defaults, so you
 # only need to list what you want to change.
 
@@ -129,10 +129,12 @@ fn write_default_config(path: &std::path::Path) {
     }
 }
 
-/// Resolves `<config dir>/cream/shell.toml`: `$XDG_CONFIG_HOME` or
-/// `~/.config` on Linux/macOS, `%APPDATA%` on Windows.
+/// Resolves `<config dir>/coconut/shell.toml`: `$XDG_CONFIG_HOME` or
+/// `~/.config` on Linux/macOS, `%APPDATA%` on Windows. Namespaced to Coconut
+/// itself (not to any compositor/distro bundling it) so this file lands in
+/// the same place whether Coconut runs standalone or as part of one.
 fn config_file_path() -> PathBuf {
-    config_dir().join("cream").join("shell.toml")
+    config_dir().join("coconut").join("shell.toml")
 }
 
 #[cfg(target_os = "windows")]

@@ -1,5 +1,5 @@
-use creamshell_api::power_profile::{PowerProfile, PowerProfileIntegration};
-use creamshell_api::{spawn_event_bridge, ChangeListener, EventBridgeGuard};
+use coconut_api::power_profile::{PowerProfile, PowerProfileIntegration};
+use coconut_api::{spawn_event_bridge, ChangeListener, EventBridgeGuard};
 use dbus::arg::{PropMap, RefArg};
 use dbus::blocking::stdintf::org_freedesktop_dbus::{Properties, PropertiesPropertiesChanged};
 use dbus::blocking::{Connection, SyncConnection};

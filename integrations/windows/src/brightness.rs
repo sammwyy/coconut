@@ -1,5 +1,5 @@
 use crate::powershell::{powershell, run_powershell};
-use creamshell_api::brightness::BrightnessIntegration;
+use coconut_api::brightness::BrightnessIntegration;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
