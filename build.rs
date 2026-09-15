@@ -11,18 +11,8 @@ const GLYPH_SIZE: f32 = 44.0;
 fn main() {
     let source_dir = Path::new("assets/icons");
     let output = PathBuf::from(env::var("OUT_DIR").expect("build output directory must exist"));
-    println!("cargo:rerun-if-changed={}", source_dir.display());
-    let mut icons = fs::read_dir(source_dir)
-        .expect("icon source directory must be readable")
-        .flatten()
-        .map(|entry| entry.path())
-        .filter(|path| {
-            matches!(
-                path.extension().and_then(|ext| ext.to_str()),
-                Some("svg" | "png" | "webp")
-            )
-        })
-        .collect::<Vec<_>>();
+    let mut icons = Vec::new();
+    collect_icons(source_dir, &mut icons);
     icons.sort();
     let mut names = HashSet::new();
     let mut registry =
@@ -50,6 +40,28 @@ fn main() {
     registry.push_str("        _ => None,\n    }\n}\n");
     fs::write(output.join("icons_registry.rs"), registry)
         .expect("icon registry must be written into build output");
+}
+
+/// Icons are organized into per-category subfolders, so this walks
+/// `assets/icons` recursively; every icon is still registered by its bare
+/// file stem, wherever it lives in that tree.
+fn collect_icons(dir: &Path, icons: &mut Vec<PathBuf>) {
+    println!("cargo:rerun-if-changed={}", dir.display());
+    for entry in fs::read_dir(dir)
+        .expect("icon source directory must be readable")
+        .flatten()
+    {
+        let path = entry.path();
+        if path.is_dir() {
+            collect_icons(&path, icons);
+        } else if matches!(
+            path.extension().and_then(|ext| ext.to_str()),
+            Some("svg" | "png" | "webp")
+        ) {
+            println!("cargo:rerun-if-changed={}", path.display());
+            icons.push(path);
+        }
+    }
 }
 
 fn rasterize_svg(source: &Path, destination: &Path) {

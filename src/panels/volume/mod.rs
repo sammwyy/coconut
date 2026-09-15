@@ -31,7 +31,7 @@ pub fn build(
     } else if value < 0.67 {
         "volume-mid"
     } else {
-        "volume-max"
+        "volume-high"
     };
     let caption = if muted { "Muted" } else { "Volume" };
     let set_volume = volume_level.clone();

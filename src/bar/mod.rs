@@ -154,7 +154,7 @@ pub fn build_dock(
             .with_click_position(move |point| weather_click(point))
             .child(Box::new(jsx! {
                 <Flex direction={FlexDirection::Row} size={(126.0, 32.0)} padding={6.0} gap={4.0} align={Align::Center}>
-                    {pixel_icon("weather-sun-cloud", 14.0)}
+                    {pixel_icon("weather_cloud_sun", 14.0)}
                     <RawText color={MUTED} font_size={10.0} align={TextAlign::Start}>{widgets::weather::DEFAULT_SUMMARY}</RawText>
                 </Flex>
             })),
@@ -476,13 +476,13 @@ fn tray_icon_button(icon: &str, on_click: Rc<dyn Fn(Point)>) -> BoxedWidget {
 
 fn network_icon(connected: bool, strength: Option<u8>) -> &'static str {
     if !connected {
-        return "wifi-off";
+        return "wifi-slash";
     }
     match strength.unwrap_or(100) {
-        75.. => "wifi-high",
-        50..=74 => "wifi-mid",
-        25..=49 => "wifi-low",
-        _ => "wifi-none",
+        75.. => "wifi-excellent",
+        50..=74 => "wifi-good",
+        25..=49 => "wifi-fair",
+        _ => "wifi-weak",
     }
 }
 
@@ -506,7 +506,7 @@ fn volume_icon(level: f32, muted: bool) -> &'static str {
     } else if level < 0.67 {
         "volume-mid"
     } else {
-        "volume-max"
+        "volume-high"
     }
 }
 

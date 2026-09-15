@@ -1,5 +1,10 @@
 use super::BrightnessIntegration;
+use crate::integrations::{spawn_event_bridge, ChangeListener, EventBridgeGuard};
+use std::ffi::CString;
+use std::os::unix::ffi::OsStrExt;
+use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::mpsc::{Receiver, SyncSender, TryRecvError};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -13,6 +18,8 @@ enum Backend {
 pub struct BrightnessCtl {
     backend: Backend,
     level: Arc<Mutex<f32>>,
+    changes: Option<ChangeListener>,
+    _bridge: Option<EventBridgeGuard>,
 }
 
 impl BrightnessCtl {
@@ -28,18 +35,33 @@ impl BrightnessCtl {
     }
 
     fn new(backend: Backend) -> Self {
-        let level = Arc::new(Mutex::new(1.0));
+        let level = Arc::new(Mutex::new(level_for(&backend).unwrap_or(1.0)));
+        let sysfs_path = matches!(backend, Backend::BrightnessCtl).then(backlight_sysfs_path);
+        let Some(Some(path)) = sysfs_path else {
+            spawn_poll(level.clone(), backend.clone());
+            return Self {
+                backend,
+                level,
+                changes: None,
+                _bridge: None,
+            };
+        };
+        // The kernel backlight driver posts a sysfs change notification on
+        // every write to `brightness` (its own or another program's), so an
+        // inotify watch on that file is a genuine hardware-level hook rather
+        // than a timer guessing when to re-read it.
         let cache = level.clone();
-        let worker_backend = backend.clone();
-        thread::spawn(move || loop {
-            if let Some(next) = level_for(&worker_backend) {
-                if let Ok(mut current) = cache.lock() {
-                    *current = next;
-                }
+        let (changes, bridge) = spawn_event_bridge(move |change_tx, shutdown_rx| {
+            if let Err(error) = watch_backlight(&path, &cache, &change_tx, &shutdown_rx) {
+                eprintln!("brightness: {error}");
             }
-            thread::sleep(Duration::from_secs(2));
         });
-        Self { backend, level }
+        Self {
+            backend,
+            level,
+            changes: Some(changes),
+            _bridge: Some(bridge),
+        }
     }
 
     fn ddc_value() -> Option<(f32, f32)> {
@@ -81,6 +103,87 @@ impl BrightnessIntegration for BrightnessCtl {
             }
         });
     }
+
+    fn changes(&self) -> Option<ChangeListener> {
+        self.changes.clone()
+    }
+}
+
+fn spawn_poll(level: Arc<Mutex<f32>>, backend: Backend) {
+    thread::spawn(move || loop {
+        if let Some(next) = level_for(&backend) {
+            if let Ok(mut current) = level.lock() {
+                *current = next;
+            }
+        }
+        thread::sleep(Duration::from_secs(2));
+    });
+}
+
+/// Resolves the sysfs directory `brightnessctl` is reading, e.g.
+/// `/sys/class/backlight/amdgpu_bl1`, so it can be watched directly.
+fn backlight_sysfs_path() -> Option<PathBuf> {
+    let info = output("brightnessctl", &["-m", "i"])?;
+    let mut fields = info.split(',');
+    let device = fields.next()?;
+    let class = fields.next()?;
+    let path = PathBuf::from("/sys/class").join(class).join(device);
+    path.join("brightness").is_file().then_some(path)
+}
+
+fn watch_backlight(
+    path: &Path,
+    level: &Arc<Mutex<f32>>,
+    changes: &SyncSender<()>,
+    shutdown: &Receiver<()>,
+) -> Result<(), String> {
+    let brightness_file = path.join("brightness");
+    let watched_path =
+        CString::new(brightness_file.as_os_str().as_bytes()).map_err(|error| error.to_string())?;
+
+    let fd = unsafe { libc::inotify_init1(libc::IN_NONBLOCK) };
+    if fd < 0 {
+        return Err(std::io::Error::last_os_error().to_string());
+    }
+    let watch = unsafe {
+        libc::inotify_add_watch(
+            fd,
+            watched_path.as_ptr(),
+            libc::IN_MODIFY | libc::IN_CLOSE_WRITE,
+        )
+    };
+    if watch < 0 {
+        let error = std::io::Error::last_os_error().to_string();
+        unsafe { libc::close(fd) };
+        return Err(error);
+    }
+
+    let mut buffer = [0u8; 512];
+    loop {
+        match shutdown.try_recv() {
+            Ok(()) | Err(TryRecvError::Disconnected) => break,
+            Err(TryRecvError::Empty) => {}
+        }
+        let mut poll_fd = libc::pollfd {
+            fd,
+            events: libc::POLLIN,
+            revents: 0,
+        };
+        let ready = unsafe { libc::poll(&mut poll_fd, 1, 500) };
+        if ready > 0 && poll_fd.revents & libc::POLLIN != 0 {
+            let read = unsafe { libc::read(fd, buffer.as_mut_ptr().cast(), buffer.len()) };
+            if read > 0 {
+                if let Some(next) = level_for(&Backend::BrightnessCtl) {
+                    if let Ok(mut current) = level.lock() {
+                        *current = next;
+                    }
+                }
+                let _ = changes.try_send(());
+            }
+        }
+    }
+    unsafe { libc::close(fd) };
+    Ok(())
 }
 
 fn level_for(backend: &Backend) -> Option<f32> {
@@ -103,4 +206,41 @@ fn output(program: &str, args: &[&str]) -> Option<String> {
         .ok()
         .filter(|output| output.status.success())
         .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{BrightnessCtl, BrightnessIntegration};
+    use std::process::Command;
+    use std::thread::sleep;
+    use std::time::Duration;
+
+    #[test]
+    #[ignore = "requires a kernel-backlight device controlled by brightnessctl"]
+    fn reacts_to_an_external_brightness_change() {
+        let brightness = BrightnessCtl::detect().expect("a brightness backend");
+        sleep(Duration::from_millis(200));
+        let listener = brightness
+            .changes()
+            .expect("a native inotify hook for the kernel backlight");
+        let initial = brightness.level();
+        let target = if initial > 0.5 {
+            initial - 0.1
+        } else {
+            initial + 0.1
+        };
+
+        let (result_tx, result_rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = result_tx.send(listener.wait());
+        });
+        let _ = Command::new("brightnessctl")
+            .args(["set", &format!("{}%", (target * 100.0).round())])
+            .status();
+        assert_eq!(result_rx.recv_timeout(Duration::from_secs(5)), Ok(true));
+
+        let _ = Command::new("brightnessctl")
+            .args(["set", &format!("{}%", (initial * 100.0).round())])
+            .status();
+    }
 }

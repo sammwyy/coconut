@@ -92,13 +92,13 @@ pub fn build_with_integrations(
         "Off".into()
     };
     let wifi_icon = if !wifi_on {
-        "wifi-off"
+        "wifi-slash"
     } else {
         match network.strength().unwrap_or(100) {
-            75.. => "wifi-high",
-            50..=74 => "wifi-mid",
-            25..=49 => "wifi-low",
-            _ => "wifi-none",
+            75.. => "wifi-excellent",
+            50..=74 => "wifi-good",
+            25..=49 => "wifi-fair",
+            _ => "wifi-weak",
         }
     };
     let wifi_caption = if connected {
@@ -172,7 +172,7 @@ pub fn build_with_integrations(
     } else if volume_value < 0.67 {
         "volume-mid"
     } else {
-        "volume-max"
+        "volume-high"
     };
 
     let brightness_backend = brightness.clone();

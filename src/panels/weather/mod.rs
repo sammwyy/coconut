@@ -18,27 +18,27 @@ struct Hour {
 const HOURS: [Hour; 5] = [
     Hour {
         label: "Now",
-        icon: "weather-sun-cloud",
+        icon: "weather_cloud_sun",
         temp: "24",
     },
     Hour {
         label: "13",
-        icon: "weather-sun",
+        icon: "weather_heat",
         temp: "25",
     },
     Hour {
         label: "16",
-        icon: "weather-cloudly",
+        icon: "weather_cloudly",
         temp: "23",
     },
     Hour {
         label: "19",
-        icon: "weather-rain",
+        icon: "weather_rain",
         temp: "20",
     },
     Hour {
         label: "22",
-        icon: "weather-wind",
+        icon: "weather_fog",
         temp: "18",
     },
 ];
@@ -54,7 +54,7 @@ pub fn build(_: Size) -> BoxedWidget {
     Box::new(jsx! {
         <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={18.0} gap={14.0} background={CARD} border={(BORDER, 1.0)} corner_radius={CARD_RADIUS}>
             <Flex direction={FlexDirection::Row} gap={14.0} align={Align::Center}>
-                {pixel_icon("weather-sun-cloud", 52.0)}
+                {pixel_icon("weather_cloud_sun", 52.0)}
                 <Flex direction={FlexDirection::Column} gap={6.0} grow={1.0}>
                     <Flex direction={FlexDirection::Row} align={Align::End} gap={8.0}>
                         <RawText color={TEXT} font_size={44.0}>"24°"</RawText>

@@ -3,28 +3,11 @@ mod kwin_dbus;
 #[cfg(target_os = "windows")]
 mod windows;
 
+use crate::integrations::ChangeListener;
 use crate::platform::OpenWindow;
 use creamui_render::WindowHandle;
-use std::sync::{mpsc::Receiver, Arc, Mutex};
 
-#[derive(Clone)]
-pub struct WindowChangeListener {
-    receiver: Arc<Mutex<Receiver<()>>>,
-}
-
-impl WindowChangeListener {
-    pub(super) fn new(receiver: Receiver<()>) -> Self {
-        Self {
-            receiver: Arc::new(Mutex::new(receiver)),
-        }
-    }
-
-    pub fn wait(&self) -> bool {
-        self.receiver
-            .lock()
-            .is_ok_and(|receiver| receiver.recv().is_ok())
-    }
-}
+pub type WindowChangeListener = ChangeListener;
 
 pub trait DesktopIntegration {
     fn prepare_window(&self, window: &WindowHandle);

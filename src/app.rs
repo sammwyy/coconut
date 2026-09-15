@@ -50,10 +50,18 @@ pub fn run() {
     let panel_battery = integrations.battery.clone();
     let panel_brightness = integrations.brightness.clone();
     let panel_volume = integrations.volume.clone();
+    let poll_brightness = integrations.brightness.clone();
+    let poll_volume = integrations.volume.clone();
+    let network_changes = integrations.network.changes();
+    let bluetooth_changes = integrations.bluetooth.changes();
+    let battery_changes = integrations.battery.changes();
+    let volume_changes = integrations.volume.changes();
     let brightness_level = Signal::new(integrations.brightness.level());
     let volume_level = Signal::new(integrations.volume.level());
     let wifi_enabled = Signal::new(integrations.network.enabled());
     let bluetooth_powered = Signal::new(integrations.bluetooth.powered());
+    let poll_brightness_level = brightness_level.clone();
+    let poll_volume_level = volume_level.clone();
     let network_wifi_enabled = wifi_enabled.clone();
     let bluetooth_panel_powered = bluetooth_powered.clone();
     let energy_brightness_level = brightness_level.clone();
@@ -117,6 +125,23 @@ pub fn run() {
                 playback_state.clone(),
             );
             schedule_clock_refresh(app.clone(), clock_text.clone(), clock_format.clone());
+            let network_revision = Signal::new(());
+            schedule_change_events(app.clone(), network_changes, network_revision.clone());
+            let bluetooth_revision = Signal::new(());
+            schedule_change_events(app.clone(), bluetooth_changes, bluetooth_revision.clone());
+            let battery_revision = Signal::new(());
+            schedule_change_events(app.clone(), battery_changes, battery_revision.clone());
+            schedule_brightness_events(app.clone(), poll_brightness, poll_brightness_level);
+            schedule_volume_events(app.clone(), poll_volume, volume_changes, poll_volume_level);
+            let bar_network_revision = network_revision.clone();
+            let bar_bluetooth_revision = bluetooth_revision.clone();
+            let bar_battery_revision = battery_revision.clone();
+            let control_network_revision = network_revision.clone();
+            let control_bluetooth_revision = bluetooth_revision.clone();
+            let control_battery_revision = battery_revision.clone();
+            let network_panel_revision = network_revision.clone();
+            let bluetooth_panel_revision = bluetooth_revision.clone();
+            let energy_panel_revision = battery_revision.clone();
             applications.start_loading(&app);
             if !schedule_window_events(app.clone(), bar_windows_backend.clone(), windows.clone()) {
                 for delay in [Duration::from_secs(1), Duration::from_secs(3)] {
@@ -345,6 +370,9 @@ pub fn run() {
                 let wifi_enabled = wifi_enabled.clone();
                 let bluetooth_powered = bluetooth_powered.clone();
                 let control_tray_config = control_tray_config.clone();
+                let network_revision = control_network_revision.clone();
+                let bluetooth_revision = control_bluetooth_revision.clone();
+                let battery_revision = control_battery_revision.clone();
                 let view = Signal::new(control_center::PanelView::Main);
                 brightness_level.set(brightness.level());
                 volume_level.set(volume.level());
@@ -368,6 +396,9 @@ pub fn run() {
                         close_on_focus_lost(&window);
                     },
                     move |size| {
+                        network_revision.get();
+                        bluetooth_revision.get();
+                        battery_revision.get();
                         control_center::build_with_integrations(
                             size,
                             network.clone(),
@@ -401,6 +432,7 @@ pub fn run() {
                 let network_handle = network_handle.clone();
                 let network = panel_network.clone();
                 let wifi_enabled = network_wifi_enabled.clone();
+                let revision = network_panel_revision.clone();
                 wifi_enabled.set(network.enabled());
                 let bar_for_popup = network_bar.clone();
                 let Some(popup) = popup_for(&bar_for_popup, anchor, popup_opens_below) else {
@@ -420,6 +452,7 @@ pub fn run() {
                         close_on_focus_lost(&window);
                     },
                     move |size| {
+                        revision.get();
                         network_panel::build(size, network.clone(), wifi_enabled.clone(), None)
                     },
                 );
@@ -438,6 +471,7 @@ pub fn run() {
                 let bluetooth_handle = bluetooth_handle.clone();
                 let bluetooth = panel_bluetooth.clone();
                 let bluetooth_powered = bluetooth_panel_powered.clone();
+                let revision = bluetooth_panel_revision.clone();
                 bluetooth_powered.set(bluetooth.powered());
                 let bar_for_popup = bluetooth_bar.clone();
                 let Some(popup) = popup_for(&bar_for_popup, anchor, popup_opens_below) else {
@@ -457,6 +491,7 @@ pub fn run() {
                         close_on_focus_lost(&window);
                     },
                     move |size| {
+                        revision.get();
                         bluetooth_panel::build(
                             size,
                             bluetooth.clone(),
@@ -481,6 +516,7 @@ pub fn run() {
                 let battery = panel_battery.clone();
                 let toggle_awake = energy_toggle_awake.clone();
                 let awake = energy_awake.clone();
+                let revision = energy_panel_revision.clone();
                 let bar_for_popup = energy_bar.clone();
                 let Some(popup) = popup_for(&bar_for_popup, anchor, popup_opens_below) else {
                     return;
@@ -499,6 +535,7 @@ pub fn run() {
                         close_on_focus_lost(&window);
                     },
                     move |size| {
+                        revision.get();
                         energy_panel::build(
                             size,
                             battery.clone(),
@@ -611,7 +648,13 @@ pub fn run() {
                 },
                 {
                     let config = config.clone();
+                    let network_revision = bar_network_revision.clone();
+                    let bluetooth_revision = bar_bluetooth_revision.clone();
+                    let battery_revision = bar_battery_revision.clone();
                     move |viewport: Size| -> BoxedWidget {
+                        network_revision.get();
+                        bluetooth_revision.get();
+                        battery_revision.get();
                         let status = SystemStatus {
                             network_connected: status_network.connected(),
                             network_strength: status_network.strength(),
@@ -711,6 +754,165 @@ fn schedule_playback_refresh(
         move |_| {
             state.set(backend.playback());
             schedule_playback_refresh(next_app, next_backend, next_state);
+        },
+    );
+}
+
+/// Wakes an open device panel as soon as its integration's native hook (a
+/// D-Bus signal, a platform event) observes a change; falls back to a
+/// couple-second poll for integrations that expose no such hook.
+fn schedule_change_events(
+    app: AppHandle,
+    listener: Option<crate::integrations::ChangeListener>,
+    revision: Signal<()>,
+) {
+    match listener {
+        Some(listener) => wait_for_change_event(app, listener, revision),
+        None => schedule_poll_refresh(app, revision),
+    }
+}
+
+fn wait_for_change_event(
+    app: AppHandle,
+    listener: crate::integrations::ChangeListener,
+    revision: Signal<()>,
+) {
+    let next_app = app.clone();
+    let next_listener = listener.clone();
+    let next_revision = revision.clone();
+    app.spawn_background(
+        move || listener.wait(),
+        move |changed| {
+            if changed {
+                revision.set(());
+                wait_for_change_event(next_app, next_listener, next_revision);
+            }
+        },
+    );
+}
+
+/// Pulses every couple of seconds so an open device panel re-reads its
+/// integration's cached state, for integrations with no native change hook
+/// to react to instead.
+fn schedule_poll_refresh(app: AppHandle, tick: Signal<()>) {
+    let next_app = app.clone();
+    let next_tick = tick.clone();
+    app.spawn_background(
+        || std::thread::sleep(Duration::from_secs(2)),
+        move |_| {
+            tick.set(());
+            schedule_poll_refresh(next_app, next_tick);
+        },
+    );
+}
+
+/// Wakes as soon as brightness's native hook (an inotify watch on the
+/// kernel backlight's sysfs node) observes a change; falls back to a
+/// couple-second poll for backends with no such hook (DDC-controlled
+/// external monitors, which have no push notifications to watch).
+/// Unlike [`schedule_poll_refresh`], both write the fresh value straight
+/// into the shared signal every consumer (bar and panels alike) already
+/// reads, rather than just poking a separate rebuild pulse.
+fn schedule_brightness_events(
+    app: AppHandle,
+    backend: Rc<dyn crate::integrations::brightness::BrightnessIntegration>,
+    level: Signal<f32>,
+) {
+    match backend.changes() {
+        Some(listener) => wait_for_brightness_event(app, backend, listener, level),
+        None => schedule_brightness_poll(app, backend, level),
+    }
+}
+
+fn wait_for_brightness_event(
+    app: AppHandle,
+    backend: Rc<dyn crate::integrations::brightness::BrightnessIntegration>,
+    listener: crate::integrations::ChangeListener,
+    level: Signal<f32>,
+) {
+    let next_app = app.clone();
+    let next_backend = backend.clone();
+    let next_listener = listener.clone();
+    let next_level = level.clone();
+    app.spawn_background(
+        move || listener.wait(),
+        move |changed| {
+            if changed {
+                level.set(backend.level());
+                wait_for_brightness_event(next_app, next_backend, next_listener, next_level);
+            }
+        },
+    );
+}
+
+fn schedule_brightness_poll(
+    app: AppHandle,
+    backend: Rc<dyn crate::integrations::brightness::BrightnessIntegration>,
+    level: Signal<f32>,
+) {
+    let next_app = app.clone();
+    let next_backend = backend.clone();
+    let next_level = level.clone();
+    app.spawn_background(
+        || std::thread::sleep(Duration::from_secs(2)),
+        move |_| {
+            level.set(backend.level());
+            schedule_brightness_poll(next_app, next_backend, next_level);
+        },
+    );
+}
+
+/// Wakes as soon as volume's native hook (a libpipewire registry/node param
+/// subscription) observes a change; falls back to a couple-second poll if
+/// the backend exposes no such hook. Writes the fresh value straight into
+/// the shared signal every consumer (bar and panels alike) already reads,
+/// rather than just poking a separate rebuild pulse.
+fn schedule_volume_events(
+    app: AppHandle,
+    backend: Rc<dyn crate::integrations::volume::VolumeIntegration>,
+    listener: Option<crate::integrations::ChangeListener>,
+    level: Signal<f32>,
+) {
+    match listener {
+        Some(listener) => wait_for_volume_event(app, backend, listener, level),
+        None => schedule_volume_poll(app, backend, level),
+    }
+}
+
+fn wait_for_volume_event(
+    app: AppHandle,
+    backend: Rc<dyn crate::integrations::volume::VolumeIntegration>,
+    listener: crate::integrations::ChangeListener,
+    level: Signal<f32>,
+) {
+    let next_app = app.clone();
+    let next_backend = backend.clone();
+    let next_listener = listener.clone();
+    let next_level = level.clone();
+    app.spawn_background(
+        move || listener.wait(),
+        move |changed| {
+            if changed {
+                level.set(backend.level());
+                wait_for_volume_event(next_app, next_backend, next_listener, next_level);
+            }
+        },
+    );
+}
+
+fn schedule_volume_poll(
+    app: AppHandle,
+    backend: Rc<dyn crate::integrations::volume::VolumeIntegration>,
+    level: Signal<f32>,
+) {
+    let next_app = app.clone();
+    let next_backend = backend.clone();
+    let next_level = level.clone();
+    app.spawn_background(
+        || std::thread::sleep(Duration::from_secs(2)),
+        move |_| {
+            level.set(backend.level());
+            schedule_volume_poll(next_app, next_backend, next_level);
         },
     );
 }
