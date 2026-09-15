@@ -1,0 +1,29 @@
+[package]
+name = "creamshell-shell"
+version = "0.1.0"
+edition = "2021"
+description = "CreamShell's dock/bar process"
+license = "Apache-2.0"
+
+[dependencies]
+creamshell-api = { path = "../api" }
+creamshell-core = { path = "../core" }
+chrono = "0.4"
+creamui-core = { path = "../../../creamui/crates/core" }
+creamui-image = { path = "../../../creamui/crates/image", features = ["webp", "jpeg"] }
+creamui-jsx = { path = "../../../creamui/crates/jsx" }
+creamui-macros = { path = "../../../creamui/crates/macros" }
+creamui-reactive = { path = "../../../creamui/crates/reactive" }
+creamui-render = { path = "../../../creamui/crates/render", features = ["platform-wayland"] }
+creamui-theme = { path = "../../../creamui/crates/theme" }
+creamui-widgets = { path = "../../../creamui/crates/widgets" }
+resvg = "0.45.1"
+
+[target.'cfg(not(target_os = "windows"))'.dependencies]
+creamshell-registry = { path = "../registry" }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+creamshell-registry = { path = "../registry", default-features = false, features = ["windows"] }
+
+[build-dependencies]
+resvg = "0.45.1"

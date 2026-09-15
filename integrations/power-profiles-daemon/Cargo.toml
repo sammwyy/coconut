@@ -1,0 +1,9 @@
+[package]
+name = "creamshell-integration-power-profiles-daemon"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+
+[dependencies]
+creamshell-api = { path = "../../crates/api" }
+dbus = "0.9"

@@ -1,0 +1,10 @@
+[package]
+name = "creamshell-integration-windows"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+
+[dependencies]
+creamshell-api = { path = "../../crates/api" }
+creamui-render = { path = "../../../creamui/crates/render" }
+windows = { version = "0.52", features = ["Win32_Foundation", "Win32_Media_Audio", "Win32_Media_Audio_Endpoints", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_System_Variant"] }
