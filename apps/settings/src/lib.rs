@@ -34,6 +34,18 @@ enum Section {
     CreateUser,
 }
 
+/// The page shown when a sidebar category is opened. Keeping this decision in
+/// the app lets `nested_sidebar` remain generic while ensuring its visible
+/// selection always corresponds to the content panel.
+fn category_default(section: Section) -> Section {
+    match section {
+        Section::Appearance => Section::Theme,
+        Section::Taskbar => Section::General,
+        Section::Users => Section::Profile,
+        leaf => leaf,
+    }
+}
+
 fn tree(accounts: &[users::Account], icons: &SettingsIcons) -> Vec<SidebarNode<Section>> {
     let profile_icon = std::env::var("USER")
         .ok()
@@ -189,6 +201,7 @@ fn build(
     let account_list = users.get();
     let navigation = tree(&account_list, icons);
     let select = view.clone();
+    let enter_category = view.clone();
     let sidebar = nested_sidebar(
         sidebar_style,
         &navigation,
@@ -196,6 +209,9 @@ fn build(
         Some(&current),
         move |section| {
             select.set(section);
+        },
+        move |section| {
+            enter_category.set(category_default(section));
         },
     );
 

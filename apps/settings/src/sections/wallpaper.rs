@@ -9,8 +9,7 @@ use creamui_render::WindowHandle;
 use creamui_theme::{use_theme, Color};
 use creamui_widgets::layout::{fixed, Align, Justify, Wrap};
 use creamui_widgets::{
-    tab_styles, ColorPicker, ColorPickerController, Tab, TabColors, TabSizing, Tabs, Text,
-    TextSize,
+    tab_styles, ColorPicker, ColorPickerController, Tab, TabColors, TabSizing, Tabs, Text, TextSize,
 };
 use image_rs::codecs::jpeg::JpegEncoder;
 use std::cell::{Cell, RefCell};
@@ -492,10 +491,7 @@ mod tests {
         ));
         let _ = fs::remove_dir_all(&directory);
         assert!(scan_wallpapers_folder(&directory).is_empty());
-        assert!(
-            !directory.exists(),
-            "scanning must never create the folder"
-        );
+        assert!(!directory.exists(), "scanning must never create the folder");
     }
 
     #[test]

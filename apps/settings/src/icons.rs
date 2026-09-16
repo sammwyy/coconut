@@ -31,9 +31,7 @@ impl SettingsIcons {
             )),
             position: decode(include_bytes!("../../../assets/icons/settings/move.svg")),
             status: decode(include_bytes!("../../../assets/icons/settings/status.svg")),
-            widgets: decode(include_bytes!(
-                "../../../assets/icons/settings/widgets.svg"
-            )),
+            widgets: decode(include_bytes!("../../../assets/icons/settings/widgets.svg")),
             users: decode(include_bytes!("../../../assets/icons/settings/users.svg")),
         }
     }
