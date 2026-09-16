@@ -5,26 +5,67 @@ use creamui_core::{BoxedWidget, Size, Styled};
 use creamui_image::{Image, ImageData, ImageFit};
 use creamui_macros::jsx;
 use creamui_reactive::Signal;
+use creamui_render::WindowHandle;
 use creamui_theme::{use_theme, Color};
 use creamui_widgets::layout::{fixed, Align, Justify, Wrap};
 use creamui_widgets::{
-    tab_styles, ColorPicker, ColorPickerController, Tab, TabColors, TabSizing, Tabs,
+    tab_styles, ColorPicker, ColorPickerController, Tab, TabColors, TabSizing, Tabs, Text,
+    TextSize,
 };
 use image_rs::codecs::jpeg::JpegEncoder;
+use std::cell::{Cell, RefCell};
 use std::collections::hash_map::DefaultHasher;
 use std::fs;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
+use std::process::Command;
+use std::rc::Rc;
 use std::time::UNIX_EPOCH;
 
 const CARD: f32 = 112.0;
 const THUMBNAIL_SIZE: u32 = 224;
+const WALLPAPER_EXTENSIONS: [&str; 4] = ["png", "jpg", "jpeg", "webp"];
 
-pub fn build(_: Size, config: &Signal<ShellConfig>, picker: &ColorPickerController) -> BoxedWidget {
+/// Persists across rebuilds so the `Wallpapers` folder is scanned for
+/// thumbnails at most once per app run, off the UI thread.
+#[derive(Clone)]
+pub struct GalleryState {
+    started: Rc<Cell<bool>>,
+    paths: Signal<Option<Vec<PathBuf>>>,
+}
+
+impl GalleryState {
+    pub fn new() -> Self {
+        Self {
+            started: Rc::new(Cell::new(false)),
+            paths: Signal::new(None),
+        }
+    }
+}
+
+impl Default for GalleryState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+pub fn build(
+    _: Size,
+    config: &Signal<ShellConfig>,
+    picker: &ColorPickerController,
+    gallery: &GalleryState,
+    window: &Rc<RefCell<Option<WindowHandle>>>,
+) -> BoxedWidget {
     let desktop = config.get().desktop;
     let image_mode = desktop.wallpaper_mode == WallpaperMode::Image;
     let content = if image_mode {
-        image_content(config, desktop.wallpaper, desktop.recent_wallpapers)
+        image_content(
+            config,
+            desktop.wallpaper,
+            desktop.recent_wallpapers,
+            gallery,
+            window,
+        )
     } else {
         solid_color(config, desktop.solid_color, picker)
     };
@@ -72,11 +113,13 @@ fn image_content(
     config: &Signal<ShellConfig>,
     current: Option<PathBuf>,
     mut recent: Vec<PathBuf>,
+    gallery: &GalleryState,
+    window: &Rc<RefCell<Option<WindowHandle>>>,
 ) -> BoxedWidget {
     recent.retain(|path| current.as_ref() != Some(path));
     recent.truncate(2);
     let mut cards = vec![add_image_card(config)];
-    if let Some(path) = current {
+    if let Some(path) = current.clone() {
         cards.push(image_card(config, path, true));
     }
     cards.extend(
@@ -85,8 +128,90 @@ fn image_content(
             .map(|path| image_card(config, path, false)),
     );
     let theme = use_theme();
-    Box::new(jsx! {
+    let recent_row: BoxedWidget = Box::new(jsx! {
         <Flex direction={FlexDirection::Row} wrap={Wrap::Wrap} gap={theme.spacing_medium} children={cards} />
+    });
+    Box::new(jsx! {
+        <Flex direction={FlexDirection::Column} gap={theme.spacing_medium}>
+            {Box::new(Text::secondary("Recent").size(TextSize::Sm)) as BoxedWidget}
+            {recent_row}
+            {wallpapers_folder_section(config, &current, gallery, window)}
+        </Flex>
+    })
+}
+
+fn wallpapers_folder_section(
+    config: &Signal<ShellConfig>,
+    current: &Option<PathBuf>,
+    gallery: &GalleryState,
+    window: &Rc<RefCell<Option<WindowHandle>>>,
+) -> BoxedWidget {
+    let theme = use_theme();
+    let Some(directory) = wallpapers_directory() else {
+        return Box::new(jsx! { <Flex /> });
+    };
+
+    if !gallery.started.get() {
+        if let Some(app) = window.borrow().as_ref().map(WindowHandle::app) {
+            gallery.started.set(true);
+            let paths = gallery.paths.clone();
+            let scan_directory = directory.clone();
+            app.spawn_background(
+                move || scan_wallpapers_folder(&scan_directory),
+                move |found| paths.set(Some(found)),
+            );
+        }
+    }
+
+    let open = directory.clone();
+    let open_button: BoxedWidget = Box::new(jsx! {
+        <RawButton style={folder_button_style()} background={theme.surface_elevated} corner_radius={theme.button_radius} on_click={move || open_wallpapers_folder(open.clone())}>
+            <Flex padding_xy={(12.0, 0.0)} align={Align::Center} justify={Justify::Center}>
+                <RawText color={theme.text_secondary} font_size={13.0}>"Open folder"</RawText>
+            </Flex>
+        </RawButton>
+    });
+    let header: BoxedWidget = Box::new(jsx! {
+        <Flex direction={FlexDirection::Row} align={Align::Center} justify={Justify::Between}>
+            {Box::new(Text::secondary("Wallpapers").size(TextSize::Sm)) as BoxedWidget}
+            {open_button}
+        </Flex>
+    });
+
+    let gallery_body: BoxedWidget = match gallery.paths.get() {
+        None => Box::new(jsx! { <Flex /> }),
+        Some(paths) if paths.is_empty() => {
+            Box::new(Text::secondary("No images in this folder yet.").size(TextSize::Sm))
+        }
+        Some(paths) => {
+            let cards: Vec<BoxedWidget> = paths
+                .into_iter()
+                .map(|path| {
+                    let selected = current.as_ref() == Some(&path);
+                    image_card(config, path, selected)
+                })
+                .collect();
+            Box::new(jsx! {
+                <Flex direction={FlexDirection::Row} wrap={Wrap::Wrap} gap={theme.spacing_medium} children={cards} />
+            })
+        }
+    };
+
+    Box::new(jsx! {
+        <Flex direction={FlexDirection::Column} gap={theme.spacing_medium}>
+            {header}
+            {gallery_body}
+        </Flex>
+    })
+}
+
+fn folder_button_style() -> creamui_core::Style {
+    creamui_core::Style::new().layout(creamui_core::layout::Style {
+        size: creamui_core::layout::Size {
+            width: creamui_core::layout::Dimension::Auto,
+            height: creamui_core::layout::Dimension::Length(30.0),
+        },
+        ..Default::default()
     })
 }
 
@@ -237,4 +362,159 @@ fn solid_color(
         },
     ));
     group(vec![row("Color", picker)])
+}
+
+/// Where wallpapers live by convention: the platform's pictures directory,
+/// in a `Wallpapers` subfolder. Never created just by looking — only
+/// [`open_wallpapers_folder`] (an explicit user action) creates it.
+fn wallpapers_directory() -> Option<PathBuf> {
+    pictures_directory().map(|directory| directory.join("Wallpapers"))
+}
+
+#[cfg(target_os = "windows")]
+fn pictures_directory() -> Option<PathBuf> {
+    std::env::var_os("USERPROFILE").map(|home| PathBuf::from(home).join("Pictures"))
+}
+
+#[cfg(target_os = "macos")]
+fn pictures_directory() -> Option<PathBuf> {
+    std::env::var_os("HOME").map(|home| PathBuf::from(home).join("Pictures"))
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+fn pictures_directory() -> Option<PathBuf> {
+    if let Some(directory) = std::env::var_os("XDG_PICTURES_DIR") {
+        return Some(PathBuf::from(directory));
+    }
+    if let Some(directory) = pictures_directory_from_user_dirs() {
+        return Some(directory);
+    }
+    std::env::var_os("HOME").map(|home| PathBuf::from(home).join("Pictures"))
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+fn pictures_directory_from_user_dirs() -> Option<PathBuf> {
+    let config = std::env::var_os("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")))?;
+    let contents = fs::read_to_string(config.join("user-dirs.dirs")).ok()?;
+    let value = contents
+        .lines()
+        .find_map(|line| line.trim().strip_prefix("XDG_PICTURES_DIR="))?
+        .trim()
+        .trim_matches('"');
+    let home = std::env::var_os("HOME").map(PathBuf::from)?;
+    Some(PathBuf::from(
+        value.replace("$HOME", &home.to_string_lossy()),
+    ))
+}
+
+/// Scans `directory` for image files and pre-warms their thumbnail cache in
+/// parallel, so the gallery that follows renders instantly. A missing
+/// directory just yields no results — it is never created here.
+fn scan_wallpapers_folder(directory: &Path) -> Vec<PathBuf> {
+    let Ok(entries) = fs::read_dir(directory) else {
+        return Vec::new();
+    };
+    let mut paths: Vec<PathBuf> = entries
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| is_wallpaper_image(path))
+        .collect();
+    paths.sort();
+
+    let workers = std::thread::available_parallelism()
+        .map(std::num::NonZeroUsize::get)
+        .unwrap_or(1)
+        .max(1);
+    let chunk_size = paths.len().max(1).div_ceil(workers).max(1);
+    std::thread::scope(|scope| {
+        for chunk in paths.chunks(chunk_size) {
+            scope.spawn(move || {
+                for path in chunk {
+                    let _ = cache_thumbnail(path);
+                }
+            });
+        }
+    });
+    paths
+}
+
+fn is_wallpaper_image(path: &Path) -> bool {
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .map(|extension| extension.to_ascii_lowercase())
+        .is_some_and(|extension| WALLPAPER_EXTENSIONS.contains(&extension.as_str()))
+}
+
+/// Opens `directory` in the platform's default file manager, creating it
+/// first if this is the first time — an explicit action the user asked for
+/// by clicking the button, unlike [`wallpapers_directory`] just being read.
+fn open_wallpapers_folder(directory: PathBuf) {
+    std::thread::spawn(move || {
+        let _ = fs::create_dir_all(&directory);
+        open_folder(&directory);
+    });
+}
+
+#[cfg(target_os = "windows")]
+fn open_folder(path: &Path) {
+    let _ = Command::new("explorer").arg(path).spawn();
+}
+
+#[cfg(target_os = "macos")]
+fn open_folder(path: &Path) {
+    let _ = Command::new("open").arg(path).spawn();
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+fn open_folder(path: &Path) {
+    let _ = Command::new("xdg-open").arg(path).spawn();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn wallpaper_image_extensions_are_case_insensitive() {
+        assert!(is_wallpaper_image(Path::new("beach.PNG")));
+        assert!(is_wallpaper_image(Path::new("beach.jpeg")));
+        assert!(!is_wallpaper_image(Path::new("beach.gif")));
+        assert!(!is_wallpaper_image(Path::new("beach")));
+    }
+
+    #[test]
+    fn scanning_a_missing_folder_yields_nothing_and_does_not_create_it() {
+        let directory = std::env::temp_dir().join(format!(
+            "coconut-settings-test-{}-missing-wallpapers",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&directory);
+        assert!(scan_wallpapers_folder(&directory).is_empty());
+        assert!(
+            !directory.exists(),
+            "scanning must never create the folder"
+        );
+    }
+
+    #[test]
+    fn scanning_only_picks_up_image_files() {
+        let directory = std::env::temp_dir().join(format!(
+            "coconut-settings-test-{}-wallpapers",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&directory);
+        fs::create_dir_all(&directory).unwrap();
+        fs::write(directory.join("notes.txt"), b"not an image").unwrap();
+        let image = image_rs::RgbaImage::from_pixel(4, 4, image_rs::Rgba([1, 2, 3, 255]));
+        image_rs::DynamicImage::ImageRgba8(image)
+            .save(directory.join("beach.png"))
+            .unwrap();
+
+        let found = scan_wallpapers_folder(&directory);
+
+        fs::remove_dir_all(&directory).ok();
+        assert_eq!(found, vec![directory.join("beach.png")]);
+    }
 }

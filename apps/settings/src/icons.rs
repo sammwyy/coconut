@@ -1,9 +1,12 @@
+use creamui_image::{ImageData, SvgSize};
 use creamui_widgets::{IconImage, IconSource, Symbol};
 use std::rc::Rc;
 
 /// Rasterized versions of the custom sidebar icons in `assets/icons/settings/`,
 /// decoded once at startup and cloned (cheaply — an `Rc` underneath) into the
-/// sidebar tree on every rebuild.
+/// sidebar tree on every rebuild. Each is monochrome, so [`Icon::draw`]
+/// recolors it to match the active/hover state and theme the same way a
+/// built-in [`Symbol`] would.
 pub struct SettingsIcons {
     pub appearance: IconSource,
     pub paintbrush: IconSource,
@@ -37,25 +40,18 @@ impl SettingsIcons {
 }
 
 fn decode(source: &[u8]) -> IconSource {
-    decode_svg(source).unwrap_or(IconSource::Symbol(Symbol::Check))
-}
-
-fn decode_svg(source: &[u8]) -> Option<IconSource> {
-    let tree = resvg::usvg::Tree::from_data(source, &resvg::usvg::Options::default()).ok()?;
-    let source_size = tree.size();
-    let scale = 64.0 / source_size.width().max(source_size.height());
-    let mut pixmap = resvg::tiny_skia::Pixmap::new(64, 64)?;
-    resvg::render(
-        &tree,
-        resvg::tiny_skia::Transform::from_scale(scale, scale),
-        &mut pixmap.as_mut(),
-    );
-    let image = creamui_image::ImageData::from_bytes(&pixmap.encode_png().ok()?).ok()?;
-    Some(IconSource::Image(IconImage {
-        width: image.width(),
-        height: image.height(),
-        rgba: Rc::from(image.pixels()),
-    }))
+    match ImageData::from_svg(source, SvgSize::Max(64)) {
+        Ok(image) => IconSource::Image(IconImage {
+            width: image.width(),
+            height: image.height(),
+            rgba: Rc::from(image.pixels()),
+            monochrome: true,
+        }),
+        Err(error) => {
+            eprintln!("settings: failed to decode a bundled icon: {error}");
+            IconSource::Symbol(Symbol::Check)
+        }
+    }
 }
 
 #[cfg(test)]

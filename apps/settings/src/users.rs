@@ -34,6 +34,7 @@ pub fn account_icon(account: &Account) -> IconSource {
             width: image.width(),
             height: image.height(),
             rgba: Rc::from(image.pixels()),
+            monochrome: false,
         });
     }
     let theme = use_theme();

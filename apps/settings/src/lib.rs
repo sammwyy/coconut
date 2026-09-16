@@ -98,6 +98,7 @@ pub fn run() {
     let profile = users::ProfileControllers::load(&account_list);
     let users = Signal::new(account_list);
     let icons = SettingsIcons::load();
+    let wallpaper_gallery = sections::wallpaper::GalleryState::new();
     polkit::ensure_kde_agent();
     let window: Rc<RefCell<Option<WindowHandle>>> = Rc::new(RefCell::new(None));
     let initial_theme = creamui_theme::active_theme();
@@ -133,6 +134,7 @@ pub fn run() {
                         &users,
                         &profile,
                         &icons,
+                        &wallpaper_gallery,
                     )
                 },
             );
@@ -151,6 +153,7 @@ fn build(
     users: &Signal<Vec<users::Account>>,
     profile: &users::ProfileControllers,
     icons: &SettingsIcons,
+    wallpaper_gallery: &sections::wallpaper::GalleryState,
 ) -> BoxedWidget {
     let theme = creamui_theme::use_theme();
 
@@ -189,7 +192,13 @@ fn build(
 
     let content = match current {
         Section::Theme => sections::appearance::build(size, active_theme_id, window),
-        Section::Wallpaper => sections::wallpaper::build(size, config, wallpaper_color_picker),
+        Section::Wallpaper => sections::wallpaper::build(
+            size,
+            config,
+            wallpaper_color_picker,
+            wallpaper_gallery,
+            window,
+        ),
         Section::General => sections::general::build(size, config),
         Section::Tray => sections::tray::build(size, config),
         Section::Widgets => sections::widgets::build(size, config),

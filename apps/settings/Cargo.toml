@@ -12,7 +12,7 @@ path = "src/main.rs"
 [dependencies]
 coconut-core = { path = "../../crates/core" }
 creamui-core = { path = "../../../creamui/crates/core" }
-creamui-image = { path = "../../../creamui/crates/image", features = ["webp", "jpeg"] }
+creamui-image = { path = "../../../creamui/crates/image", features = ["webp", "jpeg", "svg"] }
 creamui-jsx = { path = "../../../creamui/crates/jsx" }
 creamui-macros = { path = "../../../creamui/crates/macros" }
 creamui-reactive = { path = "../../../creamui/crates/reactive" }
@@ -22,4 +22,3 @@ creamui-widgets = { path = "../../../creamui/crates/widgets" }
 image-rs = { package = "image", version = "0.25.10", default-features = false, features = ["png", "jpeg", "webp"] }
 dbus = "0.9"
 rfd = "0.17"
-resvg = "0.45.1"
