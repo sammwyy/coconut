@@ -4,6 +4,7 @@ mod icon_theme;
 mod icons;
 mod panels;
 mod process;
+mod weather;
 
 use crate::bar::{
     build_dock, warn_unknown_widgets, BarActions, CreamTheme, SystemStatus, DOCK_HEIGHT, DOCK_WIDTH,
@@ -11,11 +12,11 @@ use crate::bar::{
 use crate::panels::{
     app_drawer, bluetooth as bluetooth_panel, brightness as brightness_panel, clock,
     control_center, current_playing, energy as energy_panel, network as network_panel,
-    volume as volume_panel, weather,
+    volume as volume_panel, weather as weather_panel,
 };
 use chrono::Local;
 use coconut_api::audio::{AudioIntegration, Playback};
-use coconut_core::{ipc::RuntimeEvent, BarPosition, ShellConfig};
+use coconut_core::{ipc::RuntimeEvent, BarPosition, ShellConfig, UserProfile};
 use creamui_core::{BoxedWidget, Point, Rect, Size};
 use creamui_reactive::Signal;
 use creamui_render::{AppBuilder, AppHandle, PopupOptions, WindowHandle, WindowOptions};
@@ -83,6 +84,7 @@ pub fn run() {
     let panel_volume_level = volume_level.clone();
     let clock_format = Rc::new(initial_config.widgets.clock.format.clone());
     let clock_text = Signal::new(Local::now().format(&clock_format).to_string());
+    let weather_state = Signal::new(weather::WeatherState::Loading);
     let status_network = integrations.network.clone();
     let status_battery = integrations.battery.clone();
     let status_bluetooth = integrations.bluetooth.clone();
@@ -99,6 +101,9 @@ pub fn run() {
     AppBuilder::new()
         .keep_running()
         .on_started(move |app| {
+            if initial_config.widgets.weather.enabled {
+                refresh_weather(app.clone(), weather_state.clone());
+            }
             let desktop_state = desktop_state.clone();
             desktop_state.start_loading(&app);
             let drag_overlay_state = desktop_state.clone();
@@ -208,6 +213,7 @@ pub fn run() {
                 }
             }
             let weather_app = app.clone();
+            let weather_state_for_panel = weather_state.clone();
             let popup_position = popup_position_state.clone();
             let weather_handle: Rc<RefCell<Option<WindowHandle>>> = Rc::new(RefCell::new(None));
             let weather_bar = bar_window.clone();
@@ -223,8 +229,13 @@ pub fn run() {
                 let Some(popup) = popup_for(&bar_for_popup, anchor, popup_position.get()) else {
                     return;
                 };
+                let panel_weather_state = weather_state_for_panel.clone();
                 weather_app.append_popup(
-                    popup_options("Coconut Weather", weather::WIDTH, weather::HEIGHT),
+                    popup_options(
+                        "Coconut Weather",
+                        weather_panel::WIDTH,
+                        weather_panel::HEIGHT,
+                    ),
                     popup,
                     Color::rgba(0, 0, 0, 0),
                     move |window| {
@@ -232,7 +243,7 @@ pub fn run() {
                         window.set_always_on_top(true);
                         close_on_focus_lost(&window);
                     },
-                    weather::build,
+                    move |size| weather_panel::build(size, panel_weather_state.clone()),
                 );
             });
             let clock_app = app.clone();
@@ -726,6 +737,7 @@ pub fn run() {
                 let status_bluetooth = status_bluetooth.clone();
                 let status_volume = status_volume.clone();
                 let dock_volume = dock_volume.clone();
+                let dock_weather_state = weather_state.clone();
                 let windows = windows.clone();
                 let launcher_open = launcher_open.clone();
                 let clock_text = clock_text.clone();
@@ -803,6 +815,7 @@ pub fn run() {
                             let windows = windows.clone();
                             let launcher_open = launcher_open.clone();
                             let clock_text = clock_text.clone();
+                            let weather_state = dock_weather_state.clone();
                             let refresh = refresh.clone();
                             let activate = activate.clone();
                             let bar_playback_backend = bar_playback_backend.clone();
@@ -820,6 +833,7 @@ pub fn run() {
                                 network_revision.get();
                                 bluetooth_revision.get();
                                 battery_revision.get();
+                                let weather = weather_state.get();
                                 let status = SystemStatus {
                                     network_connected: status_network.connected(),
                                     network_strength: status_network.strength(),
@@ -836,6 +850,7 @@ pub fn run() {
                                     launcher_open.clone(),
                                     status,
                                     clock_text.clone(),
+                                    &weather,
                                     BarActions {
                                         refresh_windows: refresh.clone(),
                                         activate_window: activate.clone(),
@@ -881,6 +896,7 @@ pub fn run() {
                 themed_windows.clone(),
                 append_bar,
                 desktop_work_area,
+                weather_state,
             );
         })
         .run();
@@ -906,6 +922,7 @@ fn schedule_runtime_events(
     themed_windows: Rc<RefCell<Vec<WindowHandle>>>,
     reappend_bar: Rc<dyn Fn(BarPosition)>,
     work_area: Signal<Option<coconut_api::desktop::DesktopWorkArea>>,
+    weather_state: Signal<weather::WeatherState>,
 ) {
     let next_app = app.clone();
     let next_events = events.clone();
@@ -913,7 +930,8 @@ fn schedule_runtime_events(
     let next_windows = themed_windows.clone();
     let next_reappend_bar = reappend_bar.clone();
     let next_work_area = work_area.clone();
-    app.spawn_background(
+    let next_weather_state = weather_state.clone();
+    app.clone().spawn_background(
         move || {
             std::thread::sleep(Duration::from_millis(100));
             events
@@ -931,14 +949,23 @@ fn schedule_runtime_events(
                         }
                     }
                     RuntimeEvent::ShellConfig(updated) => {
+                        let weather_was_enabled = config.peek().widgets.weather.enabled;
                         let position_changed = config.peek().bar.position != updated.bar.position;
                         warn_unknown_widgets(&updated.bar.layout);
                         config.set(updated);
+                        if !weather_was_enabled && config.peek().widgets.weather.enabled {
+                            refresh_weather(app.clone(), weather_state.clone());
+                        }
                         if position_changed {
                             work_area.set(None);
                             // The desktop and its state stay alive; only the layer-shell
                             // bar needs a new role and geometry at another edge.
                             reappend_bar(config.peek().bar.position);
+                        }
+                    }
+                    RuntimeEvent::UserProfileChanged => {
+                        if config.peek().widgets.weather.enabled {
+                            refresh_weather(app.clone(), weather_state.clone());
                         }
                     }
                 }
@@ -950,8 +977,20 @@ fn schedule_runtime_events(
                 next_windows,
                 next_reappend_bar,
                 next_work_area,
+                next_weather_state,
             );
         },
+    );
+}
+
+fn refresh_weather(app: AppHandle, state: Signal<weather::WeatherState>) {
+    state.set(weather::WeatherState::Loading);
+    app.spawn_background(
+        move || {
+            let mut profile = UserProfile::load();
+            weather::refresh(&mut profile)
+        },
+        move |next| state.set(next),
     );
 }
 

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct UserProfile {
     pub first_name: String,
@@ -8,6 +8,8 @@ pub struct UserProfile {
     pub city: String,
     pub region: String,
     pub country: String,
+    pub latitude: Option<f64>,
+    pub longitude: Option<f64>,
 }
 
 impl UserProfile {

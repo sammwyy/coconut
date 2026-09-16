@@ -1,6 +1,7 @@
 pub mod widgets;
 
 use crate::icons::pixel_icon;
+use crate::weather::WeatherState;
 use coconut_api::audio::Playback;
 use coconut_api::desktop::OpenWindow;
 use coconut_core::{BarLayout, ShellConfig, TrayConfig, TrayMode};
@@ -13,7 +14,7 @@ use creamui_macros::jsx;
 use creamui_reactive::Signal;
 use creamui_theme::{Color, Theme};
 use creamui_widgets::layout::{fixed, Align, Flex, Justify};
-use creamui_widgets::{Icon, RawButton, Symbol};
+use creamui_widgets::{Icon, RawButton, RawMarquee, Symbol};
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::{Mutex, OnceLock};
@@ -110,6 +111,7 @@ pub fn build_dock(
     launcher_open: Signal<bool>,
     status: SystemStatus,
     clock_text: Signal<String>,
+    weather: &WeatherState,
     actions: BarActions,
     config: &ShellConfig,
 ) -> BoxedWidget {
@@ -139,13 +141,20 @@ pub fn build_dock(
     let drawer_click = actions.open_app_drawer.clone();
     let control_click = actions.open_control_center.clone();
 
+    let weather_condition: BoxedWidget = Box::new(RawMarquee::new(
+        weather.bar_condition(),
+        PRIMARY,
+        12.0,
+        58.0,
+    ));
     let weather_button: BoxedWidget = Box::new(
-        RawButton::new(island_button_style(126.0, 32.0), || {})
+        RawButton::new(island_button_style(120.0, 32.0), || {})
             .with_click_position(move |point| weather_click(point))
             .child(Box::new(jsx! {
-                <Flex direction={FlexDirection::Row} size={(126.0, 32.0)} padding={6.0} gap={4.0} align={Align::Center}>
-                    {pixel_icon("weather_cloud_sun", 14.0, PRIMARY)}
-                    <RawText color={PRIMARY} font_size={12.0} width={32.0} align={TextAlign::Start}>{widgets::weather::DEFAULT_TEMPERATURE}</RawText>
+                <Flex direction={FlexDirection::Row} size={(120.0, 32.0)} padding={6.0} gap={4.0} align={Align::Center}>
+                    {pixel_icon(weather_icon(weather), 14.0, PRIMARY)}
+                    <RawText color={PRIMARY} font_size={12.0} width={32.0} align={TextAlign::Start}>{weather.bar_temperature()}</RawText>
+                    {weather_condition}
                 </Flex>
             })),
     );
@@ -245,6 +254,14 @@ pub fn build_dock(
             </Flex>
         </Flex>
     })
+}
+
+fn weather_icon(weather: &WeatherState) -> &'static str {
+    match weather {
+        WeatherState::Ready(weather) => crate::weather::icon_for(&weather.condition),
+        WeatherState::Loading => "weather_cloudly",
+        WeatherState::Unavailable(_) => "weather_cloudly",
+    }
 }
 
 /// Side bars intentionally use icon-sized controls. Their narrow width makes

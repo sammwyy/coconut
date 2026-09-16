@@ -56,3 +56,19 @@ pub fn is_country(code: &str) -> bool {
 pub fn is_region(code: &str) -> bool {
     catalog().regions.iter().any(|item| item.code == code)
 }
+
+pub fn country_name(code: &str) -> Option<&'static str> {
+    catalog()
+        .countries
+        .iter()
+        .find(|item| item.code == code)
+        .map(|item| item.name.as_str())
+}
+
+pub fn region_name(code: &str) -> Option<&'static str> {
+    catalog()
+        .regions
+        .iter()
+        .find(|item| item.code == code)
+        .map(|item| item.name.as_str())
+}

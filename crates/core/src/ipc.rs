@@ -17,6 +17,7 @@ pub const THEME_RELOAD: &str = "ReloadTheme";
 pub const SHELL_PATH: &str = "/org/coconut/Shell";
 pub const SHELL_INTERFACE: &str = "org.coconut.Shell";
 pub const SHELL_CONFIG_CHANGED: &str = "ConfigChanged";
+pub const USER_PROFILE_CHANGED: &str = "UserProfileChanged";
 
 /// Color pickers can produce a value for every pointer motion.  Keep those
 /// updates responsive while ensuring only the final value of a short burst is
@@ -31,6 +32,8 @@ pub enum RuntimeEvent {
     ReloadTheme,
     /// Replace Coconut's in-memory configuration with this validated value.
     ShellConfig(ShellConfig),
+    /// The user's saved location changed and location-backed widgets should refresh.
+    UserProfileChanged,
 }
 
 /// Emits `org.creamui.Theme.ReloadTheme` on the session bus.
@@ -47,6 +50,11 @@ pub fn publish_shell_config(config: &ShellConfig) -> Result<(), String> {
         .get_or_init(DebouncedShellConfigPublisher::new)
         .schedule(config.clone());
     Ok(())
+}
+
+/// Emits `org.coconut.Shell.UserProfileChanged` on the session bus.
+pub fn publish_user_profile_changed() -> Result<(), String> {
+    publish_signal(SHELL_PATH, SHELL_INTERFACE, USER_PROFILE_CHANGED, ())
 }
 
 fn publish_shell_config_now(config: &ShellConfig) -> Result<(), String> {
@@ -159,6 +167,18 @@ fn listen(sender: EventSender<RuntimeEvent>) {
         },
     ) {
         eprintln!("coconut: failed to listen for shell updates: {error}");
+    }
+
+    let profile_sender = sender.clone();
+    if let Err(error) = connection.add_match(
+        MatchRule::new_signal(SHELL_INTERFACE, USER_PROFILE_CHANGED).with_path(SHELL_PATH),
+        move |_: (), _, _| {
+            profile_sender
+                .send(RuntimeEvent::UserProfileChanged)
+                .is_ok()
+        },
+    ) {
+        eprintln!("coconut: failed to listen for profile updates: {error}");
     }
 
     loop {

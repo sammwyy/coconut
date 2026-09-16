@@ -22,6 +22,8 @@ creamui-render = { path = "../../../creamui/crates/render", features = ["platfor
 creamui-theme = { path = "../../../creamui/crates/theme" }
 creamui-widgets = { path = "../../../creamui/crates/widgets" }
 resvg = "0.45.1"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "gzip", "json", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
 
 [target.'cfg(not(target_os = "windows"))'.dependencies]
 coconut-registry = { path = "../../crates/registry" }

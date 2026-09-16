@@ -61,6 +61,8 @@ pub struct ProfileControllers {
     city: TextController,
     region: TextController,
     country: TextController,
+    latitude: Option<f64>,
+    longitude: Option<f64>,
     country_select: SelectController,
     region_select: SelectController,
 }
@@ -93,6 +95,8 @@ impl ProfileControllers {
             city: TextController::new(profile.city),
             region: TextController::new(profile.region),
             country: TextController::new(profile.country),
+            latitude: profile.latitude,
+            longitude: profile.longitude,
             country_select: SelectController::new(country_index),
             region_select: SelectController::new(region_index),
         }
@@ -105,6 +109,8 @@ impl ProfileControllers {
             city: self.city.peek(),
             region: self.region.peek(),
             country: self.country.peek(),
+            latitude: self.latitude,
+            longitude: self.longitude,
         }
     }
 }
@@ -113,10 +119,18 @@ pub fn build(_: Size, profile: &ProfileControllers) -> BoxedWidget {
     let own_profile = profile.clone();
     let save = Box::new(
         RawButton::new(button_style(), move || {
-            let profile = own_profile.profile();
+            let mut profile = own_profile.profile();
+            let saved_profile = UserProfile::load();
+            if profile.location() != saved_profile.location() {
+                profile.latitude = None;
+                profile.longitude = None;
+            }
             if let Err(error) = profile.save() {
                 eprintln!("settings: could not save profile: {error}");
                 return;
+            }
+            if let Err(error) = coconut_core::ipc::publish_user_profile_changed() {
+                eprintln!("settings: could not notify the desktop process about the profile update: {error}");
             }
             if let Err(error) = sync_own_account(&profile) {
                 eprintln!("settings: could not update the system account: {error}");

@@ -18,6 +18,11 @@ system without leaving your flow.
 For local development, run `cargo run -p coconut-shell` or
 `cargo run -p coconut-settings`.
 
+When the Weather widget is enabled, Coconut resolves the configured city,
+country and region directly on first use, stores the resulting coordinates in
+the user profile, and fetches the forecast directly from MET Norway. Disabling
+the widget prevents new weather requests.
+
 ## Highlights
 
 - A centered dock with running applications and active-window feedback
