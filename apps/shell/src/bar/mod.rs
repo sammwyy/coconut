@@ -13,13 +13,15 @@ use creamui_macros::jsx;
 use creamui_reactive::Signal;
 use creamui_theme::{Color, Theme};
 use creamui_widgets::layout::{fixed, Align, Flex, Justify};
-use creamui_widgets::RawButton;
+use creamui_widgets::{Icon, RawButton, Symbol};
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::{Mutex, OnceLock};
 
 pub const DOCK_HEIGHT: u32 = 44;
+pub const DOCK_WIDTH: u32 = 52;
 const BAR_HEIGHT: f32 = 44.0;
+const SIDE_ITEM_SIZE: f32 = 36.0;
 const TASK_SIZE: f32 = 32.0;
 const TASK_ICON_SIZE: f32 = 24.0;
 const MAX_TASKS: usize = 10;
@@ -111,6 +113,10 @@ pub fn build_dock(
     actions: BarActions,
     config: &ShellConfig,
 ) -> BoxedWidget {
+    if config.bar.position.is_vertical() {
+        return build_side_dock(viewport, launcher_open, status, clock_text, actions, config);
+    }
+
     let launcher_background = if launcher_open.get() {
         SELECTED
     } else {
@@ -139,7 +145,7 @@ pub fn build_dock(
             .child(Box::new(jsx! {
                 <Flex direction={FlexDirection::Row} size={(126.0, 32.0)} padding={6.0} gap={4.0} align={Align::Center}>
                     {pixel_icon("weather_cloud_sun", 14.0, PRIMARY)}
-                    <RawText color={MUTED} font_size={10.0} align={TextAlign::Start}>{widgets::weather::DEFAULT_SUMMARY}</RawText>
+                    <RawText color={PRIMARY} font_size={12.0} width={32.0} align={TextAlign::Start}>{widgets::weather::DEFAULT_TEMPERATURE}</RawText>
                 </Flex>
             })),
     );
@@ -239,6 +245,139 @@ pub fn build_dock(
             </Flex>
         </Flex>
     })
+}
+
+/// Side bars intentionally use icon-sized controls. Their narrow width makes
+/// labels and media metadata more distracting than helpful, and omitting them
+/// avoids truncating text or squeezing controls into an unreadable column.
+fn build_side_dock(
+    viewport: Size,
+    launcher_open: Signal<bool>,
+    _status: SystemStatus,
+    _clock_text: Signal<String>,
+    actions: BarActions,
+    config: &ShellConfig,
+) -> BoxedWidget {
+    let mut catalog: HashMap<String, BoxedWidget> = HashMap::new();
+    catalog.insert("logo".to_owned(), side_icon("appgrid"));
+    if config.widgets.weather.enabled {
+        catalog.insert(
+            "weather".to_owned(),
+            side_icon_button("weather_cloud_sun", actions.open_weather.clone()),
+        );
+    }
+    if config.widgets.current_playing.enabled && (actions.current_playback)().is_some() {
+        catalog.insert(
+            "current_playing".to_owned(),
+            side_icon_button("player_play", actions.open_current_playing.clone()),
+        );
+    }
+    if config.widgets.app_launcher.enabled {
+        let selected = launcher_open.get();
+        catalog.insert(
+            "app_launcher".to_owned(),
+            side_icon_button_styled("appgrid", actions.open_app_drawer.clone(), selected),
+        );
+    }
+    if config.widgets.control_center.enabled {
+        catalog.insert(
+            "control_center".to_owned(),
+            side_symbol_button(Symbol::Sliders, actions.open_control_center.clone()),
+        );
+    }
+    if config.widgets.clock.enabled {
+        catalog.insert(
+            "clock".to_owned(),
+            side_symbol_button(Symbol::Sun, actions.open_clock.clone()),
+        );
+    }
+
+    let section_height = viewport.height / 3.0;
+    let top = side_section(
+        &config.bar.layout.left,
+        &mut catalog,
+        section_height,
+        Justify::Start,
+    );
+    let middle = side_section(
+        &config.bar.layout.center,
+        &mut catalog,
+        section_height,
+        Justify::Center,
+    );
+    let bottom = side_section(
+        &config.bar.layout.right,
+        &mut catalog,
+        section_height,
+        Justify::End,
+    );
+
+    Box::new(jsx! {
+        <Flex direction={FlexDirection::Column} size={(viewport.width, viewport.height)} align={Align::Center} background={BAR} border={(ISLAND_BORDER, 1.0)}>
+            {top}
+            {middle}
+            {bottom}
+        </Flex>
+    })
+}
+
+fn side_section(
+    ids: &[String],
+    catalog: &mut HashMap<String, BoxedWidget>,
+    height: f32,
+    justify: Justify,
+) -> BoxedWidget {
+    let mut column = Flex::column()
+        .size(DOCK_WIDTH as f32, height)
+        .padding(8.0)
+        .gap(8.0)
+        .align(Align::Center)
+        .justify(justify);
+    for id in ids {
+        if let Some(widget) = catalog.remove(id) {
+            column = column.child(widget);
+        }
+    }
+    Box::new(column)
+}
+
+fn side_icon(name: &'static str) -> BoxedWidget {
+    Box::new(jsx! {
+        <Flex size={(SIDE_ITEM_SIZE, SIDE_ITEM_SIZE)} align={Align::Center} justify={Justify::Center}>
+            {pixel_icon(name, 19.0, PRIMARY)}
+        </Flex>
+    })
+}
+
+fn side_icon_button(name: &'static str, on_click: Rc<dyn Fn(Point)>) -> BoxedWidget {
+    side_icon_button_styled(name, on_click, false)
+}
+
+fn side_icon_button_styled(
+    name: &'static str,
+    on_click: Rc<dyn Fn(Point)>,
+    selected: bool,
+) -> BoxedWidget {
+    Box::new(
+        RawButton::new(
+            side_button_style(if selected { SELECTED } else { CONTROL }),
+            || {},
+        )
+        .with_click_position(move |point| on_click(point))
+        .child(side_icon(name)),
+    )
+}
+
+fn side_symbol_button(symbol: Symbol, on_click: Rc<dyn Fn(Point)>) -> BoxedWidget {
+    Box::new(
+        RawButton::new(side_button_style(CONTROL), || {})
+            .with_click_position(move |point| on_click(point))
+            .child(Box::new(jsx! {
+                <Flex size={(SIDE_ITEM_SIZE, SIDE_ITEM_SIZE)} align={Align::Center} justify={Justify::Center}>
+                    {Box::new(Icon::new(symbol, PRIMARY).size(19.0)) as BoxedWidget}
+                </Flex>
+            })),
+    )
 }
 
 fn compact_playback_widget(
@@ -695,6 +834,18 @@ fn square_style(background: Color) -> Style {
     Style::new()
         .layout(LayoutStyle {
             size: fixed(TASK_SIZE, TASK_SIZE),
+            ..Default::default()
+        })
+        .background(background)
+        .corner_radius(8.0)
+        .hover(StateStyle::new().background(CONTROL_HOVER))
+        .pressed(StateStyle::new().background(PRIMARY))
+}
+
+fn side_button_style(background: Color) -> Style {
+    Style::new()
+        .layout(LayoutStyle {
+            size: fixed(SIDE_ITEM_SIZE, SIDE_ITEM_SIZE),
             ..Default::default()
         })
         .background(background)

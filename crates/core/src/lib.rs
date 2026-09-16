@@ -46,11 +46,12 @@ const DEFAULT_SHELL_TOML: &str = r#"# Coconut configuration.
 # so you only need to list what you want to change.
 
 [bar]
-# Where the bar sits on screen: "top" or "bottom".
+# Where the bar sits on screen: "top", "bottom", "left" or "right".
 position = "bottom"
 
 [bar.layout]
-# Widget ids shown in each section of the bar, left to right. Known ids:
+# Widget ids shown in each section of the bar. On a horizontal bar they are
+# arranged left to right; on a vertical bar, top to bottom. Known ids:
 # "logo", "weather", "current_playing", "app_launcher", "control_center",
 # "clock". Remove an id to hide it, or move it to another section.
 left = ["logo", "weather", "current_playing"]

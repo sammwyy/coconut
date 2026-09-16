@@ -1,12 +1,13 @@
 use crate::bar::DOCK_HEIGHT;
 use crate::icon_theme::{build_icon_index, load_icon, resolve_icon};
 use crate::icons::pixel_icon;
+use coconut_api::desktop::DesktopWorkArea;
 use coconut_core::{ClickAction, DesktopIconsConfig, IconShape, ShellConfig, WallpaperMode};
 use creamui_core::layout::{
     Dimension, FlexDirection, LengthPercentageAuto, Position, Rect as LayoutRect,
     Size as LayoutSize, Style as LayoutStyle,
 };
-use creamui_core::{BoxedWidget, Point, Size, StateStyle, Style, Styled};
+use creamui_core::{BoxedWidget, Point, Rect, Size, StateStyle, Style, Styled};
 use creamui_image::{Image, ImageData, ImageFit};
 use creamui_macros::jsx;
 use creamui_reactive::Signal;
@@ -207,9 +208,16 @@ struct DragPreview {
     entry: DesktopEntry,
 }
 
-pub fn build(viewport: Size, state: DesktopState, config: Signal<ShellConfig>) -> BoxedWidget {
-    let desktop = config.get().desktop;
+pub fn build(
+    viewport: Size,
+    state: DesktopState,
+    config: Signal<ShellConfig>,
+    work_area: Signal<Option<DesktopWorkArea>>,
+) -> BoxedWidget {
+    let shell = config.get();
+    let desktop = shell.desktop;
     let layout = IconLayout::from_config(&desktop.icons);
+    let work_area = usable_area(viewport, work_area.get(), shell.bar.position);
     Box::new(
         RawView::new(
             Style::new()
@@ -222,7 +230,7 @@ pub fn build(viewport: Size, state: DesktopState, config: Signal<ShellConfig>) -
         .with_children(vec![
             wallpaper_layer(desktop),
             widget_layer(),
-            icon_layer(viewport, state, layout),
+            icon_layer(viewport, state, layout, work_area),
         ]),
     )
 }
@@ -274,7 +282,12 @@ fn widget_layer() -> BoxedWidget {
     Box::new(RawView::new(fill_layout()))
 }
 
-fn icon_layer(viewport: Size, state: DesktopState, layout: IconLayout) -> BoxedWidget {
+fn icon_layer(
+    viewport: Size,
+    state: DesktopState,
+    layout: IconLayout,
+    work_area: Rect,
+) -> BoxedWidget {
     let positions = state.positions.get();
     let selected = state.selected.get();
     let entries = state.entries.get();
@@ -285,7 +298,8 @@ fn icon_layer(viewport: Size, state: DesktopState, layout: IconLayout) -> BoxedW
             let position = positions
                 .get(&index)
                 .copied()
-                .unwrap_or_else(|| initial_position(index, &layout));
+                .map(|position| icon_position_in_area(position, viewport, &layout, work_area))
+                .unwrap_or_else(|| initial_position_in_area(index, &layout, work_area));
             desktop_icon(
                 viewport,
                 state.clone(),
@@ -293,6 +307,7 @@ fn icon_layer(viewport: Size, state: DesktopState, layout: IconLayout) -> BoxedW
                 position,
                 entry,
                 layout,
+                work_area,
                 selected == Some(index),
             )
         })
@@ -314,6 +329,7 @@ fn desktop_icon(
     position: Point,
     entry: DesktopEntry,
     layout: IconLayout,
+    work_area: Rect,
     selected: bool,
 ) -> BoxedWidget {
     let click_target = entry.target.clone();
@@ -359,6 +375,7 @@ fn desktop_icon(
                     y: rect.y + local.y - grab.get().y,
                 },
                 viewport,
+                work_area,
                 &layout,
             );
             drag_state.drag_preview.set(Some(DragPreview {
@@ -371,7 +388,7 @@ fn desktop_icon(
                 .drag_preview
                 .peek()
                 .map_or(position, |preview| preview.position);
-            let position = icon_position(dropped, viewport, &layout);
+            let position = icon_position_in_area(dropped, viewport, &layout, work_area);
             drop_state.drag_preview.set(None);
             if drop_state.positions.peek().get(&index) != Some(&position) {
                 drop_state.positions.update(|positions| {
@@ -419,16 +436,22 @@ fn icon_content(entry: &DesktopEntry, layout: &IconLayout, selected: bool) -> Bo
     })
 }
 
-fn free_icon_position(position: Point, viewport: Size, layout: &IconLayout) -> Point {
+fn free_icon_position(
+    position: Point,
+    _viewport: Size,
+    work_area: Rect,
+    layout: &IconLayout,
+) -> Point {
     Point {
         x: position.x.clamp(
-            GRID_INSET,
-            (viewport.width - layout.tile_width - GRID_INSET).max(GRID_INSET),
+            work_area.x + GRID_INSET,
+            (work_area.x + work_area.width - layout.tile_width - GRID_INSET)
+                .max(work_area.x + GRID_INSET),
         ),
         y: position.y.clamp(
-            GRID_INSET,
-            (viewport.height - layout.tile_height - DOCK_HEIGHT as f32 - GRID_INSET)
-                .max(GRID_INSET),
+            work_area.y + GRID_INSET,
+            (work_area.y + work_area.height - layout.tile_height - GRID_INSET)
+                .max(work_area.y + GRID_INSET),
         ),
     }
 }
@@ -673,25 +696,87 @@ fn icon_style(position: Point, layout: &IconLayout, selected: bool) -> Style {
         .pressed(StateStyle::new().background(ICON_PRESSED))
 }
 
-fn initial_position(index: usize, layout: &IconLayout) -> Point {
+fn initial_position_in_area(index: usize, layout: &IconLayout, area: Rect) -> Point {
     Point {
-        x: GRID_INSET + (index % 4) as f32 * layout.grid_cell_x,
-        y: GRID_INSET + (index / 4) as f32 * layout.grid_cell_y,
+        x: area.x + GRID_INSET + (index % 4) as f32 * layout.grid_cell_x,
+        y: area.y + GRID_INSET + (index / 4) as f32 * layout.grid_cell_y,
     }
 }
 
+#[cfg(test)]
 fn icon_position(position: Point, viewport: Size, layout: &IconLayout) -> Point {
-    let position = free_icon_position(position, viewport, layout);
+    icon_position_in_area(
+        position,
+        viewport,
+        layout,
+        usable_area(viewport, None, coconut_core::BarPosition::Bottom),
+    )
+}
+
+fn icon_position_in_area(
+    position: Point,
+    viewport: Size,
+    layout: &IconLayout,
+    area: Rect,
+) -> Point {
+    let position = free_icon_position(position, viewport, area, layout);
     Point {
-        x: (GRID_INSET
-            + ((position.x - GRID_INSET) / layout.grid_cell_x).round() * layout.grid_cell_x)
-            .clamp(GRID_INSET, grid_limit_x(viewport.width, layout)),
-        y: (GRID_INSET
-            + ((position.y - GRID_INSET) / layout.grid_cell_y).round() * layout.grid_cell_y)
+        x: (area.x
+            + GRID_INSET
+            + ((position.x - area.x - GRID_INSET) / layout.grid_cell_x).round()
+                * layout.grid_cell_x)
             .clamp(
-                GRID_INSET,
-                grid_limit_y(viewport.height - DOCK_HEIGHT as f32, layout),
+                area.x + GRID_INSET,
+                area.x + grid_limit_x(area.width, layout),
             ),
+        y: (GRID_INSET
+            + ((position.y - area.y - GRID_INSET) / layout.grid_cell_y).round()
+                * layout.grid_cell_y)
+            .clamp(
+                area.y + GRID_INSET,
+                area.y + grid_limit_y(area.height, layout),
+            ),
+    }
+}
+
+fn usable_area(
+    viewport: Size,
+    area: Option<DesktopWorkArea>,
+    position: coconut_core::BarPosition,
+) -> Rect {
+    let thickness = DOCK_HEIGHT as f32;
+    let fallback = match position {
+        coconut_core::BarPosition::Top => Rect {
+            x: 0.0,
+            y: thickness,
+            width: viewport.width,
+            height: (viewport.height - thickness).max(1.0),
+        },
+        coconut_core::BarPosition::Bottom => Rect {
+            x: 0.0,
+            y: 0.0,
+            width: viewport.width,
+            height: (viewport.height - thickness).max(1.0),
+        },
+        coconut_core::BarPosition::Left => Rect {
+            x: thickness,
+            y: 0.0,
+            width: (viewport.width - thickness).max(1.0),
+            height: viewport.height,
+        },
+        coconut_core::BarPosition::Right => Rect {
+            x: 0.0,
+            y: 0.0,
+            width: (viewport.width - thickness).max(1.0),
+            height: viewport.height,
+        },
+    };
+    let Some(area) = area else { return fallback };
+    Rect {
+        x: area.x.clamp(0.0, viewport.width),
+        y: area.y.clamp(0.0, viewport.height),
+        width: area.width.min(viewport.width).max(1.0),
+        height: area.height.min(viewport.height).max(1.0),
     }
 }
 

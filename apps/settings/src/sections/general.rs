@@ -4,7 +4,12 @@ use creamui_core::{BoxedWidget, Size};
 use creamui_reactive::Signal;
 use creamui_widgets::SegmentedControl;
 
-const POSITIONS: [BarPosition; 2] = [BarPosition::Top, BarPosition::Bottom];
+const POSITIONS: [BarPosition; 4] = [
+    BarPosition::Top,
+    BarPosition::Bottom,
+    BarPosition::Left,
+    BarPosition::Right,
+];
 
 pub fn build(_: Size, config: &Signal<ShellConfig>) -> BoxedWidget {
     let selected = POSITIONS
@@ -17,12 +22,14 @@ pub fn build(_: Size, config: &Signal<ShellConfig>) -> BoxedWidget {
             update_config(&set_position, |c| c.bar.position = POSITIONS[index]);
         })
         .option("Top")
-        .option("Bottom"),
+        .option("Bottom")
+        .option("Left")
+        .option("Right"),
     );
 
     section(
         "Bar",
-        "Choose where the bar sits on screen.",
+        "Choose where the bar sits on screen. Side bars use a compact icon layout.",
         vec![group(vec![row("Bar position", control)])],
     )
 }

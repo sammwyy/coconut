@@ -5,6 +5,14 @@ use serde::{Deserialize, Serialize};
 pub enum BarPosition {
     Top,
     Bottom,
+    Left,
+    Right,
+}
+
+impl BarPosition {
+    pub fn is_vertical(self) -> bool {
+        matches!(self, Self::Left | Self::Right)
+    }
 }
 
 impl Default for BarPosition {

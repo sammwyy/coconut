@@ -1,4 +1,4 @@
-use coconut_api::desktop::{DesktopIntegration, OpenWindow, WindowChangeListener};
+use coconut_api::desktop::{DesktopIntegration, DesktopWorkArea, OpenWindow, WindowChangeListener};
 use creamui_render::WindowHandle;
 use dbus::{
     blocking::{Connection as DbusConnection, SyncConnection},
@@ -98,18 +98,34 @@ impl DesktopIntegration for KWinDbus {
     fn window_changes(&self) -> Option<WindowChangeListener> {
         Some(self.changes.clone())
     }
+
+    fn work_area(&self) -> Option<DesktopWorkArea> {
+        self.windows.lock().ok().and_then(|cache| cache.work_area)
+    }
 }
 
 #[derive(Default)]
 struct WindowCache {
     revision: u64,
     windows: Vec<OpenWindow>,
+    work_area: Option<DesktopWorkArea>,
 }
 
 #[derive(Deserialize)]
 struct EventSnapshot {
     revision: u64,
     windows: Vec<EventWindow>,
+    #[serde(default)]
+    work_area: Option<EventWorkArea>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct EventWorkArea {
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
 }
 
 #[derive(Deserialize)]
@@ -223,6 +239,14 @@ fn apply_event_snapshot(
         return false;
     }
     current.revision = snapshot.revision;
+    current.work_area = snapshot.work_area.and_then(|area| {
+        (area.width > 0.0 && area.height > 0.0).then_some(DesktopWorkArea {
+            x: area.x,
+            y: area.y,
+            width: area.width,
+            height: area.height,
+        })
+    });
     current.windows = snapshot
         .windows
         .into_iter()
@@ -291,7 +315,21 @@ function sendSnapshot() {
             pid: Number(window.pid) || null,
             active: Boolean(window.active)
         }));
-    callDBus(destination, "/", "", "snapshot", JSON.stringify({ revision, windows }));
+    // Window snapshots are the primary job of this hook. Work-area support
+    // must never prevent them from reaching Coconut on an older KWin API.
+    let workArea = null;
+    try {
+        const screen = workspace.activeScreen;
+        const full = workspace.clientArea(KWin.FullArea, screen, workspace.currentDesktop);
+        const area = workspace.clientArea(KWin.WorkArea, screen, workspace.currentDesktop);
+        workArea = {
+            x: Number(area.x - full.x),
+            y: Number(area.y - full.y),
+            width: Number(area.width),
+            height: Number(area.height)
+        };
+    } catch (error) {}
+    callDBus(destination, "/", "", "snapshot", JSON.stringify({ revision, windows, workArea }));
 }
 
 function watchWindow(window) {

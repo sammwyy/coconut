@@ -14,11 +14,22 @@ pub struct OpenWindow {
 
 pub type WindowChangeListener = ChangeListener;
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct DesktopWorkArea {
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+}
+
 pub trait DesktopIntegration {
     fn prepare_window(&self, window: &WindowHandle);
     fn windows(&self) -> Vec<OpenWindow>;
     fn activate_window(&self, id: &str);
     fn window_changes(&self) -> Option<WindowChangeListener> {
+        None
+    }
+    fn work_area(&self) -> Option<DesktopWorkArea> {
         None
     }
 }
