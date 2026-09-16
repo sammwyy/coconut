@@ -1,4 +1,5 @@
 mod common;
+mod icons;
 mod polkit;
 mod sections;
 mod users;
@@ -10,9 +11,10 @@ use creamui_macros::jsx;
 use creamui_reactive::Signal;
 use creamui_render::{platform::WindowRole, AppBuilder, WindowHandle, WindowOptions};
 use creamui_widgets::{
-    nested_sidebar, ColorPickerController, SidebarNavController, SidebarNode, Surface, SurfaceRole,
-    Symbol,
+    nested_sidebar, ColorPickerController, IconSource, SidebarNavController, SidebarNode, Surface,
+    SurfaceRole, Symbol,
 };
+use icons::SettingsIcons;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -31,32 +33,37 @@ enum Section {
     CreateUser,
 }
 
-fn tree(accounts: &[users::Account]) -> Vec<SidebarNode<Section>> {
+fn tree(accounts: &[users::Account], icons: &SettingsIcons) -> Vec<SidebarNode<Section>> {
+    let profile_icon = std::env::var("USER")
+        .ok()
+        .and_then(|username| accounts.iter().find(|account| account.username == username))
+        .map(users::account_icon)
+        .unwrap_or(IconSource::Symbol(Symbol::Controls));
     vec![
         SidebarNode::parent(
             Section::Appearance,
-            Symbol::Appearance,
+            icons.appearance.clone(),
             "Appearance",
             vec![
-                SidebarNode::leaf(Section::Theme, Symbol::Appearance, "Theme"),
-                SidebarNode::leaf(Section::Wallpaper, Symbol::Image, "Wallpaper"),
+                SidebarNode::leaf(Section::Theme, icons.paintbrush.clone(), "Theme"),
+                SidebarNode::leaf(Section::Wallpaper, icons.wallpaper.clone(), "Wallpaper"),
                 SidebarNode::group(
                     Section::Taskbar,
                     "Taskbar",
                     vec![
-                        SidebarNode::leaf(Section::General, Symbol::Sliders, "Position"),
-                        SidebarNode::leaf(Section::Tray, Symbol::Grid, "Status area"),
-                        SidebarNode::leaf(Section::Widgets, Symbol::Check, "Widgets"),
+                        SidebarNode::leaf(Section::General, icons.position.clone(), "Position"),
+                        SidebarNode::leaf(Section::Tray, icons.status.clone(), "Status area"),
+                        SidebarNode::leaf(Section::Widgets, icons.widgets.clone(), "Widgets"),
                     ],
                 ),
             ],
         ),
         SidebarNode::parent(
             Section::Users,
-            Symbol::Controls,
+            icons.users.clone(),
             "Users",
             vec![
-                SidebarNode::leaf(Section::Profile, Symbol::Controls, "My profile"),
+                SidebarNode::leaf(Section::Profile, profile_icon, "My profile"),
                 SidebarNode::group(
                     Section::Users,
                     "Accounts",
@@ -65,7 +72,7 @@ fn tree(accounts: &[users::Account]) -> Vec<SidebarNode<Section>> {
                         .map(|account| {
                             SidebarNode::leaf(
                                 Section::User(account.username.clone()),
-                                Symbol::Controls,
+                                users::account_icon(account),
                                 if account.real_name.is_empty() {
                                     account.username.clone()
                                 } else {
@@ -75,7 +82,7 @@ fn tree(accounts: &[users::Account]) -> Vec<SidebarNode<Section>> {
                         })
                         .collect(),
                 ),
-                SidebarNode::leaf(Section::CreateUser, Symbol::Check, "Create user"),
+                SidebarNode::leaf(Section::CreateUser, icons.users.clone(), "Create user"),
             ],
         ),
     ]
@@ -90,6 +97,7 @@ pub fn run() {
     let account_list = users::list_accounts();
     let profile = users::ProfileControllers::load(&account_list);
     let users = Signal::new(account_list);
+    let icons = SettingsIcons::load();
     polkit::ensure_kde_agent();
     let window: Rc<RefCell<Option<WindowHandle>>> = Rc::new(RefCell::new(None));
     let initial_theme = creamui_theme::active_theme();
@@ -124,6 +132,7 @@ pub fn run() {
                         &wallpaper_color_picker,
                         &users,
                         &profile,
+                        &icons,
                     )
                 },
             );
@@ -141,6 +150,7 @@ fn build(
     wallpaper_color_picker: &ColorPickerController,
     users: &Signal<Vec<users::Account>>,
     profile: &users::ProfileControllers,
+    icons: &SettingsIcons,
 ) -> BoxedWidget {
     let theme = creamui_theme::use_theme();
 
@@ -165,7 +175,7 @@ fn build(
     };
     let current = view.get();
     let account_list = users.get();
-    let navigation = tree(&account_list);
+    let navigation = tree(&account_list, icons);
     let select = view.clone();
     let sidebar = nested_sidebar(
         sidebar_style,

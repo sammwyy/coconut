@@ -550,6 +550,7 @@ dependencies = [
  "creamui-widgets",
  "dbus",
  "image",
+ "resvg",
  "rfd",
 ]
 

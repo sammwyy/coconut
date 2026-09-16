@@ -22,3 +22,4 @@ creamui-widgets = { path = "../../../creamui/crates/widgets" }
 image-rs = { package = "image", version = "0.25.10", default-features = false, features = ["png", "jpeg", "webp"] }
 dbus = "0.9"
 rfd = "0.17"
+resvg = "0.45.1"

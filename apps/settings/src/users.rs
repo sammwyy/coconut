@@ -5,11 +5,13 @@ use creamui_core::{BoxedWidget, Size, StateStyle, Style as WidgetStyle, Styled};
 use creamui_theme::use_theme;
 use creamui_widgets::layout::fixed;
 use creamui_widgets::{
-    RawButton, Select, SelectController, Text, TextController, TextInput, TextSize,
+    IconImage, IconSource, RawButton, Select, SelectController, Text, TextController, TextInput,
+    TextSize,
 };
 use dbus::arg::{PropMap, RefArg};
 use dbus::blocking::Connection;
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::time::Duration;
 
 #[derive(Clone)]
@@ -17,6 +19,38 @@ pub struct Account {
     pub username: String,
     pub real_name: String,
     pub administrator: bool,
+    pub icon_path: Option<PathBuf>,
+}
+
+/// The account's avatar, decoded from disk, or a filled circle with its
+/// display name's initial when it has none set.
+pub fn account_icon(account: &Account) -> IconSource {
+    if let Some(image) = account
+        .icon_path
+        .as_deref()
+        .and_then(|path| creamui_image::ImageData::from_path(path).ok())
+    {
+        return IconSource::Image(IconImage {
+            width: image.width(),
+            height: image.height(),
+            rgba: Rc::from(image.pixels()),
+        });
+    }
+    let theme = use_theme();
+    let display_name = if account.real_name.is_empty() {
+        &account.username
+    } else {
+        &account.real_name
+    };
+    IconSource::Initial {
+        letter: display_name
+            .chars()
+            .next()
+            .unwrap_or('?')
+            .to_ascii_uppercase(),
+        background: theme.accent,
+        text_color: theme.selection_text,
+    }
 }
 
 #[derive(Clone)]
@@ -275,13 +309,18 @@ fn account_at(connection: &Connection, path: dbus::Path<'static>) -> Option<Acco
         .get("SystemAccount")
         .and_then(|value| value.0.as_i64())
         .is_some_and(|value| value != 0);
-    (!system).then(|| Account {
-        username: property_string(&properties, "UserName"),
-        real_name: property_string(&properties, "RealName"),
-        administrator: properties
-            .get("AccountType")
-            .and_then(|value| value.0.as_i64())
-            == Some(1),
+    (!system).then(|| {
+        let icon_file = property_string(&properties, "IconFile");
+        Account {
+            username: property_string(&properties, "UserName"),
+            real_name: property_string(&properties, "RealName"),
+            administrator: properties
+                .get("AccountType")
+                .and_then(|value| value.0.as_i64())
+                == Some(1),
+            icon_path: (!icon_file.is_empty() && PathBuf::from(&icon_file).is_file())
+                .then(|| PathBuf::from(icon_file)),
+        }
     })
 }
 
@@ -307,6 +346,7 @@ fn fallback_accounts() -> Vec<Account> {
                     username: fields[0].to_owned(),
                     real_name: fields[4].split(',').next().unwrap_or_default().to_owned(),
                     administrator: false,
+                    icon_path: None,
                 }
             })
         })
