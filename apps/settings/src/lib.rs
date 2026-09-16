@@ -1,5 +1,7 @@
 mod common;
+mod polkit;
 mod sections;
+mod users;
 
 use coconut_core::ShellConfig;
 use creamui_core::layout::{Dimension, FlexDirection, LengthPercentage, Style};
@@ -14,7 +16,7 @@ use creamui_widgets::{
 use std::cell::RefCell;
 use std::rc::Rc;
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, PartialEq)]
 enum Section {
     Appearance,
     Theme,
@@ -23,27 +25,60 @@ enum Section {
     General,
     Tray,
     Widgets,
+    Users,
+    Profile,
+    User(String),
+    CreateUser,
 }
 
-fn tree() -> Vec<SidebarNode<Section>> {
-    vec![SidebarNode::parent(
-        Section::Appearance,
-        Symbol::Appearance,
-        "Appearance",
-        vec![
-            SidebarNode::leaf(Section::Theme, Symbol::Appearance, "Theme"),
-            SidebarNode::leaf(Section::Wallpaper, Symbol::Image, "Wallpaper"),
-            SidebarNode::group(
-                Section::Taskbar,
-                "Taskbar",
-                vec![
-                    SidebarNode::leaf(Section::General, Symbol::Sliders, "Position"),
-                    SidebarNode::leaf(Section::Tray, Symbol::Grid, "Status area"),
-                    SidebarNode::leaf(Section::Widgets, Symbol::Check, "Widgets"),
-                ],
-            ),
-        ],
-    )]
+fn tree(accounts: &[users::Account]) -> Vec<SidebarNode<Section>> {
+    vec![
+        SidebarNode::parent(
+            Section::Appearance,
+            Symbol::Appearance,
+            "Appearance",
+            vec![
+                SidebarNode::leaf(Section::Theme, Symbol::Appearance, "Theme"),
+                SidebarNode::leaf(Section::Wallpaper, Symbol::Image, "Wallpaper"),
+                SidebarNode::group(
+                    Section::Taskbar,
+                    "Taskbar",
+                    vec![
+                        SidebarNode::leaf(Section::General, Symbol::Sliders, "Position"),
+                        SidebarNode::leaf(Section::Tray, Symbol::Grid, "Status area"),
+                        SidebarNode::leaf(Section::Widgets, Symbol::Check, "Widgets"),
+                    ],
+                ),
+            ],
+        ),
+        SidebarNode::parent(
+            Section::Users,
+            Symbol::Controls,
+            "Users",
+            vec![
+                SidebarNode::leaf(Section::Profile, Symbol::Controls, "My profile"),
+                SidebarNode::group(
+                    Section::Users,
+                    "Accounts",
+                    accounts
+                        .iter()
+                        .map(|account| {
+                            SidebarNode::leaf(
+                                Section::User(account.username.clone()),
+                                Symbol::Controls,
+                                if account.real_name.is_empty() {
+                                    account.username.clone()
+                                } else {
+                                    account.real_name.clone()
+                                },
+                            )
+                        })
+                        .collect(),
+                ),
+                SidebarNode::leaf(Section::CreateUser, Symbol::Check, "Create user"),
+            ],
+        ),
+    ]
 }
 
 pub fn run() {
@@ -52,6 +87,10 @@ pub fn run() {
     let view = Signal::new(Section::Theme);
     let nav = SidebarNavController::new();
     let wallpaper_color_picker = ColorPickerController::new();
+    let account_list = users::list_accounts();
+    let profile = users::ProfileControllers::load(&account_list);
+    let users = Signal::new(account_list);
+    polkit::ensure_kde_agent();
     let window: Rc<RefCell<Option<WindowHandle>>> = Rc::new(RefCell::new(None));
     let initial_theme = creamui_theme::active_theme();
 
@@ -60,8 +99,8 @@ pub fn run() {
             app.append_window(
                 WindowOptions {
                     title: "Settings".into(),
-                    width: 800,
-                    height: 540,
+                    width: 960,
+                    height: 640,
                     decorations: true,
                     resizable: true,
                     transparent: false,
@@ -83,6 +122,8 @@ pub fn run() {
                         &nav,
                         &window,
                         &wallpaper_color_picker,
+                        &users,
+                        &profile,
                     )
                 },
             );
@@ -98,6 +139,8 @@ fn build(
     nav: &SidebarNavController<Section>,
     window: &Rc<RefCell<Option<WindowHandle>>>,
     wallpaper_color_picker: &ColorPickerController,
+    users: &Signal<Vec<users::Account>>,
+    profile: &users::ProfileControllers,
 ) -> BoxedWidget {
     let theme = creamui_theme::use_theme();
 
@@ -121,10 +164,12 @@ fn build(
         ..Default::default()
     };
     let current = view.get();
+    let account_list = users.get();
+    let navigation = tree(&account_list);
     let select = view.clone();
     let sidebar = nested_sidebar(
         sidebar_style,
-        &tree(),
+        &navigation,
         nav,
         Some(&current),
         move |section| {
@@ -138,7 +183,10 @@ fn build(
         Section::General => sections::general::build(size, config),
         Section::Tray => sections::tray::build(size, config),
         Section::Widgets => sections::widgets::build(size, config),
-        Section::Appearance | Section::Taskbar => {
+        Section::Profile => users::build(size, profile),
+        Section::User(username) => users::account_view(size, &account_list, &username),
+        Section::CreateUser => users::create_user_view(size),
+        Section::Appearance | Section::Taskbar | Section::Users => {
             unreachable!("sidebar parents are not selectable")
         }
     };

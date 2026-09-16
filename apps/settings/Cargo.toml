@@ -20,4 +20,5 @@ creamui-render = { path = "../../../creamui/crates/render", features = ["platfor
 creamui-theme = { path = "../../../creamui/crates/theme" }
 creamui-widgets = { path = "../../../creamui/crates/widgets" }
 image-rs = { package = "image", version = "0.25.10", default-features = false, features = ["png", "jpeg", "webp"] }
+dbus = "0.9"
 rfd = "0.17"

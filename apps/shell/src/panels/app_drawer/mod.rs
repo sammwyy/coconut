@@ -163,8 +163,8 @@ pub fn build(
             <Flex direction={FlexDirection::Row} grow={1.0} gap={10.0}>
                 {sidebar}
                 <Flex direction={FlexDirection::Column} grow={1.0} gap={10.0}>
-                    {scroll}
                     {search}
+                    {scroll}
                 </Flex>
             </Flex>
         </Flex>

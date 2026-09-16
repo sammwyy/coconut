@@ -1,11 +1,14 @@
 mod bar;
 mod desktop;
+pub mod geo;
 pub mod ipc;
+mod profile;
 mod tray;
 mod widgets;
 
 pub use bar::{BarConfig, BarLayout, BarPosition};
 pub use desktop::{DesktopColor, DesktopConfig, WallpaperMode};
+pub use profile::UserProfile;
 pub use tray::{TrayConfig, TrayMode, TrayVisibility};
 pub use widgets::WidgetsConfig;
 
