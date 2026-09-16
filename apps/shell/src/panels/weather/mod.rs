@@ -54,7 +54,7 @@ pub fn build(_: Size) -> BoxedWidget {
     Box::new(jsx! {
         <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={18.0} gap={14.0} background={CARD} border={(BORDER, 1.0)} corner_radius={CARD_RADIUS}>
             <Flex direction={FlexDirection::Row} gap={14.0} align={Align::Center}>
-                {pixel_icon("weather_cloud_sun", 52.0)}
+                {pixel_icon("weather_cloud_sun", 52.0, TEXT)}
                 <Flex direction={FlexDirection::Column} gap={6.0} grow={1.0}>
                     <Flex direction={FlexDirection::Row} align={Align::End} gap={8.0}>
                         <RawText color={TEXT} font_size={44.0}>"24°"</RawText>
@@ -87,7 +87,7 @@ fn hour_cell(hour: Hour) -> BoxedWidget {
     Box::new(jsx! {
         <Flex direction={FlexDirection::Column} size={(44.0, 64.0)} gap={5.0} align={Align::Center} justify={Justify::Center}>
             <RawText color={MUTED} font_size={10.0}>{hour.label}</RawText>
-            {pixel_icon(hour.icon, 18.0)}
+            {pixel_icon(hour.icon, 18.0, TEXT)}
             <RawText color={TEXT} font_size={13.0}>{hour.temp}</RawText>
         </Flex>
     })

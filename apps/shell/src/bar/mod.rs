@@ -138,7 +138,7 @@ pub fn build_dock(
             .with_click_position(move |point| weather_click(point))
             .child(Box::new(jsx! {
                 <Flex direction={FlexDirection::Row} size={(126.0, 32.0)} padding={6.0} gap={4.0} align={Align::Center}>
-                    {pixel_icon("weather_cloud_sun", 14.0)}
+                    {pixel_icon("weather_cloud_sun", 14.0, PRIMARY)}
                     <RawText color={MUTED} font_size={10.0} align={TextAlign::Start}>{widgets::weather::DEFAULT_SUMMARY}</RawText>
                 </Flex>
             })),
@@ -156,7 +156,7 @@ pub fn build_dock(
         RawButton::new(square_style(launcher_background), || {})
             .with_click_position(move |point| drawer_click(point))
             .child(Box::new(jsx! {
-                <Flex size={(32.0, 32.0)} align={Align::Center} justify={Justify::Center}>{pixel_icon("appgrid", 21.0)}</Flex>
+                <Flex size={(32.0, 32.0)} align={Align::Center} justify={Justify::Center}>{pixel_icon("appgrid", 21.0, PRIMARY)}</Flex>
             })),
     );
     let control_button = match config.tray.mode {
@@ -283,7 +283,7 @@ fn compact_media_button(icon: &'static str, on_click: Rc<dyn Fn()>) -> BoxedWidg
             .with_click_position(move |_| on_click())
             .child(Box::new(jsx! {
                 <Flex size={(18.0, 24.0)} align={Align::Center} justify={Justify::Center}>
-                    {pixel_icon(icon, 13.0)}
+                    {pixel_icon(icon, 13.0, PRIMARY)}
                 </Flex>
             })),
     )
@@ -376,26 +376,26 @@ fn control_button_widget(
         .justify(Justify::Center)
         .align(Align::Center);
     if tray.wifi.shows_in_bar() {
-        row = row.child(pixel_icon(network_icon, 16.0));
+        row = row.child(pixel_icon(network_icon, 16.0, PRIMARY));
         icon_count += 1;
     }
     if tray.brightness.shows_in_bar() {
-        row = row.child(pixel_icon("brightness", 16.0));
+        row = row.child(pixel_icon("brightness", 16.0, PRIMARY));
         icon_count += 1;
     }
     if tray.volume.shows_in_bar() {
-        row = row.child(pixel_icon(volume_icon, 16.0));
+        row = row.child(pixel_icon(volume_icon, 16.0, PRIMARY));
         icon_count += 1;
     }
     if tray.bluetooth.shows_in_bar() {
-        row = row.child(pixel_icon(bluetooth_icon, 16.0));
+        row = row.child(pixel_icon(bluetooth_icon, 16.0, PRIMARY));
         icon_count += 1;
     }
     if tray.battery.shows_in_bar() {
-        row = row.child(pixel_icon(battery_icon, 16.0));
+        row = row.child(pixel_icon(battery_icon, 16.0, PRIMARY));
         icon_count += 1;
     }
-    row = row.child(pixel_icon("chevron-up", 13.0));
+    row = row.child(pixel_icon("chevron-up", 13.0, PRIMARY));
     let width = control_button_width(icon_count);
     row = row.size(width, 32.0);
 
@@ -453,7 +453,7 @@ fn tray_icon_button(icon: &str, on_click: Rc<dyn Fn(Point)>) -> BoxedWidget {
         RawButton::new(island_button_style(32.0, 32.0), || {})
             .with_click_position(move |point| on_click(point))
             .child(Box::new(jsx! {
-                <Flex size={(32.0, 32.0)} align={Align::Center} justify={Justify::Center}>{pixel_icon(icon, 16.0)}</Flex>
+                <Flex size={(32.0, 32.0)} align={Align::Center} justify={Justify::Center}>{pixel_icon(icon, 16.0, PRIMARY)}</Flex>
             })),
     )
 }

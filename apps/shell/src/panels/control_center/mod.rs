@@ -351,7 +351,7 @@ fn device_tile(
     let content = Box::new(jsx! {
         <Flex direction={FlexDirection::Column} size={(TILE_W, TILE_H)} padding={10.0} gap={7.0}>
             <Flex direction={FlexDirection::Row} gap={8.0} align={Align::Center}>
-                {pixel_icon(icon, 16.0)}
+                {pixel_icon(icon, 16.0, TEXT)}
                 <RawText color={MUTED} font_size={11.0} align={TextAlign::Start}>{kicker}</RawText>
                 <Flex grow={1.0} />
                 {compact_switch(enabled, on_toggle)}
@@ -373,7 +373,7 @@ fn status_tile(
     let content = Box::new(jsx! {
         <Flex direction={FlexDirection::Column} size={(TILE_W, TILE_H)} padding={10.0} gap={6.0} justify={creamui_widgets::layout::Justify::Center}>
             <Flex direction={FlexDirection::Row} gap={8.0} align={Align::Center}>
-                {pixel_icon(icon, 16.0)}
+                {pixel_icon(icon, 16.0, TEXT)}
                 <RawText color={MUTED} font_size={11.0} align={TextAlign::Start}>{kicker}</RawText>
             </Flex>
             <Flex direction={FlexDirection::Row} align={Align::Center} gap={8.0}>

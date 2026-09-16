@@ -1,6 +1,7 @@
 use crate::icons::pixel_icon;
 use crate::panels::chrome::{
-    compact_hero_card, list_row, panel_header, section_label, toggle_row, BORDER, CARD, CARD_RADIUS,
+    compact_hero_card, list_row, panel_header, section_label, toggle_row, BORDER, CARD,
+    CARD_RADIUS, TEXT,
 };
 use coconut_api::battery::BatteryIntegration;
 use coconut_api::power_profile::{PowerProfile, PowerProfileIntegration};
@@ -86,7 +87,7 @@ fn profile_row(
         profile_icon(&profile.id),
         profile_label(&profile.id).to_owned(),
         profile_description(&profile.id).to_owned(),
-        profile.active.then(|| pixel_icon("check", 14.0)),
+        profile.active.then(|| pixel_icon("check", 14.0, TEXT)),
         profile.active,
         Some(on_select),
     )

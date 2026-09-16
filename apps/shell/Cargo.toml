@@ -28,6 +28,3 @@ coconut-registry = { path = "../../crates/registry" }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 coconut-registry = { path = "../../crates/registry", default-features = false, features = ["windows"] }
-
-[build-dependencies]
-resvg = "0.45.1"

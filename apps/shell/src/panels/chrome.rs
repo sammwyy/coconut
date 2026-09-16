@@ -68,7 +68,7 @@ pub fn hero_card(icon: &str, title: String, caption: String) -> BoxedWidget {
         .property(StyleProp::Background(PANEL.into()))
         .property(StyleProp::Border(creamui_core::Border::new(BORDER, 1.0)))
         .property(StyleProp::CornerRadius(ISLAND_RADIUS))
-        .child(pixel_icon(icon, 40.0))
+        .child(pixel_icon(icon, 40.0, TEXT))
         .child(Box::new(jsx! {
             <RawText color={TEXT} font_size={20.0} align={TextAlign::Center}>{title}</RawText>
         }))
@@ -91,7 +91,7 @@ pub fn compact_hero_card(icon: &str, value: String, caption: String) -> BoxedWid
         .property(StyleProp::CornerRadius(ISLAND_RADIUS))
         .child(Box::new(jsx! {
             <Flex direction={FlexDirection::Row} align={Align::Center} gap={8.0}>
-                {pixel_icon(icon, 22.0)}
+                {pixel_icon(icon, 22.0, TEXT)}
                 <Flex grow={1.0} />
                 <RawText color={TEXT} font_size={18.0} align={TextAlign::End}>{value}</RawText>
             </Flex>
@@ -126,7 +126,7 @@ pub fn connection_card(
             .property(StyleProp::CornerRadius(ISLAND_RADIUS))
             .child(Box::new(jsx! {
                 <Flex direction={FlexDirection::Row} align={Align::Center} gap={6.0}>
-                    {pixel_icon(icon, 16.0)}
+                    {pixel_icon(icon, 16.0, TEXT)}
                     <RawText color={title_color} font_size={12.0} align={TextAlign::Start}>{title}</RawText>
                 </Flex>
             }))
@@ -190,7 +190,7 @@ pub fn fat_slider(
 fn slider_title(icon: &str, label: &str, on_open: Option<Rc<dyn Fn()>>) -> BoxedWidget {
     let content = Box::new(jsx! {
         <Flex direction={FlexDirection::Row} align={Align::Center} gap={8.0}>
-            {pixel_icon(icon, 18.0)}
+            {pixel_icon(icon, 18.0, TEXT)}
             <RawText color={TEXT} font_size={13.0}>{label.to_owned()}</RawText>
         </Flex>
     });
@@ -234,7 +234,7 @@ pub fn icon_button(icon: &str, size: f32, on_click: Rc<dyn Fn()>) -> BoxedWidget
     Box::new(
         RawButton::new(icon_button_style(size), move || on_click()).child(Box::new(jsx! {
             <Flex size={(size, size)} align={Align::Center} justify={Justify::Center}>
-                {pixel_icon(icon, size * 0.6)}
+                {pixel_icon(icon, size * 0.6, TEXT)}
             </Flex>
         })),
     )
@@ -304,7 +304,7 @@ pub fn list_row(
             .gap(10.0)
             .align(Align::Center)
             .property(StyleProp::Width(LIST_WIDTH.into()))
-            .child(pixel_icon(icon, 18.0))
+            .child(pixel_icon(icon, 18.0, TEXT))
             .child(text_column)
             .child(trailing),
     );
@@ -364,7 +364,7 @@ fn detail_row_inner(label: &str, value: String, action: Option<BoxedWidget>) -> 
 pub fn action_button(icon: &str, label: &str, on_click: Rc<dyn Fn()>) -> BoxedWidget {
     let content = Box::new(jsx! {
         <Flex direction={FlexDirection::Row} align={Align::Center} gap={6.0} padding={6.0}>
-            {pixel_icon(icon, 12.0)}
+            {pixel_icon(icon, 12.0, TEXT)}
             <RawText color={TEXT} font_size={11.0}>{label.to_owned()}</RawText>
         </Flex>
     });

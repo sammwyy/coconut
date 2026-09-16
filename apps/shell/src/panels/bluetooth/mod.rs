@@ -1,7 +1,7 @@
 use crate::icons::pixel_icon;
 use crate::panels::chrome::{
     action_button, compact_switch, detail_row, icon_button, list_row, panel_header, section_label,
-    BORDER, CARD, CARD_RADIUS, ISLAND_RADIUS, LIST_WIDTH, MUTED, PANEL,
+    BORDER, CARD, CARD_RADIUS, ISLAND_RADIUS, LIST_WIDTH, MUTED, PANEL, TEXT,
 };
 use coconut_api::bluetooth::{BluetoothDevice, BluetoothIntegration};
 use creamui_core::layout::{Dimension, FlexDirection, Style as LayoutStyle};
@@ -125,7 +125,7 @@ fn paired_device_row(device: &BluetoothDevice, view: &Signal<Option<String>>) ->
     } else {
         "Paired"
     };
-    let trailing = device.connected.then(|| pixel_icon("check", 14.0));
+    let trailing = device.connected.then(|| pixel_icon("check", 14.0, TEXT));
     let address = device.address.clone();
     let view = view.clone();
     let on_click = Rc::new(move || view.set(Some(address.clone())));

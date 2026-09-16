@@ -2,7 +2,7 @@ use crate::icons::pixel_icon;
 use crate::panels::chrome::{
     action_button, compact_switch, connection_card, detail_row, detail_row_with_action,
     icon_button, list_row, panel_header, section_label, wifi_strength_icon, BORDER, CARD,
-    CARD_RADIUS, ISLAND_RADIUS, LIST_WIDTH, MUTED, PANEL,
+    CARD_RADIUS, ISLAND_RADIUS, LIST_WIDTH, MUTED, PANEL, TEXT,
 };
 use coconut_api::network::{NetworkDevice, NetworkDeviceKind, NetworkIntegration, WifiNetwork};
 use creamui_core::layout::{Dimension, FlexDirection, Style as LayoutStyle};
@@ -280,10 +280,10 @@ fn wifi_row(network: &WifiNetwork, on_click: Rc<dyn Fn()>) -> BoxedWidget {
     };
     let mut trailing = Flex::row().gap(6.0).align(Align::Center);
     if network.secured {
-        trailing = trailing.child(pixel_icon("lock", 12.0));
+        trailing = trailing.child(pixel_icon("lock", 12.0, TEXT));
     }
     if network.active {
-        trailing = trailing.child(pixel_icon("check", 14.0));
+        trailing = trailing.child(pixel_icon("check", 14.0, TEXT));
     }
     list_row(
         icon,

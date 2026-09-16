@@ -451,6 +451,7 @@ fn entry_icon(entry: &DesktopEntry, size: f32) -> BoxedWidget {
             EntryKind::Launcher => "appgrid",
         },
         size,
+        ICON_LABEL,
     )
 }
 
