@@ -4,3 +4,4 @@ pub mod general;
 pub mod tray;
 pub mod wallpaper;
 pub mod widgets;
+pub mod window;

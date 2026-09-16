@@ -28,6 +28,8 @@ enum Section {
     General,
     Tray,
     Widgets,
+    Layout,
+    WorkingArea,
     Users,
     Profile,
     User(String),
@@ -46,7 +48,11 @@ fn category_default(section: Section) -> Section {
     }
 }
 
-fn tree(accounts: &[users::Account], icons: &SettingsIcons) -> Vec<SidebarNode<Section>> {
+fn tree(
+    accounts: &[users::Account],
+    icons: &SettingsIcons,
+    blair_available: bool,
+) -> Vec<SidebarNode<Section>> {
     let profile_icon = std::env::var("USER")
         .ok()
         .and_then(|username| accounts.iter().find(|account| account.username == username))
@@ -73,6 +79,26 @@ fn tree(accounts: &[users::Account], icons: &SettingsIcons) -> Vec<SidebarNode<S
                         SidebarNode::leaf(Section::Tray, icons.status.clone(), "Status area"),
                         SidebarNode::leaf(Section::Widgets, icons.widgets.clone(), "Widgets"),
                     ],
+                ),
+                SidebarNode::group(
+                    Section::Layout,
+                    "Compositor (Blair)",
+                    if blair_available {
+                        vec![
+                            SidebarNode::leaf(
+                                Section::Layout,
+                                IconSource::Symbol(Symbol::Controls),
+                                "Layout",
+                            ),
+                            SidebarNode::leaf(
+                                Section::WorkingArea,
+                                IconSource::Symbol(Symbol::Controls),
+                                "Working area",
+                            ),
+                        ]
+                    } else {
+                        Vec::new()
+                    },
                 ),
             ],
         ),
@@ -118,6 +144,7 @@ pub fn run() {
     let users = Signal::new(account_list);
     let icons = SettingsIcons::load();
     let wallpaper_gallery = sections::wallpaper::GalleryState::new();
+    let window_settings = sections::window::WindowState::connect();
     polkit::ensure_kde_agent();
     let window: Rc<RefCell<Option<WindowHandle>>> = Rc::new(RefCell::new(None));
     let initial_theme = creamui_theme::active_theme();
@@ -155,6 +182,7 @@ pub fn run() {
                         &profile,
                         &icons,
                         &wallpaper_gallery,
+                        window_settings.as_ref(),
                     )
                 },
             );
@@ -175,6 +203,7 @@ fn build(
     profile: &users::ProfileControllers,
     icons: &SettingsIcons,
     wallpaper_gallery: &sections::wallpaper::GalleryState,
+    window_settings: Option<&sections::window::WindowState>,
 ) -> BoxedWidget {
     let theme = creamui_theme::use_theme();
 
@@ -199,7 +228,7 @@ fn build(
     };
     let current = view.get();
     let account_list = users.get();
-    let navigation = tree(&account_list, icons);
+    let navigation = tree(&account_list, icons, window_settings.is_some());
     let select = view.clone();
     let enter_category = view.clone();
     let sidebar = nested_sidebar(
@@ -230,6 +259,14 @@ fn build(
         Section::General => sections::general::build(size, config),
         Section::Tray => sections::tray::build(size, config),
         Section::Widgets => sections::widgets::build(size, config),
+        Section::Layout => sections::window::build_layout(
+            size,
+            window_settings.expect("Blair settings are available"),
+        ),
+        Section::WorkingArea => sections::window::build_working_area(
+            size,
+            window_settings.expect("Blair settings are available"),
+        ),
         Section::Profile => users::build(size, profile),
         Section::User(username) => users::account_view(size, &account_list, &username),
         Section::CreateUser => users::create_user_view(size),
