@@ -22,6 +22,10 @@ pub fn detect() -> Registry {
 }
 
 fn detect_desktop() -> Rc<dyn coconut_api::desktop::DesktopIntegration> {
+    #[cfg(feature = "blair")]
+    if let Some(item) = coconut_integration_blair::BlairDbus::detect() {
+        return Rc::new(item);
+    }
     #[cfg(feature = "kwin")]
     if let Some(item) = coconut_integration_kwin::KWinDbus::detect() {
         return Rc::new(item);

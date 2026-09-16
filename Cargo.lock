@@ -468,6 +468,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "coconut-integration-blair"
+version = "0.1.0"
+dependencies = [
+ "coconut-api",
+ "creamui-render",
+ "dbus",
+]
+
+[[package]]
 name = "coconut-integration-bluez"
 version = "0.1.0"
 dependencies = [
@@ -547,6 +556,7 @@ name = "coconut-registry"
 version = "0.1.0"
 dependencies = [
  "coconut-api",
+ "coconut-integration-blair",
  "coconut-integration-bluez",
  "coconut-integration-brightnessctl",
  "coconut-integration-kwin",

@@ -31,7 +31,7 @@ the widget prevents new weather requests.
 - Live clock and weather entry points
 - Quick access to network, brightness, volume, Bluetooth, and battery status
 - Purpose-built pop-up panels that stay visually consistent with the dock
-- Native integrations for KDE/Wayland and Windows 10 when available
+- Native integrations for Blair, KDE/Wayland, and Windows 10 when available
 
 ## Platforms
 
@@ -41,8 +41,9 @@ sessions, master volume, battery, brightness, network, and Bluetooth. Hardware
 features that are not present, such as a laptop battery or an internal display,
 fall back gracefully.
 
-Linux integrations currently target a KDE Wayland session with the relevant
-desktop services installed.
+Linux integrates natively with Blair through its org.blair.Compositor1 D-Bus
+API (window lifecycle, focus/minimize, work areas, and layer-shell surfaces).
+KDE Wayland remains supported with its relevant desktop services.
 
 ## Widgets
 

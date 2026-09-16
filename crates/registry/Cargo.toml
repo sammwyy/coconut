@@ -14,6 +14,7 @@ coconut-integration-network-manager = { path = "../../integrations/network-manag
 coconut-integration-power-profiles-daemon = { path = "../../integrations/power-profiles-daemon", optional = true }
 coconut-integration-pipewire = { path = "../../integrations/pipewire", optional = true }
 coconut-integration-kwin = { path = "../../integrations/kwin", optional = true }
+coconut-integration-blair = { path = "../../integrations/blair", optional = true }
 coconut-integration-windows = { path = "../../integrations/windows", optional = true }
 
 [features]
@@ -26,6 +27,7 @@ default = [
     "power-profiles-daemon",
     "pipewire",
     "kwin",
+    "blair",
 ]
 mpris = ["dep:coconut-integration-mpris"]
 upower = ["dep:coconut-integration-upower"]
@@ -35,4 +37,5 @@ network-manager = ["dep:coconut-integration-network-manager"]
 power-profiles-daemon = ["dep:coconut-integration-power-profiles-daemon"]
 pipewire = ["dep:coconut-integration-pipewire"]
 kwin = ["dep:coconut-integration-kwin"]
+blair = ["dep:coconut-integration-blair"]
 windows = ["dep:coconut-integration-windows"]
