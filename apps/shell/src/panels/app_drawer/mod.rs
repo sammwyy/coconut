@@ -1,3 +1,4 @@
+use crate::icon_theme::{build_icon_index, load_icon, resolve_icon, xdg_data_directories};
 use crate::panels::chrome::{
     ACCENT, BORDER, CARD, CARD_RADIUS, CONTROL, CONTROL_HOVER, ISLAND_RADIUS, MUTED, PANEL,
     SELECTED, TEXT,
@@ -368,7 +369,7 @@ fn resolve_icons(mut apps: Vec<AppEntry>) -> Vec<AppEntry> {
             .icon_name
             .as_deref()
             .and_then(|name| resolve_icon(name, &icon_index))
-            .and_then(|path| ImageData::from_path(path).ok());
+            .and_then(|path| load_icon(&path, 48));
     }
     apps
 }
@@ -488,79 +489,6 @@ fn parse_exec(value: &str) -> Vec<String> {
         .into_iter()
         .filter(|argument| !argument.starts_with('%'))
         .collect()
-}
-
-fn resolve_icon(icon: &str, index: &HashMap<String, PathBuf>) -> Option<PathBuf> {
-    let path = PathBuf::from(icon);
-    if path.is_file() && supported_image(&path) {
-        return Some(path);
-    }
-    let needle = path
-        .file_stem()
-        .and_then(|name| name.to_str())
-        .unwrap_or(icon)
-        .to_ascii_lowercase();
-    index.get(&needle).cloned()
-}
-
-fn icon_roots() -> Vec<PathBuf> {
-    let mut roots = Vec::new();
-    for directory in xdg_data_directories() {
-        roots.push(directory.join("icons"));
-        roots.push(directory.join("pixmaps"));
-        roots.push(directory.join("flatpak/appstream"));
-    }
-    roots.push(PathBuf::from("/var/lib/flatpak/appstream"));
-    roots
-}
-
-fn xdg_data_directories() -> Vec<PathBuf> {
-    let mut directories = Vec::new();
-    let data_home = std::env::var_os("XDG_DATA_HOME")
-        .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".local/share")));
-    if let Some(directory) = data_home {
-        directories.push(directory);
-    }
-    let data_dirs =
-        std::env::var_os("XDG_DATA_DIRS").unwrap_or_else(|| "/usr/local/share:/usr/share".into());
-    directories.extend(std::env::split_paths(&data_dirs));
-    directories
-}
-
-fn build_icon_index() -> HashMap<String, PathBuf> {
-    let mut index = HashMap::new();
-    for root in icon_roots() {
-        collect_icons(&root, &mut index);
-    }
-    index
-}
-
-fn collect_icons(directory: &Path, index: &mut HashMap<String, PathBuf>) {
-    let Ok(entries) = fs::read_dir(directory) else {
-        return;
-    };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.is_dir() {
-            collect_icons(&path, index);
-        } else if supported_image(&path) {
-            if let Some(name) = path.file_stem().and_then(|stem| stem.to_str()) {
-                index.entry(name.to_ascii_lowercase()).or_insert(path);
-            }
-        }
-    }
-}
-
-fn supported_image(path: &Path) -> bool {
-    path.extension()
-        .and_then(|extension| extension.to_str())
-        .is_some_and(|extension| {
-            matches!(
-                extension.to_ascii_lowercase().as_str(),
-                "png" | "jpg" | "jpeg" | "webp"
-            )
-        })
 }
 
 fn short_name(name: &str) -> String {

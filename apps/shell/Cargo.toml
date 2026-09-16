@@ -14,7 +14,7 @@ coconut-api = { path = "../../crates/api" }
 coconut-core = { path = "../../crates/core" }
 chrono = "0.4"
 creamui-core = { path = "../../../creamui/crates/core" }
-creamui-image = { path = "../../../creamui/crates/image", features = ["webp", "jpeg"] }
+creamui-image = { path = "../../../creamui/crates/image", features = ["webp", "jpeg", "svg"] }
 creamui-jsx = { path = "../../../creamui/crates/jsx" }
 creamui-macros = { path = "../../../creamui/crates/macros" }
 creamui-reactive = { path = "../../../creamui/crates/reactive" }

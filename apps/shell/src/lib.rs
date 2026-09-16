@@ -1,5 +1,6 @@
 mod bar;
 mod desktop;
+mod icon_theme;
 mod icons;
 mod panels;
 mod process;
@@ -139,7 +140,16 @@ pub fn run() {
                     let themed_windows = themed_windows.clone();
                     move |window| themed_windows.borrow_mut().push(window)
                 },
-                move |viewport| desktop::build_drag_overlay(viewport, drag_overlay_state.clone()),
+                {
+                    let config = config.clone();
+                    move |viewport| {
+                        desktop::build_drag_overlay(
+                            viewport,
+                            drag_overlay_state.clone(),
+                            config.clone(),
+                        )
+                    }
+                },
             );
             schedule_playback_refresh(
                 app.clone(),

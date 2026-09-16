@@ -23,6 +23,7 @@ enum Section {
     Appearance,
     Theme,
     Wallpaper,
+    DesktopIcons,
     Taskbar,
     General,
     Tray,
@@ -47,6 +48,11 @@ fn tree(accounts: &[users::Account], icons: &SettingsIcons) -> Vec<SidebarNode<S
             vec![
                 SidebarNode::leaf(Section::Theme, icons.paintbrush.clone(), "Theme"),
                 SidebarNode::leaf(Section::Wallpaper, icons.wallpaper.clone(), "Wallpaper"),
+                SidebarNode::leaf(
+                    Section::DesktopIcons,
+                    IconSource::Symbol(Symbol::Grid),
+                    "Desktop icons",
+                ),
                 SidebarNode::group(
                     Section::Taskbar,
                     "Taskbar",
@@ -94,6 +100,7 @@ pub fn run() {
     let view = Signal::new(Section::Theme);
     let nav = SidebarNavController::new();
     let wallpaper_color_picker = ColorPickerController::new();
+    let desktop_icons_color_picker = ColorPickerController::new();
     let account_list = users::list_accounts();
     let profile = users::ProfileControllers::load(&account_list);
     let users = Signal::new(account_list);
@@ -131,6 +138,7 @@ pub fn run() {
                         &nav,
                         &window,
                         &wallpaper_color_picker,
+                        &desktop_icons_color_picker,
                         &users,
                         &profile,
                         &icons,
@@ -150,6 +158,7 @@ fn build(
     nav: &SidebarNavController<Section>,
     window: &Rc<RefCell<Option<WindowHandle>>>,
     wallpaper_color_picker: &ColorPickerController,
+    desktop_icons_color_picker: &ColorPickerController,
     users: &Signal<Vec<users::Account>>,
     profile: &users::ProfileControllers,
     icons: &SettingsIcons,
@@ -199,6 +208,9 @@ fn build(
             wallpaper_gallery,
             window,
         ),
+        Section::DesktopIcons => {
+            sections::desktop_icons::build(size, config, desktop_icons_color_picker)
+        }
         Section::General => sections::general::build(size, config),
         Section::Tray => sections::tray::build(size, config),
         Section::Widgets => sections::widgets::build(size, config),

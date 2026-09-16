@@ -7,7 +7,9 @@ mod tray;
 mod widgets;
 
 pub use bar::{BarConfig, BarLayout, BarPosition};
-pub use desktop::{DesktopColor, DesktopConfig, WallpaperMode};
+pub use desktop::{
+    ClickAction, DesktopColor, DesktopConfig, DesktopIconsConfig, IconShape, WallpaperMode,
+};
 pub use profile::UserProfile;
 pub use tray::{TrayConfig, TrayMode, TrayVisibility};
 pub use widgets::WidgetsConfig;
@@ -15,7 +17,7 @@ pub use widgets::WidgetsConfig;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ShellConfig {
     pub bar: BarConfig,
@@ -90,6 +92,24 @@ format = "%H:%M"
 [desktop]
 # Path to a wallpaper image. Unset uses the built-in background.
 # wallpaper = "/home/you/Pictures/wallpaper.jpg"
+
+[desktop.icons]
+# Background square size in pixels. The grid slot, label text and
+# spacing all scale with this.
+# size = 58.0
+# Extra gap added between grid slots, on top of "size".
+# spacing = 16.0
+# Whether icons show a colored background square.
+# background = true
+# Background square shape: "square", "rounded", or "circle".
+# shape = "rounded"
+# Gap between the background and the icon glyph. 0 makes the glyph
+# fill the background and clip to its shape.
+# padding = 12.0
+# background_color = { r = 59, g = 126, b = 193 }
+# What a single click does: "select" it, or "open" it right away.
+# Double-clicking always opens it either way.
+# click = "select"
 "#;
 
 impl ShellConfig {
