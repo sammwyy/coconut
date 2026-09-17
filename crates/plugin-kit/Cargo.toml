@@ -1,0 +1,19 @@
+[package]
+name = "coconut-plugin-kit"
+version = "0.1.0"
+edition = "2021"
+description = "Island/Panel/Plugin traits, registry, SharedState and PanelHost shared by every Coconut plugin crate"
+license = "Apache-2.0"
+build = "build.rs"
+
+[dependencies]
+coconut-core = { path = "../core" }
+creamui-core = { path = "../../../creamui/crates/core" }
+creamui-image = { path = "../../../creamui/crates/image", features = ["webp", "jpeg", "svg"] }
+creamui-jsx = { path = "../../../creamui/crates/jsx" }
+creamui-macros = { path = "../../../creamui/crates/macros" }
+creamui-reactive = { path = "../../../creamui/crates/reactive" }
+creamui-render = { path = "../../../creamui/crates/render" }
+creamui-theme = { path = "../../../creamui/crates/theme" }
+creamui-widgets = { path = "../../../creamui/crates/widgets" }
+serde = { version = "1", features = ["derive"] }

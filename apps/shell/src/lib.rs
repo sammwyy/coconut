@@ -1,30 +1,34 @@
 mod bar;
 mod desktop;
-mod icon_theme;
-mod icons;
-mod panels;
+mod plugins;
 mod process;
-mod weather;
 
-use crate::bar::{
-    build_dock, warn_unknown_widgets, BarActions, SystemStatus, DOCK_HEIGHT, DOCK_WIDTH,
-};
-use crate::panels::{
-    app_drawer, bluetooth as bluetooth_panel, brightness as brightness_panel, clock,
-    control_center, current_playing, energy as energy_panel, network as network_panel,
-    volume as volume_panel, weather as weather_panel,
-};
+use crate::bar::{build_dock, DOCK_HEIGHT, DOCK_WIDTH};
+use crate::plugins::all_plugins;
 use chrono::Local;
 use coconut_api::audio::{AudioIntegration, Playback};
-use coconut_core::{ipc::RuntimeEvent, BarPosition, ShellConfig, UserProfile};
-use creamui_core::{BoxedWidget, Point, Rect, Size};
+use coconut_api::desktop::{DesktopIntegration, DesktopWorkArea, OpenWindow, WindowChangeListener};
+use coconut_core::{ipc::RuntimeEvent, DockConfig, DockPosition, ShellConfig, UserProfile};
+use coconut_plugin_app_drawer::AppCatalog;
+use coconut_plugin_app_launcher::{LauncherOpenSignal, WindowListState};
+use coconut_plugin_clock::{ClockConfig, ClockText};
+use coconut_plugin_current_playing::{
+    CurrentPlayback, NextPlayback, PreviousPlayback, SeekPlayback, TogglePlayback,
+};
+use coconut_plugin_kit::{warn_unknown_islands, PanelHost, PluginInitContext, PluginRegistry};
+use coconut_plugin_kit::SharedState;
+use coconut_plugin_tray::{
+    BatteryRevision, BluetoothPowered, BluetoothRevision, BrightnessLevel, KeepAwakeState,
+    NetworkRevision, PowerProfileRevision, ToggleKeepAwake, VolumeLevel, WifiEnabled,
+};
+use coconut_plugin_weather::WeatherState;
+use creamui_core::{BoxedWidget, Point, Size};
 use creamui_reactive::Signal;
-use creamui_render::{AppBuilder, AppHandle, PopupOptions, WindowHandle, WindowOptions};
+use creamui_render::{AppBuilder, AppHandle, WindowHandle, WindowOptions};
 use creamui_theme::{Color, Theme};
-use creamui_widgets::ScrollController;
 use std::rc::Rc;
 use std::{
-    cell::{Cell, RefCell},
+    cell::RefCell,
     process::Child,
     process::Command,
     sync::{mpsc::Receiver, Arc, Mutex, OnceLock},
@@ -32,10 +36,6 @@ use std::{
 };
 
 pub fn run() {
-    // F3 can't reach the desktop/wallpaper layer-shell surface (it never
-    // gets keyboard interactivity, by design, so it doesn't steal focus
-    // from other apps) — start the overlay visible everywhere instead of
-    // relying on the toggle.
     #[cfg(feature = "perf-metrics")]
     creamui_devtools::init_with(creamui_devtools::DevtoolsOptions {
         initially_visible: true,
@@ -44,38 +44,125 @@ pub fn run() {
 
     initialize_system_theme();
     let initial_config = ShellConfig::load();
-    warn_unknown_widgets(&initial_config.bar.layout);
-    let popup_position_state = Rc::new(Cell::new(initial_config.bar.position));
     let config = Signal::new(initial_config.clone());
     let runtime_events = Arc::new(Mutex::new(coconut_core::ipc::listen_for_runtime_events()));
     let themed_windows: Rc<RefCell<Vec<WindowHandle>>> = Rc::new(RefCell::new(Vec::new()));
+    let dock_windows: Rc<RefCell<Vec<WindowHandle>>> = Rc::new(RefCell::new(Vec::new()));
 
     let integrations = coconut_registry::detect();
-    let applications = app_drawer::AppCatalog::new();
-    let drawer_state = app_drawer::DrawerState::default();
     let desktop_state = desktop::DesktopState::default();
-    let initial_windows = integrations.desktop.windows();
-    let windows = Signal::new(initial_windows);
     let desktop_work_area = Signal::new(integrations.desktop.work_area());
+
+    let shared = SharedState::default();
+
+    // -- app launcher / window list -----------------------------------
+    let windows = Signal::new(integrations.desktop.windows());
     let launcher_open = Signal::new(false);
-    let ready_backend = integrations.desktop.clone();
+    shared.insert(LauncherOpenSignal(launcher_open.clone()));
+    {
+        let refresh_backend = integrations.desktop.clone();
+        let refresh_windows = windows.clone();
+        let refresh: Rc<dyn Fn()> = Rc::new(move || refresh_windows.set(refresh_backend.windows()));
+        let activate_backend = integrations.desktop.clone();
+        let activate: Rc<dyn Fn(String)> =
+            Rc::new(move |id: String| activate_backend.activate_window(&id));
+        shared.insert(WindowListState {
+            windows: windows.clone(),
+            refresh,
+            activate,
+        });
+    }
+
+    // -- current playing -------------------------------------------------
     let playback_backend = integrations.audio.clone();
-    let playback_state = Signal::new(playback_backend.playback());
-    let bar_window: Rc<RefCell<Option<WindowHandle>>> = Rc::new(RefCell::new(None));
+    let playback_state: Signal<Option<Playback>> = Signal::new(playback_backend.playback());
+    {
+        let state = playback_state.clone();
+        shared.insert(CurrentPlayback(Rc::new(move || state.get())));
+        let backend = playback_backend.clone();
+        shared.insert(TogglePlayback(Rc::new(move || backend.toggle_playback())));
+        let backend = playback_backend.clone();
+        shared.insert(PreviousPlayback(Rc::new(move || backend.previous())));
+        let backend = playback_backend.clone();
+        shared.insert(NextPlayback(Rc::new(move || backend.next())));
+        let backend = playback_backend.clone();
+        let state = playback_state.clone();
+        shared.insert(SeekPlayback(Rc::new(move |progress: f64| {
+            if let Some(playback) = state.peek() {
+                if let Some(length) = parse_playback_time(&playback.length) {
+                    backend.seek(progress * length);
+                }
+            }
+        })));
+    }
+
+    // -- clock -------------------------------------------------------------
+    let clock_config: ClockConfig = coconut_core::modules::load_module("clock");
+    let clock_format = Rc::new(clock_config.format.clone());
+    let clock_text = Signal::new(Local::now().format(&clock_config.format).to_string());
+    shared.insert(ClockText(clock_text.clone()));
+
+    // -- weather -------------------------------------------------------------
+    let weather_state: Signal<WeatherState> = Signal::new(WeatherState::Loading);
+    shared.insert(weather_state.clone());
+
+    // -- tray / control center ---------------------------------------------
+    shared.insert(integrations.network.clone());
+    shared.insert(integrations.bluetooth.clone());
+    shared.insert(integrations.battery.clone());
+    shared.insert(integrations.volume.clone());
+    shared.insert(integrations.brightness.clone());
+    shared.insert(integrations.power_profile.clone());
+
+    let wifi_enabled = Signal::new(integrations.network.enabled());
+    shared.insert(WifiEnabled(wifi_enabled.clone()));
+    let bluetooth_powered = Signal::new(integrations.bluetooth.powered());
+    shared.insert(BluetoothPowered(bluetooth_powered.clone()));
+    let brightness_level = Signal::new(integrations.brightness.level());
+    shared.insert(BrightnessLevel(brightness_level.clone()));
+    let volume_level = Signal::new(integrations.volume.level());
+    shared.insert(VolumeLevel(volume_level.clone()));
+
+    let network_revision = Signal::new(());
+    shared.insert(NetworkRevision(network_revision.clone()));
+    let bluetooth_revision = Signal::new(());
+    shared.insert(BluetoothRevision(bluetooth_revision.clone()));
+    let battery_revision = Signal::new(());
+    shared.insert(BatteryRevision(battery_revision.clone()));
+    let power_profile_revision = Signal::new(());
+    shared.insert(PowerProfileRevision(power_profile_revision.clone()));
+
+    let awake = Signal::new(false);
+    shared.insert(KeepAwakeState(awake.clone()));
+    let awake_process: Rc<RefCell<Option<Child>>> = Rc::new(RefCell::new(None));
+    let keep_awake: Rc<dyn Fn()> = {
+        let process = awake_process.clone();
+        let awake = awake.clone();
+        Rc::new(move || {
+            let mut process = process.borrow_mut();
+            if let Some(mut child) = process.take() {
+                let _ = child.kill();
+                awake.set(false);
+            } else if let Ok(child) = Command::new("systemd-inhibit")
+                .args([
+                    "--what=idle:sleep",
+                    "--why=Coconut",
+                    "--mode=block",
+                    "sleep",
+                    "infinity",
+                ])
+                .spawn()
+            {
+                *process = Some(child);
+                awake.set(true);
+            }
+        })
+    };
+    shared.insert(ToggleKeepAwake(keep_awake));
+
+    let ready_backend = integrations.desktop.clone();
     let bar_playback_backend = integrations.audio.clone();
     let bar_windows_backend = integrations.desktop.clone();
-    let control_network = integrations.network.clone();
-    let control_brightness = integrations.brightness.clone();
-    let control_battery = integrations.battery.clone();
-    let control_volume = integrations.volume.clone();
-    let control_bluetooth = integrations.bluetooth.clone();
-    let control_power_profile = integrations.power_profile.clone();
-    let panel_network = integrations.network.clone();
-    let panel_bluetooth = integrations.bluetooth.clone();
-    let panel_battery = integrations.battery.clone();
-    let panel_power_profile = integrations.power_profile.clone();
-    let panel_brightness = integrations.brightness.clone();
-    let panel_volume = integrations.volume.clone();
     let poll_brightness = integrations.brightness.clone();
     let poll_volume = integrations.volume.clone();
     let network_changes = integrations.network.changes();
@@ -83,39 +170,25 @@ pub fn run() {
     let battery_changes = integrations.battery.changes();
     let power_profile_changes = integrations.power_profile.changes();
     let volume_changes = integrations.volume.changes();
-    let brightness_level = Signal::new(integrations.brightness.level());
-    let volume_level = Signal::new(integrations.volume.level());
-    let wifi_enabled = Signal::new(integrations.network.enabled());
-    let bluetooth_powered = Signal::new(integrations.bluetooth.powered());
-    let poll_brightness_level = brightness_level.clone();
-    let poll_volume_level = volume_level.clone();
-    let network_wifi_enabled = wifi_enabled.clone();
-    let bluetooth_panel_powered = bluetooth_powered.clone();
-    let energy_brightness_level = brightness_level.clone();
-    let panel_volume_level = volume_level.clone();
-    let clock_format = Rc::new(initial_config.widgets.clock.format.clone());
-    let clock_text = Signal::new(Local::now().format(&clock_format).to_string());
-    let weather_state = Signal::new(weather::WeatherState::Loading);
-    let status_network = integrations.network.clone();
-    let status_battery = integrations.battery.clone();
-    let status_bluetooth = integrations.bluetooth.clone();
-    let status_volume = integrations.volume.clone();
-    let refresh_backend = integrations.desktop.clone();
-    let refresh_windows = windows.clone();
-    let refresh = Rc::new(move || {
-        let next = refresh_backend.windows();
-        refresh_windows.set(next);
-    });
-    let activate_backend = integrations.desktop.clone();
-    let activate = Rc::new(move |id: String| activate_backend.activate_window(&id));
 
     AppBuilder::new()
         .keep_running()
         .on_started(move |app| {
-            if initial_config.widgets.weather.enabled {
+            let plugins = all_plugins();
+            let init_ctx = PluginInitContext {
+                shared: shared.clone(),
+                app: app.clone(),
+            };
+            let registry = Rc::new(PluginRegistry::build(&plugins, &init_ctx));
+            warn_unknown_islands(&initial_config.docks, &registry);
+
+            let panel_host = PanelHost::new(app.clone(), registry.clone(), shared.clone());
+            panel_host.set_theme(system_theme());
+            let open_panel = panel_host.dispatcher();
+
+            if island_present(&initial_config.docks, "weather") {
                 refresh_weather(app.clone(), weather_state.clone());
             }
-            let desktop_state = desktop_state.clone();
             desktop_state.start_loading(&app, initial_config.appearance.icon_theme.clone());
             let desktop_for_window = desktop_state.clone();
             app.append_window(
@@ -152,38 +225,19 @@ pub fn run() {
                     }
                 },
             );
-            schedule_playback_refresh(
-                app.clone(),
-                playback_backend.clone(),
-                playback_state.clone(),
-            );
+
+            schedule_playback_refresh(app.clone(), playback_backend.clone(), playback_state.clone());
             schedule_clock_refresh(app.clone(), clock_text.clone(), clock_format.clone());
-            let network_revision = Signal::new(());
             schedule_change_events(app.clone(), network_changes, network_revision.clone());
-            let bluetooth_revision = Signal::new(());
             schedule_change_events(app.clone(), bluetooth_changes, bluetooth_revision.clone());
-            let battery_revision = Signal::new(());
             schedule_change_events(app.clone(), battery_changes, battery_revision.clone());
-            let power_profile_revision = Signal::new(());
             schedule_change_events(
                 app.clone(),
                 power_profile_changes,
                 power_profile_revision.clone(),
             );
-            schedule_brightness_events(app.clone(), poll_brightness, poll_brightness_level);
-            schedule_volume_events(app.clone(), poll_volume, volume_changes, poll_volume_level);
-            let bar_network_revision = network_revision.clone();
-            let bar_bluetooth_revision = bluetooth_revision.clone();
-            let bar_battery_revision = battery_revision.clone();
-            let control_network_revision = network_revision.clone();
-            let control_bluetooth_revision = bluetooth_revision.clone();
-            let control_battery_revision = battery_revision.clone();
-            let control_power_profile_revision = power_profile_revision.clone();
-            let network_panel_revision = network_revision.clone();
-            let bluetooth_panel_revision = bluetooth_revision.clone();
-            let energy_panel_revision = battery_revision.clone();
-            let energy_panel_power_profile_revision = power_profile_revision.clone();
-            applications.start_loading(&app, initial_config.appearance.icon_theme.clone());
+            schedule_brightness_events(app.clone(), poll_brightness, brightness_level.clone());
+            schedule_volume_events(app.clone(), poll_volume, volume_changes, volume_level.clone());
             if !schedule_window_events(
                 app.clone(),
                 bar_windows_backend.clone(),
@@ -199,730 +253,158 @@ pub fn run() {
                     );
                 }
             }
-            let weather_app = app.clone();
-            let weather_state_for_panel = weather_state.clone();
-            let popup_position = popup_position_state.clone();
-            let weather_handle: Rc<RefCell<Option<WindowHandle>>> = Rc::new(RefCell::new(None));
-            let weather_bar = bar_window.clone();
-            let open_weather = Rc::new(move |anchor: Point| {
-                if let Some(handle) = weather_handle.borrow_mut().take() {
-                    if handle.is_open() {
-                        handle.close();
-                        return;
-                    }
-                }
-                let weather_handle = weather_handle.clone();
-                let bar_for_popup = weather_bar.clone();
-                let Some(popup) = popup_for(&bar_for_popup, anchor, popup_position.get()) else {
-                    return;
-                };
-                let panel_weather_state = weather_state_for_panel.clone();
-                weather_app.append_popup(
-                    popup_options(
-                        "Coconut Weather",
-                        weather_panel::WIDTH,
-                        weather_panel::HEIGHT,
-                    ),
-                    popup,
-                    Color::rgba(0, 0, 0, 0),
-                    move |window| {
-                        *weather_handle.borrow_mut() = Some(window.clone());
-                        window.set_always_on_top(true);
-                        close_on_focus_lost(&window);
-                    },
-                    move |size| weather_panel::build(size, panel_weather_state.clone()),
-                );
-            });
-            let clock_app = app.clone();
-            let popup_position = popup_position_state.clone();
-            let clock_handle: Rc<RefCell<Option<WindowHandle>>> = Rc::new(RefCell::new(None));
-            let clock_bar = bar_window.clone();
-            let open_clock = Rc::new(move |anchor: Point| {
-                if let Some(handle) = clock_handle.borrow_mut().take() {
-                    if handle.is_open() {
-                        handle.close();
-                        return;
-                    }
-                }
-                let clock_handle = clock_handle.clone();
-                let bar_for_popup = clock_bar.clone();
-                let Some(popup) = popup_for(&bar_for_popup, anchor, popup_position.get()) else {
-                    return;
-                };
-                clock_app.append_popup(
-                    popup_options("Coconut Clock", clock::WIDTH, clock::HEIGHT),
-                    popup,
-                    Color::rgba(0, 0, 0, 0),
-                    move |window| {
-                        *clock_handle.borrow_mut() = Some(window.clone());
-                        window.set_always_on_top(true);
-                        close_on_focus_lost(&window);
-                    },
-                    clock::build,
-                );
-            });
-            let music_app = app.clone();
-            let popup_position = popup_position_state.clone();
-            let music_backend = playback_backend.clone();
-            let music_handle: Rc<RefCell<Option<WindowHandle>>> = Rc::new(RefCell::new(None));
-            let music_bar = bar_window.clone();
-            let open_current_playing = Rc::new(move |anchor: Point| {
-                if let Some(handle) = music_handle.borrow_mut().take() {
-                    if handle.is_open() {
-                        handle.close();
-                        return;
-                    }
-                }
-                let music_handle = music_handle.clone();
-                let backend = music_backend.clone();
-                let playback_state = playback_state.clone();
-                let bar_for_popup = music_bar.clone();
-                let Some(popup) = popup_for(&bar_for_popup, anchor, popup_position.get()) else {
-                    return;
-                };
-                music_app.append_popup(
-                    popup_options(
-                        "Coconut Current Playing",
-                        current_playing::WIDTH,
-                        current_playing::HEIGHT,
-                    ),
-                    popup,
-                    Color::rgba(0, 0, 0, 0),
-                    move |window| {
-                        *music_handle.borrow_mut() = Some(window.clone());
-                        window.set_always_on_top(true);
-                        close_on_focus_lost(&window);
-                    },
-                    move |size| {
-                        current_playing::build(
-                            size,
-                            playback_state.get(),
-                            {
-                                let backend = backend.clone();
-                                Rc::new(move || backend.toggle_playback())
-                            },
-                            {
-                                let backend = backend.clone();
-                                Rc::new(move || backend.previous())
-                            },
-                            {
-                                let backend = backend.clone();
-                                Rc::new(move || backend.next())
-                            },
-                            {
-                                let backend = backend.clone();
-                                let playback_state = playback_state.clone();
-                                Rc::new(move |progress| {
-                                    if let Some(playback) = playback_state.peek() {
-                                        if let Some(length) = parse_playback_time(&playback.length)
-                                        {
-                                            backend.seek(progress * length);
-                                        }
-                                    }
-                                })
-                            },
-                        )
-                    },
-                );
-            });
-            let drawer_app = app.clone();
-            let drawer_catalog = applications.clone();
-            let drawer_state = drawer_state.clone();
-            let drawer_handle: Rc<RefCell<Option<WindowHandle>>> = Rc::new(RefCell::new(None));
-            let popup_position = popup_position_state.clone();
-            let drawer_bar = bar_window.clone();
-            let open_app_drawer = Rc::new(move |anchor: Point| {
-                if let Some(handle) = drawer_handle.borrow_mut().take() {
-                    if handle.is_open() {
-                        handle.close();
-                        return;
-                    }
-                }
-                let drawer_handle = drawer_handle.clone();
-                let close_handle = drawer_handle.clone();
-                let close_drawer: Rc<dyn Fn()> = Rc::new(move || {
-                    if let Some(window) = close_handle.borrow_mut().take() {
-                        window.close();
-                    }
-                });
-                let catalog = drawer_catalog.clone();
-                let state = drawer_state.clone();
-                let bar_for_popup = drawer_bar.clone();
-                let Some(popup) = popup_for(&bar_for_popup, anchor, popup_position.get()) else {
-                    return;
-                };
-                drawer_app.append_popup(
-                    popup_options("Coconut App Drawer", app_drawer::WIDTH, app_drawer::HEIGHT),
-                    popup,
-                    Color::rgba(0, 0, 0, 0),
-                    move |window| {
-                        *drawer_handle.borrow_mut() = Some(window.clone());
-                        window.set_always_on_top(true);
-                        close_on_focus_lost(&window);
-                    },
-                    move |size| {
-                        app_drawer::build(
-                            size,
-                            catalog.clone(),
-                            state.clone(),
-                            close_drawer.clone(),
-                        )
-                    },
-                );
-            });
-            let awake_process: Rc<RefCell<Option<Child>>> = Rc::new(RefCell::new(None));
-            let awake = Signal::new(false);
-            let keep_awake = {
-                let process = awake_process.clone();
-                let awake = awake.clone();
-                Rc::new(move || {
-                    let mut process = process.borrow_mut();
-                    if let Some(mut child) = process.take() {
-                        let _ = child.kill();
-                        awake.set(false);
-                    } else if let Ok(child) = Command::new("systemd-inhibit")
-                        .args([
-                            "--what=idle:sleep",
-                            "--why=Coconut",
-                            "--mode=block",
-                            "sleep",
-                            "infinity",
-                        ])
-                        .spawn()
-                    {
-                        *process = Some(child);
-                        awake.set(true);
-                    }
-                })
-            };
-            let energy_awake = awake.clone();
-            let energy_toggle_awake = keep_awake.clone();
-            let control_app = app.clone();
-            let popup_position = popup_position_state.clone();
-            let control_handle: Rc<RefCell<Option<WindowHandle>>> = Rc::new(RefCell::new(None));
-            let dock_volume = volume_level.clone();
-            let control_bar = bar_window.clone();
-            let control_tray_config = config.clone();
-            let open_control_center = Rc::new(move |anchor: Point| {
-                if let Some(handle) = control_handle.borrow_mut().take() {
-                    if handle.is_open() {
-                        handle.close();
-                        return;
-                    }
-                }
-                let control_handle = control_handle.clone();
-                let toggle = keep_awake.clone();
-                let awake = awake.clone();
-                let network = control_network.clone();
-                let brightness = control_brightness.clone();
-                let battery = control_battery.clone();
-                let volume = control_volume.clone();
-                let bluetooth = control_bluetooth.clone();
-                let power_profile = control_power_profile.clone();
-                let brightness_level = brightness_level.clone();
-                let volume_level = volume_level.clone();
-                let wifi_enabled = wifi_enabled.clone();
-                let bluetooth_powered = bluetooth_powered.clone();
-                let control_tray_config = control_tray_config.clone();
-                let network_revision = control_network_revision.clone();
-                let bluetooth_revision = control_bluetooth_revision.clone();
-                let battery_revision = control_battery_revision.clone();
-                let power_profile_revision = control_power_profile_revision.clone();
-                let view = Signal::new(control_center::PanelView::Main);
-                let network_scroll = ScrollController::new(0.0);
-                let bluetooth_scroll = ScrollController::new(0.0);
-                let network_detail = Signal::new(None);
-                let bluetooth_detail = Signal::new(None);
-                let network_password = Signal::new(None);
-                brightness_level.set(brightness.level());
-                volume_level.set(volume.level());
-                wifi_enabled.set(network.enabled());
-                bluetooth_powered.set(bluetooth.powered());
-                let bar_for_popup = control_bar.clone();
-                let Some(popup) = popup_for(&bar_for_popup, anchor, popup_position.get()) else {
-                    return;
-                };
-                control_app.append_popup(
-                    popup_options(
-                        "Coconut Control Center",
-                        control_center::WIDTH,
-                        control_center::HEIGHT,
-                    ),
-                    popup,
-                    Color::rgba(0, 0, 0, 0),
-                    move |window| {
-                        *control_handle.borrow_mut() = Some(window.clone());
-                        window.set_always_on_top(true);
-                        close_on_focus_lost(&window);
-                    },
-                    move |size| {
-                        network_revision.get();
-                        bluetooth_revision.get();
-                        battery_revision.get();
-                        power_profile_revision.get();
-                        control_center::build_with_integrations(
-                            size,
-                            network.clone(),
-                            brightness.clone(),
-                            battery.clone(),
-                            volume.clone(),
-                            bluetooth.clone(),
-                            power_profile.clone(),
-                            toggle.clone(),
-                            awake.get(),
-                            brightness_level.clone(),
-                            volume_level.clone(),
-                            wifi_enabled.clone(),
-                            bluetooth_powered.clone(),
-                            network_scroll.clone(),
-                            bluetooth_scroll.clone(),
-                            network_detail.clone(),
-                            bluetooth_detail.clone(),
-                            network_password.clone(),
-                            &control_tray_config.get().tray,
-                            view.clone(),
-                        )
-                    },
-                );
-            });
 
-            let network_app = app.clone();
-            let popup_position = popup_position_state.clone();
-            let network_handle: Rc<RefCell<Option<WindowHandle>>> = Rc::new(RefCell::new(None));
-            let network_bar = bar_window.clone();
-            let open_network = Rc::new(move |anchor: Point| {
-                if let Some(handle) = network_handle.borrow_mut().take() {
-                    if handle.is_open() {
-                        handle.close();
-                        return;
-                    }
-                }
-                let network_handle = network_handle.clone();
-                let network = panel_network.clone();
-                let wifi_enabled = network_wifi_enabled.clone();
-                let revision = network_panel_revision.clone();
-                let scroll = ScrollController::new(0.0);
-                let detail = Signal::new(None);
-                let password = Signal::new(None);
-                wifi_enabled.set(network.enabled());
-                let bar_for_popup = network_bar.clone();
-                let Some(popup) = popup_for(&bar_for_popup, anchor, popup_position.get()) else {
-                    return;
-                };
-                network_app.append_popup(
-                    popup_options(
-                        "Coconut Network",
-                        network_panel::WIDTH,
-                        network_panel::HEIGHT,
-                    ),
-                    popup,
-                    Color::rgba(0, 0, 0, 0),
-                    move |window| {
-                        *network_handle.borrow_mut() = Some(window.clone());
-                        window.set_always_on_top(true);
-                        close_on_focus_lost(&window);
-                    },
-                    move |size| {
-                        revision.get();
-                        network_panel::build(
-                            size,
-                            network.clone(),
-                            wifi_enabled.clone(),
-                            scroll.clone(),
-                            detail.clone(),
-                            password.clone(),
-                            None,
-                        )
-                    },
-                );
-            });
+            append_docks(
+                &app,
+                &initial_config.docks,
+                &registry,
+                &shared,
+                &open_panel,
+                &panel_host,
+                &ready_backend,
+                &themed_windows,
+                &dock_windows,
+            );
 
-            let bluetooth_app = app.clone();
-            let popup_position = popup_position_state.clone();
-            let bluetooth_handle: Rc<RefCell<Option<WindowHandle>>> = Rc::new(RefCell::new(None));
-            let bluetooth_bar = bar_window.clone();
-            let open_bluetooth = Rc::new(move |anchor: Point| {
-                if let Some(handle) = bluetooth_handle.borrow_mut().take() {
-                    if handle.is_open() {
-                        handle.close();
-                        return;
-                    }
-                }
-                let bluetooth_handle = bluetooth_handle.clone();
-                let bluetooth = panel_bluetooth.clone();
-                let bluetooth_powered = bluetooth_panel_powered.clone();
-                let revision = bluetooth_panel_revision.clone();
-                let scroll = ScrollController::new(0.0);
-                let detail = Signal::new(None);
-                bluetooth_powered.set(bluetooth.powered());
-                let bar_for_popup = bluetooth_bar.clone();
-                let Some(popup) = popup_for(&bar_for_popup, anchor, popup_position.get()) else {
-                    return;
-                };
-                bluetooth_app.append_popup(
-                    popup_options(
-                        "Coconut Bluetooth",
-                        bluetooth_panel::WIDTH,
-                        bluetooth_panel::HEIGHT,
-                    ),
-                    popup,
-                    Color::rgba(0, 0, 0, 0),
-                    move |window| {
-                        *bluetooth_handle.borrow_mut() = Some(window.clone());
-                        window.set_always_on_top(true);
-                        close_on_focus_lost(&window);
-                    },
-                    move |size| {
-                        revision.get();
-                        bluetooth_panel::build(
-                            size,
-                            bluetooth.clone(),
-                            bluetooth_powered.clone(),
-                            scroll.clone(),
-                            detail.clone(),
-                            None,
-                        )
-                    },
-                );
-            });
-
-            let energy_app = app.clone();
-            let popup_position = popup_position_state.clone();
-            let energy_handle: Rc<RefCell<Option<WindowHandle>>> = Rc::new(RefCell::new(None));
-            let energy_bar = bar_window.clone();
-            let open_energy = Rc::new(move |anchor: Point| {
-                if let Some(handle) = energy_handle.borrow_mut().take() {
-                    if handle.is_open() {
-                        handle.close();
-                        return;
-                    }
-                }
-                let energy_handle = energy_handle.clone();
-                let battery = panel_battery.clone();
-                let power_profile = panel_power_profile.clone();
-                let toggle_awake = energy_toggle_awake.clone();
-                let awake = energy_awake.clone();
-                let revision = energy_panel_revision.clone();
-                let power_profile_revision = energy_panel_power_profile_revision.clone();
-                let bar_for_popup = energy_bar.clone();
-                let Some(popup) = popup_for(&bar_for_popup, anchor, popup_position.get()) else {
-                    return;
-                };
-                energy_app.append_popup(
-                    popup_options("Coconut Energy", energy_panel::WIDTH, energy_panel::HEIGHT),
-                    popup,
-                    Color::rgba(0, 0, 0, 0),
-                    move |window| {
-                        *energy_handle.borrow_mut() = Some(window.clone());
-                        window.set_always_on_top(true);
-                        close_on_focus_lost(&window);
-                    },
-                    move |size| {
-                        revision.get();
-                        power_profile_revision.get();
-                        energy_panel::build(
-                            size,
-                            battery.clone(),
-                            power_profile.clone(),
-                            awake.get(),
-                            toggle_awake.clone(),
-                            None,
-                        )
-                    },
-                );
-            });
-
-            let brightness_app = app.clone();
-            let popup_position = popup_position_state.clone();
-            let brightness_handle: Rc<RefCell<Option<WindowHandle>>> = Rc::new(RefCell::new(None));
-            let brightness_bar = bar_window.clone();
-            let open_brightness = Rc::new(move |anchor: Point| {
-                if let Some(handle) = brightness_handle.borrow_mut().take() {
-                    if handle.is_open() {
-                        handle.close();
-                        return;
-                    }
-                }
-                let brightness_handle = brightness_handle.clone();
-                let brightness = panel_brightness.clone();
-                let brightness_level = energy_brightness_level.clone();
-                brightness_level.set(brightness.level());
-                let bar_for_popup = brightness_bar.clone();
-                let Some(popup) = popup_for(&bar_for_popup, anchor, popup_position.get()) else {
-                    return;
-                };
-                brightness_app.append_popup(
-                    popup_options(
-                        "Coconut Brightness",
-                        brightness_panel::WIDTH,
-                        brightness_panel::HEIGHT,
-                    ),
-                    popup,
-                    Color::rgba(0, 0, 0, 0),
-                    move |window| {
-                        *brightness_handle.borrow_mut() = Some(window.clone());
-                        window.set_always_on_top(true);
-                        close_on_focus_lost(&window);
-                    },
-                    move |size| {
-                        brightness_panel::build(
-                            size,
-                            brightness.clone(),
-                            brightness_level.clone(),
-                            None,
-                        )
-                    },
-                );
-            });
-
-            let volume_app = app.clone();
-            let popup_position = popup_position_state.clone();
-            let volume_handle: Rc<RefCell<Option<WindowHandle>>> = Rc::new(RefCell::new(None));
-            let volume_bar = bar_window.clone();
-            let open_volume = Rc::new(move |anchor: Point| {
-                if let Some(handle) = volume_handle.borrow_mut().take() {
-                    if handle.is_open() {
-                        handle.close();
-                        return;
-                    }
-                }
-                let volume_handle = volume_handle.clone();
-                let volume = panel_volume.clone();
-                let volume_level = panel_volume_level.clone();
-                volume_level.set(volume.level());
-                let bar_for_popup = volume_bar.clone();
-                let Some(popup) = popup_for(&bar_for_popup, anchor, popup_position.get()) else {
-                    return;
-                };
-                volume_app.append_popup(
-                    popup_options("Coconut Volume", volume_panel::WIDTH, volume_panel::HEIGHT),
-                    popup,
-                    Color::rgba(0, 0, 0, 0),
-                    move |window| {
-                        *volume_handle.borrow_mut() = Some(window.clone());
-                        window.set_always_on_top(true);
-                        close_on_focus_lost(&window);
-                    },
-                    move |size| {
-                        volume_panel::build(size, volume.clone(), volume_level.clone(), None)
-                    },
-                );
-            });
-
-            let append_bar: Rc<dyn Fn(BarPosition)> = Rc::new({
-                let app = app.clone();
-                let popup_position = popup_position_state.clone();
-                let ready_backend = ready_backend.clone();
-                let bar_window = bar_window.clone();
-                let themed_windows = themed_windows.clone();
-                let config = config.clone();
-                let network_revision = bar_network_revision.clone();
-                let bluetooth_revision = bar_bluetooth_revision.clone();
-                let battery_revision = bar_battery_revision.clone();
-                let status_network = status_network.clone();
-                let status_battery = status_battery.clone();
-                let status_bluetooth = status_bluetooth.clone();
-                let status_volume = status_volume.clone();
-                let dock_volume = dock_volume.clone();
-                let dock_weather_state = weather_state.clone();
-                let windows = windows.clone();
-                let launcher_open = launcher_open.clone();
-                let clock_text = clock_text.clone();
-                let refresh = refresh.clone();
-                let activate = activate.clone();
-                let bar_playback_backend = bar_playback_backend.clone();
-                let open_weather = open_weather.clone();
-                let open_clock = open_clock.clone();
-                let open_current_playing = open_current_playing.clone();
-                let open_app_drawer = open_app_drawer.clone();
-                let open_control_center = open_control_center.clone();
-                let open_network = open_network.clone();
-                let open_bluetooth = open_bluetooth.clone();
-                let open_energy = open_energy.clone();
-                let open_brightness = open_brightness.clone();
-                let open_volume = open_volume.clone();
-                let displayed_position = Rc::new(Cell::new(None::<BarPosition>));
-                move |position| {
-                    popup_position.set(position);
-                    if displayed_position.get() == Some(position) {
-                        return;
-                    }
-                    displayed_position.set(Some(position));
-                    // A changed layer-shell role cannot be applied in place.
-                    // Close the old surface before queuing its replacement;
-                    // waiting for the new window's ready callback left stale
-                    // panels behind when a compositor delayed configuration.
-                    if let Some(previous) = bar_window.borrow_mut().take() {
-                        previous.close();
-                    }
-                    let role = match position {
-                        BarPosition::Top => creamui_render::platform::WindowRole::TopPanel,
-                        BarPosition::Bottom => creamui_render::platform::WindowRole::BottomPanel,
-                        BarPosition::Left => creamui_render::platform::WindowRole::LeftPanel,
-                        BarPosition::Right => creamui_render::platform::WindowRole::RightPanel,
-                    };
-                    let (width, height) = if position.is_vertical() {
-                        (DOCK_WIDTH, 800)
-                    } else {
-                        (800, DOCK_HEIGHT)
-                    };
-                    app.append_window(
-                        WindowOptions {
-                            title: "Coconut".into(),
-                            width,
-                            height,
-                            decorations: false,
-                            resizable: false,
-                            transparent: true,
-                            role,
-                            theme: system_theme(),
-                            ..Default::default()
-                        },
-                        Color::rgba(0, 0, 0, 0),
-                        {
-                            let bar_window = bar_window.clone();
-                            let themed_windows = themed_windows.clone();
-                            let ready_backend = ready_backend.clone();
-                            move |window: WindowHandle| {
-                                ready_backend.prepare_window(&window);
-                                themed_windows.borrow_mut().push(window.clone());
-                                *bar_window.borrow_mut() = Some(window);
-                            }
-                        },
-                        {
-                            let config = config.clone();
-                            let network_revision = network_revision.clone();
-                            let bluetooth_revision = bluetooth_revision.clone();
-                            let battery_revision = battery_revision.clone();
-                            let status_network = status_network.clone();
-                            let status_battery = status_battery.clone();
-                            let status_bluetooth = status_bluetooth.clone();
-                            let status_volume = status_volume.clone();
-                            let dock_volume = dock_volume.clone();
-                            let windows = windows.clone();
-                            let launcher_open = launcher_open.clone();
-                            let clock_text = clock_text.clone();
-                            let weather_state = dock_weather_state.clone();
-                            let refresh = refresh.clone();
-                            let activate = activate.clone();
-                            let bar_playback_backend = bar_playback_backend.clone();
-                            let open_weather = open_weather.clone();
-                            let open_clock = open_clock.clone();
-                            let open_current_playing = open_current_playing.clone();
-                            let open_app_drawer = open_app_drawer.clone();
-                            let open_control_center = open_control_center.clone();
-                            let open_network = open_network.clone();
-                            let open_bluetooth = open_bluetooth.clone();
-                            let open_energy = open_energy.clone();
-                            let open_brightness = open_brightness.clone();
-                            let open_volume = open_volume.clone();
-                            move |viewport: Size| -> BoxedWidget {
-                                network_revision.get();
-                                bluetooth_revision.get();
-                                battery_revision.get();
-                                let weather = weather_state.get();
-                                let status = SystemStatus {
-                                    network_connected: status_network.connected(),
-                                    network_strength: status_network.strength(),
-                                    battery_percentage: status_battery.percentage(),
-                                    battery_charging: status_battery.charging(),
-                                    bluetooth_powered: status_bluetooth.powered(),
-                                    bluetooth_connected: status_bluetooth.connected(),
-                                    volume: dock_volume.get(),
-                                    volume_muted: status_volume.muted(),
-                                };
-                                build_dock(
-                                    viewport,
-                                    windows.get(),
-                                    launcher_open.clone(),
-                                    status,
-                                    clock_text.clone(),
-                                    &weather,
-                                    BarActions {
-                                        refresh_windows: refresh.clone(),
-                                        activate_window: activate.clone(),
-                                        current_playback: {
-                                            let backend = bar_playback_backend.clone();
-                                            Rc::new(move || backend.playback())
-                                        },
-                                        toggle_playback: {
-                                            let backend = bar_playback_backend.clone();
-                                            Rc::new(move || backend.toggle_playback())
-                                        },
-                                        previous_playback: {
-                                            let backend = bar_playback_backend.clone();
-                                            Rc::new(move || backend.previous())
-                                        },
-                                        next_playback: {
-                                            let backend = bar_playback_backend.clone();
-                                            Rc::new(move || backend.next())
-                                        },
-                                        open_weather: open_weather.clone(),
-                                        open_clock: open_clock.clone(),
-                                        open_current_playing: open_current_playing.clone(),
-                                        open_app_drawer: open_app_drawer.clone(),
-                                        open_control_center: open_control_center.clone(),
-                                        open_network: open_network.clone(),
-                                        open_bluetooth: open_bluetooth.clone(),
-                                        open_energy: open_energy.clone(),
-                                        open_brightness: open_brightness.clone(),
-                                        open_volume: open_volume.clone(),
-                                    },
-                                    &config.get(),
-                                )
-                            }
-                        },
-                    );
-                }
-            });
-            append_bar(initial_config.bar.position);
             schedule_runtime_events(
                 app.clone(),
                 runtime_events.clone(),
                 config.clone(),
                 themed_windows.clone(),
-                append_bar,
+                registry,
+                shared.clone(),
+                panel_host,
+                open_panel,
+                ready_backend.clone(),
+                dock_windows.clone(),
                 desktop_work_area,
                 weather_state,
-                applications,
                 desktop_state,
             );
+            let _ = bar_playback_backend;
         })
         .run();
 }
 
-fn schedule_window_events(
-    app: AppHandle,
-    backend: Rc<dyn coconut_api::desktop::DesktopIntegration>,
-    windows: Signal<Vec<coconut_api::desktop::OpenWindow>>,
-    work_area: Signal<Option<coconut_api::desktop::DesktopWorkArea>>,
-) -> bool {
-    let Some(listener) = backend.window_changes() else {
-        return false;
-    };
-    wait_for_window_event(app, backend, windows, work_area, listener);
-    true
+/// Whether `id` is placed in any section of any configured dock — the
+/// dynamic-dock analog of the old `config.widgets.<id>.enabled` check.
+fn island_present(docks: &[DockConfig], id: &str) -> bool {
+    docks
+        .iter()
+        .flat_map(|dock| &dock.sections)
+        .flat_map(|section| &section.islands)
+        .any(|entry| entry.id == id)
 }
 
+/// (Re)creates every dock window from scratch. Closes whatever dock windows
+/// currently exist first — layer-shell roles/geometry can't be changed in
+/// place, so any change to the docks list (position, count, sections,
+/// islands) is handled by tearing down and rebuilding all of them, the same
+/// way the old single-bar `append_bar` closure recreated its one window on
+/// a position change.
+///
+/// Only the first dock feeds [`PanelHost`]'s popup anchor geometry — popups
+/// opened from a second/third dock's islands still anchor against the
+/// primary dock until multi-dock popup anchoring gets its own design pass.
+#[allow(clippy::too_many_arguments)]
+fn append_docks(
+    app: &AppHandle,
+    docks: &[DockConfig],
+    registry: &Rc<PluginRegistry>,
+    shared: &SharedState,
+    open_panel: &Rc<dyn Fn(&'static str, Point)>,
+    panel_host: &Rc<PanelHost>,
+    ready_backend: &Rc<dyn DesktopIntegration>,
+    themed_windows: &Rc<RefCell<Vec<WindowHandle>>>,
+    dock_windows: &Rc<RefCell<Vec<WindowHandle>>>,
+) {
+    for window in dock_windows.borrow_mut().drain(..) {
+        window.close();
+    }
+    for (index, dock) in docks.iter().enumerate() {
+        let position = dock.position;
+        let role = match position {
+            DockPosition::Top => creamui_render::platform::WindowRole::TopPanel,
+            DockPosition::Bottom => creamui_render::platform::WindowRole::BottomPanel,
+            DockPosition::Left => creamui_render::platform::WindowRole::LeftPanel,
+            DockPosition::Right => creamui_render::platform::WindowRole::RightPanel,
+        };
+        let (width, height) = if position.is_vertical() {
+            (DOCK_WIDTH, 800)
+        } else {
+            (800, DOCK_HEIGHT)
+        };
+        let is_primary = index == 0;
+        let dock = dock.clone();
+        let registry = registry.clone();
+        let shared = shared.clone();
+        let open_panel = open_panel.clone();
+        let panel_host = panel_host.clone();
+        let ready_backend = ready_backend.clone();
+        let themed_windows = themed_windows.clone();
+        let dock_windows = dock_windows.clone();
+        app.append_window(
+            WindowOptions {
+                title: "Coconut".into(),
+                width,
+                height,
+                decorations: false,
+                resizable: false,
+                transparent: true,
+                role,
+                theme: system_theme(),
+                ..Default::default()
+            },
+            Color::rgba(0, 0, 0, 0),
+            move |window: WindowHandle| {
+                ready_backend.prepare_window(&window);
+                themed_windows.borrow_mut().push(window.clone());
+                dock_windows.borrow_mut().push(window.clone());
+                if is_primary {
+                    panel_host.set_dock_window(Some(window));
+                    let thickness = if position.is_vertical() {
+                        DOCK_WIDTH as f32
+                    } else {
+                        DOCK_HEIGHT as f32
+                    };
+                    panel_host.set_dock_geometry(position, thickness);
+                }
+            },
+            move |viewport: Size| -> BoxedWidget {
+                build_dock(viewport, &dock, &registry, &shared, &open_panel)
+            },
+        );
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 fn schedule_runtime_events(
     app: AppHandle,
     events: Arc<Mutex<Receiver<RuntimeEvent>>>,
     config: Signal<ShellConfig>,
     themed_windows: Rc<RefCell<Vec<WindowHandle>>>,
-    reappend_bar: Rc<dyn Fn(BarPosition)>,
-    work_area: Signal<Option<coconut_api::desktop::DesktopWorkArea>>,
-    weather_state: Signal<weather::WeatherState>,
-    applications: app_drawer::AppCatalog,
+    registry: Rc<PluginRegistry>,
+    shared: SharedState,
+    panel_host: Rc<PanelHost>,
+    open_panel: Rc<dyn Fn(&'static str, Point)>,
+    ready_backend: Rc<dyn DesktopIntegration>,
+    dock_windows: Rc<RefCell<Vec<WindowHandle>>>,
+    work_area: Signal<Option<DesktopWorkArea>>,
+    weather_state: Signal<WeatherState>,
     desktop_state: desktop::DesktopState,
 ) {
     let next_app = app.clone();
     let next_events = events.clone();
     let next_config = config.clone();
     let next_windows = themed_windows.clone();
-    let next_reappend_bar = reappend_bar.clone();
+    let next_registry = registry.clone();
+    let next_shared = shared.clone();
+    let next_panel_host = panel_host.clone();
+    let next_open_panel = open_panel.clone();
+    let next_ready_backend = ready_backend.clone();
+    let next_dock_windows = dock_windows.clone();
     let next_work_area = work_area.clone();
     let next_weather_state = weather_state.clone();
-    let next_applications = applications.clone();
     let next_desktop_state = desktop_state.clone();
     app.clone().spawn_background(
         move || {
@@ -937,35 +419,45 @@ fn schedule_runtime_events(
                 match event {
                     RuntimeEvent::ReloadTheme => {
                         let theme = reload_system_theme();
+                        panel_host.set_theme(theme);
                         for window in themed_windows.borrow().iter() {
                             window.set_theme(theme);
                         }
                     }
                     RuntimeEvent::ShellConfig(updated) => {
-                        let weather_was_enabled = config.peek().widgets.weather.enabled;
-                        let position_changed = config.peek().bar.position != updated.bar.position;
-                        warn_unknown_widgets(&updated.bar.layout);
+                        let weather_was_enabled = island_present(&config.peek().docks, "weather");
+                        let docks_changed = config.peek().docks != updated.docks;
+                        warn_unknown_islands(&updated.docks, &registry);
                         let icon_theme_changed =
                             config.peek().appearance.icon_theme != updated.appearance.icon_theme;
                         config.set(updated);
                         if icon_theme_changed {
-                            applications
-                                .start_loading(&app, config.peek().appearance.icon_theme.clone());
-                            desktop_state
-                                .start_loading(&app, config.peek().appearance.icon_theme.clone());
+                            let icon_theme = config.peek().appearance.icon_theme.clone();
+                            if let Some(catalog) = shared.get::<AppCatalog>() {
+                                catalog.start_loading(&app, icon_theme.clone());
+                            }
+                            desktop_state.start_loading(&app, icon_theme);
                         }
-                        if !weather_was_enabled && config.peek().widgets.weather.enabled {
+                        if !weather_was_enabled && island_present(&config.peek().docks, "weather") {
                             refresh_weather(app.clone(), weather_state.clone());
                         }
-                        if position_changed {
+                        if docks_changed {
                             work_area.set(None);
-                            // The desktop and its state stay alive; only the layer-shell
-                            // bar needs a new role and geometry at another edge.
-                            reappend_bar(config.peek().bar.position);
+                            append_docks(
+                                &app,
+                                &config.peek().docks,
+                                &registry,
+                                &shared,
+                                &open_panel,
+                                &panel_host,
+                                &ready_backend,
+                                &themed_windows,
+                                &dock_windows,
+                            );
                         }
                     }
                     RuntimeEvent::UserProfileChanged => {
-                        if config.peek().widgets.weather.enabled {
+                        if island_present(&config.peek().docks, "weather") {
                             refresh_weather(app.clone(), weather_state.clone());
                         }
                     }
@@ -976,33 +468,50 @@ fn schedule_runtime_events(
                 next_events,
                 next_config,
                 next_windows,
-                next_reappend_bar,
+                next_registry,
+                next_shared,
+                next_panel_host,
+                next_open_panel,
+                next_ready_backend,
+                next_dock_windows,
                 next_work_area,
                 next_weather_state,
-                next_applications,
                 next_desktop_state,
             );
         },
     );
 }
 
-fn refresh_weather(app: AppHandle, state: Signal<weather::WeatherState>) {
-    state.set(weather::WeatherState::Loading);
+fn refresh_weather(app: AppHandle, state: Signal<WeatherState>) {
+    state.set(WeatherState::Loading);
     app.spawn_background(
         move || {
             let mut profile = UserProfile::load();
-            weather::refresh(&mut profile)
+            coconut_plugin_weather::refresh(&mut profile)
         },
         move |next| state.set(next),
     );
 }
 
+fn schedule_window_events(
+    app: AppHandle,
+    backend: Rc<dyn DesktopIntegration>,
+    windows: Signal<Vec<OpenWindow>>,
+    work_area: Signal<Option<DesktopWorkArea>>,
+) -> bool {
+    let Some(listener) = backend.window_changes() else {
+        return false;
+    };
+    wait_for_window_event(app, backend, windows, work_area, listener);
+    true
+}
+
 fn wait_for_window_event(
     app: AppHandle,
-    backend: Rc<dyn coconut_api::desktop::DesktopIntegration>,
-    windows: Signal<Vec<coconut_api::desktop::OpenWindow>>,
-    work_area: Signal<Option<coconut_api::desktop::DesktopWorkArea>>,
-    listener: coconut_api::desktop::WindowChangeListener,
+    backend: Rc<dyn DesktopIntegration>,
+    windows: Signal<Vec<OpenWindow>>,
+    work_area: Signal<Option<DesktopWorkArea>>,
+    listener: WindowChangeListener,
 ) {
     let waiting_listener = listener.clone();
     let next_app = app.clone();
@@ -1018,11 +527,7 @@ fn wait_for_window_event(
     );
 }
 
-fn schedule_playback_refresh(
-    app: AppHandle,
-    backend: Rc<dyn AudioIntegration>,
-    state: Signal<Option<Playback>>,
-) {
+fn schedule_playback_refresh(app: AppHandle, backend: Rc<dyn AudioIntegration>, state: Signal<Option<Playback>>) {
     let next_app = app.clone();
     let next_backend = backend.clone();
     let next_state = state.clone();
@@ -1038,22 +543,14 @@ fn schedule_playback_refresh(
 /// Wakes an open device panel as soon as its integration's native hook (a
 /// D-Bus signal, a platform event) observes a change; falls back to a
 /// couple-second poll for integrations that expose no such hook.
-fn schedule_change_events(
-    app: AppHandle,
-    listener: Option<coconut_api::ChangeListener>,
-    revision: Signal<()>,
-) {
+fn schedule_change_events(app: AppHandle, listener: Option<coconut_api::ChangeListener>, revision: Signal<()>) {
     match listener {
         Some(listener) => wait_for_change_event(app, listener, revision),
         None => schedule_poll_refresh(app, revision),
     }
 }
 
-fn wait_for_change_event(
-    app: AppHandle,
-    listener: coconut_api::ChangeListener,
-    revision: Signal<()>,
-) {
+fn wait_for_change_event(app: AppHandle, listener: coconut_api::ChangeListener, revision: Signal<()>) {
     let next_app = app.clone();
     let next_listener = listener.clone();
     let next_revision = revision.clone();
@@ -1083,13 +580,6 @@ fn schedule_poll_refresh(app: AppHandle, tick: Signal<()>) {
     );
 }
 
-/// Wakes as soon as brightness's native hook (an inotify watch on the
-/// kernel backlight's sysfs node) observes a change; falls back to a
-/// couple-second poll for backends with no such hook (DDC-controlled
-/// external monitors, which have no push notifications to watch).
-/// Unlike [`schedule_poll_refresh`], both write the fresh value straight
-/// into the shared signal every consumer (bar and panels alike) already
-/// reads, rather than just poking a separate rebuild pulse.
 fn schedule_brightness_events(
     app: AppHandle,
     backend: Rc<dyn coconut_api::brightness::BrightnessIntegration>,
@@ -1139,11 +629,6 @@ fn schedule_brightness_poll(
     );
 }
 
-/// Wakes as soon as volume's native hook (a libpipewire registry/node param
-/// subscription) observes a change; falls back to a couple-second poll if
-/// the backend exposes no such hook. Writes the fresh value straight into
-/// the shared signal every consumer (bar and panels alike) already reads,
-/// rather than just poking a separate rebuild pulse.
 fn schedule_volume_events(
     app: AppHandle,
     backend: Rc<dyn coconut_api::volume::VolumeIntegration>,
@@ -1177,11 +662,7 @@ fn wait_for_volume_event(
     );
 }
 
-fn schedule_volume_poll(
-    app: AppHandle,
-    backend: Rc<dyn coconut_api::volume::VolumeIntegration>,
-    level: Signal<f32>,
-) {
+fn schedule_volume_poll(app: AppHandle, backend: Rc<dyn coconut_api::volume::VolumeIntegration>, level: Signal<f32>) {
     let next_app = app.clone();
     let next_backend = backend.clone();
     let next_level = level.clone();
@@ -1213,86 +694,6 @@ fn schedule_clock_refresh(app: AppHandle, state: Signal<String>, format: Rc<Stri
 fn parse_playback_time(value: &str) -> Option<f64> {
     let (minutes, seconds) = value.split_once(':')?;
     Some(minutes.parse::<f64>().ok()? * 60.0 + seconds.parse::<f64>().ok()?)
-}
-
-fn close_on_focus_lost(window: &WindowHandle) {
-    let handle = window.clone();
-    window.on_focus_lost(move || handle.close());
-}
-
-fn popup_for(
-    bar: &Rc<RefCell<Option<WindowHandle>>>,
-    anchor: Point,
-    position: BarPosition,
-) -> Option<PopupOptions> {
-    let bar_ref = bar.borrow();
-    bar_ref.as_ref().map(|bar| {
-        let anchor_rect = match position {
-            // Horizontal panels keep the old edge-spanning anchor, which
-            // places their popup outside the panel.
-            BarPosition::Top => Rect {
-                x: anchor.x,
-                y: anchor.y,
-                width: 1.0,
-                height: (DOCK_HEIGHT as f32 - anchor.y).max(1.0),
-            },
-            BarPosition::Bottom => Rect {
-                x: anchor.x,
-                y: 0.0,
-                width: 1.0,
-                height: (anchor.y + 1.0).max(1.0),
-            },
-            // For a side panel, Top/Center/Bottom gravity must be relative
-            // to the button itself, never the whole section above it.
-            BarPosition::Left | BarPosition::Right => Rect {
-                x: anchor.x,
-                y: anchor.y,
-                width: 1.0,
-                height: 1.0,
-            },
-        };
-        let vertical = bar
-            .monitor_size()
-            .map(|(_, height)| height as f32)
-            .unwrap_or(800.0);
-        // The center section of a side bar is deliberately generous. It
-        // covers the middle half of the bar; only controls clearly near an
-        // edge choose an edge-aligned popup.
-        let top_region = vertical * 0.25;
-        let bottom_region = vertical * 0.75;
-        let placement = match position {
-            BarPosition::Top => creamui_render::platform::PopupPlacement::Below,
-            BarPosition::Bottom => creamui_render::platform::PopupPlacement::Above,
-            BarPosition::Left if anchor.y < top_region => {
-                creamui_render::platform::PopupPlacement::RightTop
-            }
-            BarPosition::Left if anchor.y > bottom_region => {
-                creamui_render::platform::PopupPlacement::RightBottom
-            }
-            BarPosition::Left => creamui_render::platform::PopupPlacement::RightCenter,
-            BarPosition::Right if anchor.y < top_region => {
-                creamui_render::platform::PopupPlacement::LeftTop
-            }
-            BarPosition::Right if anchor.y > bottom_region => {
-                creamui_render::platform::PopupPlacement::LeftBottom
-            }
-            BarPosition::Right => creamui_render::platform::PopupPlacement::LeftCenter,
-        };
-        PopupOptions::new(bar.clone(), anchor_rect).placed(placement)
-    })
-}
-
-fn popup_options(title: &str, width: u32, height: u32) -> WindowOptions {
-    WindowOptions {
-        title: title.into(),
-        width,
-        height,
-        decorations: false,
-        resizable: false,
-        transparent: true,
-        theme: system_theme(),
-        ..Default::default()
-    }
 }
 
 static SYSTEM_THEME: OnceLock<Mutex<Theme>> = OnceLock::new();

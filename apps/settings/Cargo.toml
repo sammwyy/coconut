@@ -11,6 +11,8 @@ path = "src/main.rs"
 
 [dependencies]
 coconut-core = { path = "../../crates/core" }
+coconut-plugin-tray = { path = "../../plugins/tray" }
+coconut-plugin-clock = { path = "../../plugins/clock" }
 blair-client = { path = "../../../blair/crates/client" }
 blair-protocol = { path = "../../../blair/crates/protocol" }
 creamui-core = { path = "../../../creamui/crates/core" }

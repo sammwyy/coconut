@@ -1,0 +1,16 @@
+[package]
+name = "coconut-plugin-current-playing"
+version = "0.1.0"
+edition = "2021"
+description = "Coconut dock plugin: the current-playing island and panel"
+license = "Apache-2.0"
+
+[dependencies]
+coconut-api = { path = "../../crates/api" }
+coconut-plugin-kit = { path = "../../crates/plugin-kit" }
+creamui-core = { path = "../../../creamui/crates/core" }
+creamui-image = { path = "../../../creamui/crates/image", features = ["webp", "jpeg", "svg"] }
+creamui-jsx = { path = "../../../creamui/crates/jsx" }
+creamui-macros = { path = "../../../creamui/crates/macros" }
+creamui-theme = { path = "../../../creamui/crates/theme" }
+creamui-widgets = { path = "../../../creamui/crates/widgets" }

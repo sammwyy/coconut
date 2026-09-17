@@ -1,1017 +1,306 @@
-pub mod widgets;
-
-use crate::icons::pixel_icon;
-use crate::weather::WeatherState;
-use coconut_api::audio::Playback;
-use coconut_api::desktop::OpenWindow;
-use coconut_core::{BarLayout, ShellConfig, TrayConfig, TrayMode};
-use creamui_core::layout::{FlexDirection, Style as LayoutStyle};
-use creamui_core::{
-    BoxedWidget, Painter, Point, Rect, Size, StateStyle, Style, Styled, TextAlign, Widget,
+use coconut_core::{ordered_islands, DockConfig, DockPosition, IslandEntry, SectionConfig};
+use coconut_plugin_kit::{
+    parse_gap, ConfigValue, Gap, Island, IslandConfig, IslandRenderContext, PluginRegistry,
+    SharedState,
 };
-use creamui_image::{Image, ImageData, ImageFit};
-use creamui_macros::jsx;
-use creamui_reactive::Signal;
+use creamui_core::{BoxedWidget, Point, Size, Styled};
 use creamui_theme::{use_theme, Color};
-use creamui_widgets::layout::{fixed, Align, Flex, Justify};
-use creamui_widgets::{Icon, RawButton, RawMarquee, Symbol};
+use creamui_widgets::layout::{Align, Flex, Justify};
 use std::collections::HashMap;
 use std::rc::Rc;
-use std::sync::{Mutex, OnceLock};
 
+/// Thickness of a horizontal dock (its height) and of a vertical dock (its
+/// width). Also read by `apps/shell/src/desktop/mod.rs` to reserve desktop
+/// grid space, and by `popup_for`'s anchor-rect math in `lib.rs`.
 pub const DOCK_HEIGHT: u32 = 44;
 pub const DOCK_WIDTH: u32 = 52;
 const BAR_HEIGHT: f32 = 44.0;
-const SIDE_ITEM_SIZE: f32 = 36.0;
-const TASK_SIZE: f32 = 32.0;
-const TASK_ICON_SIZE: f32 = 24.0;
-const MAX_TASKS: usize = 10;
-const CLOCK_WIDTH: f32 = 60.0;
+/// Padding reserved at the leading/trailing edge of a dock, outside its
+/// first/last section.
 const EDGE_GAP: f32 = 16.0;
 
-fn bar_color() -> Color {
+fn dock_background() -> Color {
     use_theme().colors.surface
 }
-fn island_color() -> Color {
-    use_theme().colors.surface_elevated
-}
-fn island_border() -> Color {
+
+fn dock_border() -> Color {
     use_theme().colors.border
 }
-fn control_color() -> Color {
-    use_theme().colors.surface_hover
-}
-fn control_hover() -> Color {
-    use_theme().colors.surface_hover
-}
-fn selected_color() -> Color {
-    use_theme().colors.selection_background
-}
-fn accent_color() -> Color {
-    use_theme().colors.accent
-}
-fn primary_color() -> Color {
-    use_theme().colors.text_primary
-}
-fn muted_color() -> Color {
-    use_theme().colors.text_secondary
-}
 
-#[derive(Clone)]
-pub struct BarActions {
-    pub refresh_windows: Rc<dyn Fn()>,
-    pub activate_window: Rc<dyn Fn(String)>,
-    pub current_playback: Rc<dyn Fn() -> Option<Playback>>,
-    pub toggle_playback: Rc<dyn Fn()>,
-    pub previous_playback: Rc<dyn Fn()>,
-    pub next_playback: Rc<dyn Fn()>,
-    pub open_weather: Rc<dyn Fn(Point)>,
-    pub open_clock: Rc<dyn Fn(Point)>,
-    pub open_current_playing: Rc<dyn Fn(Point)>,
-    pub open_app_drawer: Rc<dyn Fn(Point)>,
-    pub open_control_center: Rc<dyn Fn(Point)>,
-    pub open_network: Rc<dyn Fn(Point)>,
-    pub open_bluetooth: Rc<dyn Fn(Point)>,
-    pub open_energy: Rc<dyn Fn(Point)>,
-    pub open_brightness: Rc<dyn Fn(Point)>,
-    pub open_volume: Rc<dyn Fn(Point)>,
-}
-
-#[derive(Clone, Copy, Debug, Default)]
-pub struct SystemStatus {
-    pub network_connected: bool,
-    pub network_strength: Option<u8>,
-    pub battery_percentage: Option<u8>,
-    pub battery_charging: bool,
-    pub bluetooth_powered: bool,
-    pub bluetooth_connected: bool,
-    pub volume: f32,
-    pub volume_muted: bool,
-}
-
-/// Widget ids known to the bar. Any other id in `shell.toml`'s
-/// `[bar.layout]` is ignored with a warning.
-pub const KNOWN_WIDGET_IDS: &[&str] = &[
-    "logo",
-    "weather",
-    "current_playing",
-    "app_launcher",
-    "control_center",
-    "clock",
-];
-
-/// Warns once (at startup) about any `[bar.layout]` id the bar does not
-/// recognize. The per-frame layout code stays silent about unknown ids so
-/// rebuilding the bar never spams the log.
-pub fn warn_unknown_widgets(layout: &BarLayout) {
-    for id in layout
-        .left
-        .iter()
-        .chain(layout.center.iter())
-        .chain(layout.right.iter())
-    {
-        if !KNOWN_WIDGET_IDS.contains(&id.as_str()) {
-            eprintln!("bar: unknown widget id '{id}' in shell.toml layout; ignoring");
-        }
-    }
-}
-
+/// Builds one dock's full widget tree: its sections, laid out along the
+/// dock's position (row for top/bottom, column for left/right), each
+/// containing its configured islands in `index` order.
 pub fn build_dock(
     viewport: Size,
-    windows: Vec<OpenWindow>,
-    launcher_open: Signal<bool>,
-    status: SystemStatus,
-    clock_text: Signal<String>,
-    weather: &WeatherState,
-    actions: BarActions,
-    config: &ShellConfig,
+    dock: &DockConfig,
+    registry: &PluginRegistry,
+    shared: &SharedState,
+    open_panel: &Rc<dyn Fn(&'static str, Point)>,
 ) -> BoxedWidget {
-    if config.bar.position.is_vertical() {
-        return build_side_dock(
-            viewport,
-            windows,
-            launcher_open,
-            status,
-            clock_text,
-            actions,
-            config,
-        );
-    }
-
-    let launcher_background = if launcher_open.get() {
-        selected_color()
+    if dock.position.is_vertical() {
+        build_vertical_dock(viewport, dock, registry, shared, open_panel)
     } else {
-        control_color()
-    };
-    let (tasks, task_count) = window_strip(
-        windows,
-        actions.activate_window.clone(),
-        actions.refresh_windows.clone(),
-    );
-    let dock_width = dock_width(task_count);
-    let clock: BoxedWidget = Box::new(LiveClock {
-        text: clock_text.get(),
-    });
-    let playback = (actions.current_playback)();
-    let section_width = viewport.width / 3.0;
-    let weather_click = actions.open_weather.clone();
-    let clock_click = actions.open_clock.clone();
-    let music_click = actions.open_current_playing.clone();
-    let drawer_click = actions.open_app_drawer.clone();
-    let control_click = actions.open_control_center.clone();
-
-    let weather_condition: BoxedWidget = Box::new(RawMarquee::new(
-        weather.bar_condition(),
-        primary_color(),
-        12.0,
-        58.0,
-    ));
-    let weather_button: BoxedWidget = Box::new(
-        RawButton::new(island_button_style(120.0, 32.0), || {})
-            .with_click_position(move |point| weather_click(point))
-            .child(Box::new(jsx! {
-                <Flex direction={FlexDirection::Row} size={(120.0, 32.0)} padding={6.0} gap={4.0} align={Align::Center}>
-                    {pixel_icon(weather_icon(weather), 14.0, primary_color())}
-                    <RawText color={primary_color()} font_size={12.0} width={32.0} align={TextAlign::Start}>{weather.bar_temperature()}</RawText>
-                    {weather_condition}
-                </Flex>
-            })),
-    );
-    let music_button = playback.as_ref().map(|item| {
-        compact_playback_widget(
-            item,
-            music_click,
-            actions.previous_playback.clone(),
-            actions.toggle_playback.clone(),
-            actions.next_playback.clone(),
-        )
-    });
-    let drawer_button: BoxedWidget = Box::new(
-        RawButton::new(square_style(launcher_background), || {})
-            .with_click_position(move |point| drawer_click(point))
-            .child(Box::new(jsx! {
-                <Flex size={(32.0, 32.0)} align={Align::Center} justify={Justify::Center}>{pixel_icon("appgrid", 21.0, primary_color())}</Flex>
-            })),
-    );
-    let control_button = match config.tray.mode {
-        TrayMode::Grouped => control_button_widget(&status, &config.tray, control_click),
-        TrayMode::Individual => individual_tray_row(
-            &status,
-            &config.tray,
-            actions.open_network.clone(),
-            actions.open_bluetooth.clone(),
-            actions.open_energy.clone(),
-            actions.open_brightness.clone(),
-            actions.open_volume.clone(),
-        ),
-    };
-    let clock_button: BoxedWidget = Box::new(
-        RawButton::new(island_button_style(68.0, 32.0), || {})
-            .with_click_position(move |point| clock_click(point))
-            .child(Box::new(jsx! {
-                <Flex direction={FlexDirection::Column} size={(68.0, 32.0)} padding={2.0} justify={Justify::Center} align={Align::Center}>
-                    {clock}
-                </Flex>
-            })),
-    );
-
-    let mut catalog: HashMap<String, BoxedWidget> = HashMap::new();
-    catalog.insert("logo".to_owned(), logo_widget());
-    if config.widgets.weather.enabled {
-        catalog.insert("weather".to_owned(), weather_button);
-    }
-    if config.widgets.current_playing.enabled && music_button.is_some() {
-        catalog.insert(
-            "current_playing".to_owned(),
-            music_button.expect("checked above"),
-        );
-    }
-    if config.widgets.app_launcher.enabled {
-        catalog.insert(
-            "app_launcher".to_owned(),
-            app_launcher_widget(dock_width, drawer_button, tasks),
-        );
-    }
-    if config.widgets.control_center.enabled {
-        catalog.insert("control_center".to_owned(), control_button);
-    }
-    if config.widgets.clock.enabled {
-        catalog.insert("clock".to_owned(), clock_button);
-    }
-
-    let left = bar_section(
-        &config.bar.layout.left,
-        &mut catalog,
-        section_width,
-        Justify::Start,
-        true,
-        false,
-    );
-    let center = bar_section(
-        &config.bar.layout.center,
-        &mut catalog,
-        section_width,
-        Justify::Center,
-        false,
-        false,
-    );
-    let right = bar_section(
-        &config.bar.layout.right,
-        &mut catalog,
-        section_width,
-        Justify::End,
-        true,
-        true,
-    );
-
-    Box::new(jsx! {
-        <Flex direction={FlexDirection::Column} size={(viewport.width, viewport.height)} justify={Justify::End} align={Align::Center} background={Color::rgba(0, 0, 0, 0)}>
-            <Flex direction={FlexDirection::Row} size={(viewport.width, BAR_HEIGHT)} align={Align::Center} background={bar_color()} border={(island_border(), 1.0)}>
-                {left}
-                {center}
-                {right}
-            </Flex>
-        </Flex>
-    })
-}
-
-fn weather_icon(weather: &WeatherState) -> &'static str {
-    match weather {
-        WeatherState::Ready(weather) => crate::weather::icon_for(&weather.condition),
-        WeatherState::Loading => "weather_cloudly",
-        WeatherState::Unavailable(_) => "weather_cloudly",
+        build_horizontal_dock(viewport, dock, registry, shared, open_panel)
     }
 }
 
-/// Side bars intentionally use icon-sized controls. Their narrow width makes
-/// labels and media metadata more distracting than helpful, and omitting them
-/// avoids truncating text or squeezing controls into an unreadable column.
-fn build_side_dock(
+fn build_horizontal_dock(
     viewport: Size,
-    windows: Vec<OpenWindow>,
-    launcher_open: Signal<bool>,
-    _status: SystemStatus,
-    _clock_text: Signal<String>,
-    actions: BarActions,
-    config: &ShellConfig,
+    dock: &DockConfig,
+    registry: &PluginRegistry,
+    shared: &SharedState,
+    open_panel: &Rc<dyn Fn(&'static str, Point)>,
 ) -> BoxedWidget {
-    let mut catalog: HashMap<String, BoxedWidget> = HashMap::new();
-    catalog.insert("logo".to_owned(), side_icon("appgrid"));
-    if config.widgets.weather.enabled {
-        catalog.insert(
-            "weather".to_owned(),
-            side_icon_button("weather_cloud_sun", actions.open_weather.clone()),
-        );
-    }
-    if config.widgets.current_playing.enabled && (actions.current_playback)().is_some() {
-        catalog.insert(
-            "current_playing".to_owned(),
-            side_icon_button("player_play", actions.open_current_playing.clone()),
-        );
-    }
-    if config.widgets.app_launcher.enabled {
-        let selected = launcher_open.get();
-        catalog.insert(
-            "app_launcher".to_owned(),
-            side_app_launcher_widget(
-                windows,
-                actions.activate_window.clone(),
-                actions.refresh_windows.clone(),
-                actions.open_app_drawer.clone(),
-                selected,
-            ),
-        );
-    }
-    if config.widgets.control_center.enabled {
-        catalog.insert(
-            "control_center".to_owned(),
-            side_symbol_button(Symbol::Sliders, actions.open_control_center.clone()),
-        );
-    }
-    if config.widgets.clock.enabled {
-        catalog.insert(
-            "clock".to_owned(),
-            side_symbol_button(Symbol::Sun, actions.open_clock.clone()),
-        );
+    let section_count = dock.sections.len().max(1);
+    let section_width = viewport.width / section_count as f32;
+
+    let mut row = Flex::row()
+        .size(viewport.width, BAR_HEIGHT)
+        .align(Align::Center);
+    for (index, section) in dock.sections.iter().enumerate() {
+        row = row.child(build_row_section(
+            section,
+            section_width,
+            index == 0,
+            index + 1 == dock.sections.len(),
+            dock.position,
+            registry,
+            shared,
+            open_panel,
+        ));
     }
 
-    let section_height = viewport.height / 3.0;
-    let top = side_section(
-        &config.bar.layout.left,
-        &mut catalog,
-        section_height,
-        Justify::Start,
-    );
-    let middle = side_section(
-        &config.bar.layout.center,
-        &mut catalog,
-        section_height,
-        Justify::Center,
-    );
-    let bottom = side_section(
-        &config.bar.layout.right,
-        &mut catalog,
-        section_height,
-        Justify::End,
-    );
-
-    Box::new(jsx! {
-        <Flex direction={FlexDirection::Column} size={(viewport.width, viewport.height)} align={Align::Center} background={bar_color()} border={(island_border(), 1.0)}>
-            {top}
-            {middle}
-            {bottom}
-        </Flex>
-    })
+    Box::new(Flex::column().size(viewport.width, viewport.height).justify(Justify::End).align(Align::Center).background(Color::rgba(0, 0, 0, 0)).child(Box::new(
+        row.background(dock_background()).border(dock_border(), 1.0),
+    )))
 }
 
-fn side_section(
-    ids: &[String],
-    catalog: &mut HashMap<String, BoxedWidget>,
-    height: f32,
-    justify: Justify,
+fn build_vertical_dock(
+    viewport: Size,
+    dock: &DockConfig,
+    registry: &PluginRegistry,
+    shared: &SharedState,
+    open_panel: &Rc<dyn Fn(&'static str, Point)>,
 ) -> BoxedWidget {
+    let section_count = dock.sections.len().max(1);
+    let section_height = viewport.height / section_count as f32;
+
     let mut column = Flex::column()
-        .size(DOCK_WIDTH as f32, height)
-        .padding(8.0)
-        .gap(8.0)
+        .size(viewport.width, viewport.height)
         .align(Align::Center)
-        .justify(justify);
-    for id in ids {
-        if let Some(widget) = catalog.remove(id) {
-            column = column.child(widget);
-        }
+        .background(dock_background())
+        .border(dock_border(), 1.0);
+    for (index, section) in dock.sections.iter().enumerate() {
+        column = column.child(build_column_section(
+            section,
+            section_height,
+            index == 0,
+            index + 1 == dock.sections.len(),
+            dock.position,
+            registry,
+            shared,
+            open_panel,
+        ));
     }
     Box::new(column)
 }
 
-fn side_icon(name: &'static str) -> BoxedWidget {
-    Box::new(jsx! {
-        <Flex size={(SIDE_ITEM_SIZE, SIDE_ITEM_SIZE)} align={Align::Center} justify={Justify::Center}>
-            {pixel_icon(name, 19.0, primary_color())}
-        </Flex>
-    })
-}
-
-fn side_icon_button(name: &'static str, on_click: Rc<dyn Fn(Point)>) -> BoxedWidget {
-    side_icon_button_styled(name, on_click, false)
-}
-
-/// The launcher also serves as the task switcher. Keeping the task icons in
-/// this compact vertical island makes open windows available on side bars
-/// without turning every configured bar section into a separate task list.
-fn side_app_launcher_widget(
-    windows: Vec<OpenWindow>,
-    activate_window: Rc<dyn Fn(String)>,
-    refresh_windows: Rc<dyn Fn()>,
-    open_drawer: Rc<dyn Fn(Point)>,
-    selected: bool,
-) -> BoxedWidget {
-    let drawer = side_icon_button_styled("appgrid", open_drawer, selected);
-    let mut island = Flex::column()
-        .padding(4.0)
-        .gap(6.0)
-        .align(Align::Center)
-        .background(island_color())
-        .border(island_border(), 1.0)
-        .corner_radius(12.0)
-        .child(drawer);
-
-    for entry in windows.into_iter().take(MAX_TASKS) {
-        let id = entry.id.clone();
-        let active = entry.active;
-        let activate = activate_window.clone();
-        let refresh = refresh_windows.clone();
-        island = island.child(Box::new(
-            RawButton::new(window_style(active), move || {
-                activate(id.clone());
-                refresh();
-            })
-            .child(task_icon(&entry, active)),
-        ));
-    }
-
-    Box::new(island)
-}
-
-fn side_icon_button_styled(
-    name: &'static str,
-    on_click: Rc<dyn Fn(Point)>,
-    selected: bool,
-) -> BoxedWidget {
-    Box::new(
-        RawButton::new(
-            side_button_style(if selected {
-                selected_color()
-            } else {
-                control_color()
-            }),
-            || {},
-        )
-        .with_click_position(move |point| on_click(point))
-        .child(side_icon(name)),
-    )
-}
-
-fn side_symbol_button(symbol: Symbol, on_click: Rc<dyn Fn(Point)>) -> BoxedWidget {
-    Box::new(
-        RawButton::new(side_button_style(control_color()), || {})
-            .with_click_position(move |point| on_click(point))
-            .child(Box::new(jsx! {
-                <Flex size={(SIDE_ITEM_SIZE, SIDE_ITEM_SIZE)} align={Align::Center} justify={Justify::Center}>
-                    {Box::new(Icon::new(symbol, primary_color()).size(19.0)) as BoxedWidget}
-                </Flex>
-            })),
-    )
-}
-
-fn compact_playback_widget(
-    playback: &Playback,
-    open: Rc<dyn Fn(Point)>,
-    previous: Rc<dyn Fn()>,
-    toggle: Rc<dyn Fn()>,
-    next: Rc<dyn Fn()>,
-) -> BoxedWidget {
-    let duration = (!playback.position.is_empty()).then_some(playback.position.as_str());
-    let width = if duration.is_some() { 144.0 } else { 108.0 };
-    let duration_widget: BoxedWidget = duration
-        .map(|duration| {
-            Box::new(jsx! {
-                <RawText color={muted_color()} font_size={10.0} align={TextAlign::End}>{duration}</RawText>
-            }) as BoxedWidget
-        })
-        .unwrap_or_else(|| Box::new(Flex::row().size(0.0, 0.0)));
-    let play_icon = if playback.status == "Playing" {
-        "player_pause"
-    } else {
-        "player_play"
-    };
-    Box::new(
-        RawButton::new(island_button_style(width, 32.0), || {})
-            .with_click_position(move |point| open(point))
-            .child(Box::new(jsx! {
-                <Flex direction={FlexDirection::Row} size={(width, 32.0)} padding={4.0} gap={3.0} align={Align::Center}>
-                    {music_cover(Some(playback))}
-                    {compact_media_button("player_previous", previous)}
-                    {compact_media_button(play_icon, toggle)}
-                    {compact_media_button("player_next", next)}
-                    {duration_widget}
-                </Flex>
-            })),
-    )
-}
-
-fn compact_media_button(icon: &'static str, on_click: Rc<dyn Fn()>) -> BoxedWidget {
-    Box::new(
-        RawButton::new(media_control_style(), || {})
-            .with_click_position(move |_| on_click())
-            .child(Box::new(jsx! {
-                <Flex size={(18.0, 24.0)} align={Align::Center} justify={Justify::Center}>
-                    {pixel_icon(icon, 13.0, primary_color())}
-                </Flex>
-            })),
-    )
-}
-
-/// Builds one section (left/center/right) of the bar from its configured
-/// widget ids, in order. Ids that are unknown, disabled, or already placed
-/// in another section are silently skipped.
-fn bar_section(
-    ids: &[String],
-    catalog: &mut HashMap<String, BoxedWidget>,
+/// One horizontal-dock section: a row of islands, `width` wide, sitting at
+/// the leading, middle, or trailing edge of the dock depending on its
+/// position among its siblings.
+#[allow(clippy::too_many_arguments)]
+fn build_row_section(
+    section: &SectionConfig,
     width: f32,
-    justify: Justify,
-    leading_gap: bool,
-    trailing_gap: bool,
+    is_first: bool,
+    is_last: bool,
+    position: DockPosition,
+    registry: &PluginRegistry,
+    shared: &SharedState,
+    open_panel: &Rc<dyn Fn(&'static str, Point)>,
 ) -> BoxedWidget {
+    let justify = section_justify(is_first, is_last);
+    let gap = parse_gap(&section.gap);
     let mut row = Flex::row()
         .size(width, BAR_HEIGHT)
-        .gap(6.0)
-        .justify(justify)
-        .align(Align::Center);
-    if leading_gap {
+        .align(Align::Center)
+        .justify(justify);
+    row = apply_gap(row, gap, width);
+    if is_first {
         row = row.child(Box::new(Flex::row().size(EDGE_GAP, BAR_HEIGHT)));
     }
-    for id in ids {
-        if let Some(widget) = catalog.remove(id) {
-            row = row.child(widget);
-        }
+    for widget in build_islands(
+        section,
+        position,
+        |id| registry.island(id).cloned(),
+        shared,
+        open_panel,
+    ) {
+        row = row.child(widget);
     }
-    if trailing_gap {
+    if is_last {
         row = row.child(Box::new(Flex::row().size(EDGE_GAP, BAR_HEIGHT)));
     }
     Box::new(row)
 }
 
-fn logo_widget() -> BoxedWidget {
-    Box::new(jsx! {
-        <Flex direction={FlexDirection::Row} size={(48.0, 32.0)} padding={5.0} gap={2.0} align={Align::Center} background={island_color()} border={(island_border(), 1.0)} corner_radius={9.0}>
-            <Flex size={(5.0, 5.0)} background={primary_color()} corner_radius={2.5} />
-            <Flex size={(3.0, 3.0)} background={muted_color()} corner_radius={1.5} />
-            <Flex size={(3.0, 3.0)} background={muted_color()} corner_radius={1.5} />
-            <Flex size={(3.0, 3.0)} background={muted_color()} corner_radius={1.5} />
-            <Flex size={(3.0, 3.0)} background={muted_color()} corner_radius={1.5} />
-        </Flex>
-    })
-}
-
-fn app_launcher_widget(
-    dock_width: f32,
-    drawer_button: BoxedWidget,
-    tasks: BoxedWidget,
+/// One vertical-dock section: a column of islands, `height` tall.
+#[allow(clippy::too_many_arguments)]
+fn build_column_section(
+    section: &SectionConfig,
+    height: f32,
+    is_first: bool,
+    is_last: bool,
+    position: DockPosition,
+    registry: &PluginRegistry,
+    shared: &SharedState,
+    open_panel: &Rc<dyn Fn(&'static str, Point)>,
 ) -> BoxedWidget {
-    Box::new(jsx! {
-        <Flex direction={FlexDirection::Row} size={(dock_width, 40.0)} padding={4.0} gap={6.0} align={Align::Center} background={island_color()} border={(island_border(), 1.0)} corner_radius={12.0}>
-            {drawer_button}
-            {tasks}
-        </Flex>
-    })
+    let justify = section_justify(is_first, is_last);
+    let gap = parse_gap(&section.gap);
+    let mut column = Flex::column()
+        .size(DOCK_WIDTH as f32, height)
+        .padding(8.0)
+        .align(Align::Center)
+        .justify(justify);
+    column = apply_gap(column, gap, height);
+    for widget in build_islands(
+        section,
+        position,
+        |id| registry.island(id).cloned(),
+        shared,
+        open_panel,
+    ) {
+        column = column.child(widget);
+    }
+    Box::new(column)
 }
 
-fn control_button_width(icon_count: usize) -> f32 {
-    const ICON_WIDTH: f32 = 16.0;
-    const CHEVRON_WIDTH: f32 = 13.0;
-    const GAP: f32 = 7.0;
-    const PADDING: f32 = 8.0;
-    let icons = icon_count as f32;
-    PADDING + icons * ICON_WIDTH + (icons + 1.0) * GAP + CHEVRON_WIDTH
-}
-
-fn control_button_widget(
-    status: &SystemStatus,
-    tray: &TrayConfig,
-    on_click: Rc<dyn Fn(Point)>,
-) -> BoxedWidget {
-    let network_icon = network_icon(status.network_connected, status.network_strength);
-    let battery_icon = battery_icon(status.battery_percentage, status.battery_charging);
-    let bluetooth_icon = if status.bluetooth_connected {
-        "bluetooth-connected"
-    } else if status.bluetooth_powered {
-        "bluetooth-on"
-    } else {
-        "bluetooth-off"
-    };
-    let volume_icon = volume_icon(status.volume, status.volume_muted);
-
-    let mut icon_count = 0;
-    let mut row = Flex::row()
-        .padding(4.0)
-        .gap(7.0)
-        .justify(Justify::Center)
-        .align(Align::Center);
-    if tray.wifi.shows_in_bar() {
-        row = row.child(pixel_icon(network_icon, 16.0, primary_color()));
-        icon_count += 1;
-    }
-    if tray.brightness.shows_in_bar() {
-        row = row.child(pixel_icon("brightness", 16.0, primary_color()));
-        icon_count += 1;
-    }
-    if tray.volume.shows_in_bar() {
-        row = row.child(pixel_icon(volume_icon, 16.0, primary_color()));
-        icon_count += 1;
-    }
-    if tray.bluetooth.shows_in_bar() {
-        row = row.child(pixel_icon(bluetooth_icon, 16.0, primary_color()));
-        icon_count += 1;
-    }
-    if tray.battery.shows_in_bar() {
-        row = row.child(pixel_icon(battery_icon, 16.0, primary_color()));
-        icon_count += 1;
-    }
-    row = row.child(pixel_icon("chevron-up", 13.0, primary_color()));
-    let width = control_button_width(icon_count);
-    row = row.size(width, 32.0);
-
-    Box::new(
-        RawButton::new(island_button_style(width, 32.0), || {})
-            .with_click_position(move |point| on_click(point))
-            .child(Box::new(row)),
-    )
-}
-
-/// One island per enabled tray icon, each opening its device's dedicated
-/// panel directly. Icons without a dedicated panel (volume) fall back to
-/// the grouped control center.
-fn individual_tray_row(
-    status: &SystemStatus,
-    tray: &TrayConfig,
-    open_network: Rc<dyn Fn(Point)>,
-    open_bluetooth: Rc<dyn Fn(Point)>,
-    open_energy: Rc<dyn Fn(Point)>,
-    open_brightness: Rc<dyn Fn(Point)>,
-    open_volume: Rc<dyn Fn(Point)>,
-) -> BoxedWidget {
-    let network_icon = network_icon(status.network_connected, status.network_strength);
-    let battery_icon = battery_icon(status.battery_percentage, status.battery_charging);
-    let bluetooth_icon = if status.bluetooth_connected {
-        "bluetooth-connected"
-    } else if status.bluetooth_powered {
-        "bluetooth-on"
-    } else {
-        "bluetooth-off"
-    };
-    let volume_icon = volume_icon(status.volume, status.volume_muted);
-
-    let mut row = Flex::row().gap(6.0).align(Align::Center);
-    if tray.wifi.shows_in_bar() {
-        row = row.child(tray_icon_button(network_icon, open_network));
-    }
-    if tray.brightness.shows_in_bar() {
-        row = row.child(tray_icon_button("brightness", open_brightness));
-    }
-    if tray.volume.shows_in_bar() {
-        row = row.child(tray_icon_button(volume_icon, open_volume));
-    }
-    if tray.bluetooth.shows_in_bar() {
-        row = row.child(tray_icon_button(bluetooth_icon, open_bluetooth));
-    }
-    if tray.battery.shows_in_bar() {
-        row = row.child(tray_icon_button(battery_icon, open_energy));
-    }
-    Box::new(row)
-}
-
-fn tray_icon_button(icon: &str, on_click: Rc<dyn Fn(Point)>) -> BoxedWidget {
-    Box::new(
-        RawButton::new(island_button_style(32.0, 32.0), || {})
-            .with_click_position(move |point| on_click(point))
-            .child(Box::new(jsx! {
-                <Flex size={(32.0, 32.0)} align={Align::Center} justify={Justify::Center}>{pixel_icon(icon, 16.0, primary_color())}</Flex>
-            })),
-    )
-}
-
-fn network_icon(connected: bool, strength: Option<u8>) -> &'static str {
-    if !connected {
-        return "wifi-slash";
-    }
-    match strength.unwrap_or(100) {
-        75.. => "wifi-excellent",
-        50..=74 => "wifi-good",
-        25..=49 => "wifi-fair",
-        _ => "wifi-weak",
+/// The first section hugs the dock's leading edge, the last hugs its
+/// trailing edge, and anything in between centers within its own share of
+/// the dock's length.
+fn section_justify(is_first: bool, is_last: bool) -> Justify {
+    match (is_first, is_last) {
+        (true, true) => Justify::Center,
+        (true, false) => Justify::Start,
+        (false, true) => Justify::End,
+        (false, false) => Justify::Center,
     }
 }
 
-fn battery_icon(percentage: Option<u8>, charging: bool) -> &'static str {
-    if charging {
-        return "battery-bolt";
-    }
-    match percentage.unwrap_or(0) {
-        80.. => "battery-full",
-        50..=79 => "battery-mid",
-        20..=49 => "battery-low",
-        _ => "battery-empty",
+fn apply_gap(container: Flex, gap: Gap, length: f32) -> Flex {
+    match gap {
+        Gap::Fixed(px) => container.gap(px),
+        Gap::Percent(fraction) => container.gap(fraction * length),
+        Gap::Between => container.gap(0.0).justify(Justify::Between),
+        Gap::Evenly => container.gap(0.0).justify(Justify::Evenly),
     }
 }
 
-fn volume_icon(level: f32, muted: bool) -> &'static str {
-    if muted || level <= 0.01 {
-        "volume-mute"
-    } else if level < 0.34 {
-        "volume-low"
-    } else if level < 0.67 {
-        "volume-mid"
-    } else {
-        "volume-high"
-    }
-}
-
-struct LiveClock {
-    text: String,
-}
-
-impl Widget for LiveClock {
-    fn style(&self) -> Style {
-        Style::new().layout(LayoutStyle {
-            size: fixed(CLOCK_WIDTH, 24.0),
-            ..Default::default()
-        })
-    }
-
-    fn paint(&self, painter: &mut dyn Painter, rect: Rect) {
-        painter.fill_text_font(
-            rect,
-            &self.text,
-            primary_color(),
-            13.0,
-            TextAlign::Center,
-            None,
-            false,
-            false,
-        );
-    }
-}
-
-fn window_strip(
-    windows: Vec<OpenWindow>,
-    activate_window: Rc<dyn Fn(String)>,
-    refresh_windows: Rc<dyn Fn()>,
-) -> (BoxedWidget, usize) {
-    if windows.is_empty() {
-        return (Box::new(Flex::row()), 0);
-    }
-
-    let count = windows.len().min(MAX_TASKS);
-    let mut strip = Flex::row().gap(6.0).align(Align::Center);
-    for entry in windows.into_iter().take(MAX_TASKS) {
-        let id = entry.id.clone();
-        let selected = entry.active;
-        let activate = activate_window.clone();
-        let refresh = refresh_windows.clone();
-        let icon = task_icon(&entry, selected);
-        let item: BoxedWidget = Box::new(
-            RawButton::new(window_style(selected), move || {
-                activate(id.clone());
-                refresh();
-            })
-            .child(icon),
-        );
-        strip = strip.child(item);
-    }
-    (Box::new(strip), count)
-}
-
-fn dock_width(tasks: usize) -> f32 {
-    if tasks == 0 {
-        46.0
-    } else {
-        46.0 + tasks as f32 * TASK_SIZE + (tasks - 1) as f32 * 6.0
-    }
-}
-
-fn task_icon(window: &OpenWindow, active: bool) -> BoxedWidget {
-    let indicator_width = if active { 10.0 } else { 3.0 };
-    let indicator_color = if active {
-        accent_color()
-    } else {
-        Color::rgba(0, 0, 0, 0)
-    };
-    Box::new(jsx! {
-        <Flex direction={FlexDirection::Column} size={(TASK_SIZE, TASK_SIZE)} gap={1.0} align={Align::Center} justify={Justify::Center}>
-            <Flex size={(TASK_ICON_SIZE, TASK_ICON_SIZE)} align={Align::Center} justify={Justify::Center}>{app_icon(window)}</Flex>
-            <Flex size={(indicator_width, 3.0)} background={indicator_color} corner_radius={1.5} />
-        </Flex>
-    })
-}
-
-fn app_icon(window: &OpenWindow) -> BoxedWidget {
-    if let Some(data) = window.icon_path.as_ref().and_then(cached_icon_data) {
-        return Box::new(
-            Image::new(data)
-                .layout(LayoutStyle {
-                    size: fixed(22.0, 22.0),
-                    ..Default::default()
-                })
-                .fit(ImageFit::Contain),
-        );
-    }
-    Box::new(jsx! {
-        <Flex size={(TASK_ICON_SIZE, TASK_ICON_SIZE)} align={Align::Center} justify={Justify::Center} background={control_color()} corner_radius={7.0}>
-            <RawText color={primary_color()} font_size={11.0} align={TextAlign::Center}>{fallback_icon(&window.app_name)}</RawText>
-        </Flex>
-    })
-}
-
-/// The dock widget tree is rebuilt for clock and playback updates. Retain
-/// decoded window icons so those updates never reopen and decode every icon.
-/// Failed decodes are cached as well, avoiding a retry on every rebuild.
-fn cached_icon_data(path: &std::path::PathBuf) -> Option<ImageData> {
-    static CACHE: OnceLock<Mutex<HashMap<std::path::PathBuf, Option<ImageData>>>> = OnceLock::new();
-    let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
-    if let Some(data) = cache.lock().ok().and_then(|cache| cache.get(path).cloned()) {
-        return data;
-    }
-
-    let data = if path
-        .extension()
-        .is_some_and(|extension| extension.eq_ignore_ascii_case("svg"))
-    {
-        decode_svg_icon(path)
-    } else {
-        ImageData::from_path(path).ok()
-    };
-    if let Ok(mut cache) = cache.lock() {
-        cache.insert(path.clone(), data.clone());
-    }
-    data
-}
-
-fn decode_svg_icon(path: &std::path::Path) -> Option<ImageData> {
-    let source = std::fs::read(path).ok()?;
-    let tree = resvg::usvg::Tree::from_data(&source, &resvg::usvg::Options::default()).ok()?;
-    let source_size = tree.size();
-    let scale = 64.0 / source_size.width().max(source_size.height());
-    let mut pixmap = resvg::tiny_skia::Pixmap::new(64, 64)?;
-    resvg::render(
-        &tree,
-        resvg::tiny_skia::Transform::from_scale(scale, scale),
-        &mut pixmap.as_mut(),
-    );
-    ImageData::from_bytes(&pixmap.encode_png().ok()?).ok()
-}
-
-fn music_cover(playback: Option<&Playback>) -> BoxedWidget {
-    let Some(data) = playback
-        .and_then(|item| item.art_url.as_ref())
-        .and_then(safe_image_data)
-    else {
-        let Some(data) = playback
-            .and_then(|item| item.app_icon.as_ref())
-            .and_then(safe_image_data)
-        else {
-            return Box::new(jsx! { <Flex size={(24.0, 24.0)} /> });
+/// Resolves a section's configured islands against a lookup, in `index`
+/// order, skipping unknown ids (already warned about at config-load time
+/// via [`coconut_plugin_kit::warn_unknown_islands`], so this stays silent)
+/// and islands that decline to render themselves right now (e.g.
+/// "current_playing" with nothing playing).
+///
+/// Unlike the old `HashMap<String, BoxedWidget>` catalog this replaces,
+/// `lookup` is a non-destructive read: the same id placed in two sections
+/// (or twice in one section) renders twice, an intentional behavior change
+/// — see `section_resolution_skips_unknown_but_allows_repeated_ids` below.
+/// Takes a lookup closure rather than `&PluginRegistry` directly so this
+/// can be unit-tested without a live `PluginInitContext`/`AppHandle`.
+fn build_islands(
+    section: &SectionConfig,
+    position: DockPosition,
+    lookup: impl Fn(&str) -> Option<Rc<dyn Island>>,
+    shared: &SharedState,
+    open_panel: &Rc<dyn Fn(&'static str, Point)>,
+) -> Vec<BoxedWidget> {
+    let mut widgets = Vec::new();
+    for entry in ordered_islands(&section.islands) {
+        let Some(island) = lookup(&entry.id) else {
+            continue;
         };
-        return Box::new(
-            Image::new(data)
-                .layout(LayoutStyle {
-                    size: fixed(24.0, 24.0),
-                    ..Default::default()
-                })
-                .fit(ImageFit::Contain),
-        );
-    };
-    Box::new(
-        Image::new(data)
-            .layout(LayoutStyle {
-                size: fixed(24.0, 24.0),
-                ..Default::default()
-            })
-            .fit(ImageFit::Cover),
-    )
-}
-
-fn safe_image_data(path: &std::path::PathBuf) -> Option<ImageData> {
-    const MAX_ART_BYTES: u64 = 8 * 1024 * 1024;
-    static CACHE: OnceLock<Mutex<HashMap<std::path::PathBuf, ImageData>>> = OnceLock::new();
-    let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
-    if let Some(data) = cache.lock().ok().and_then(|cache| cache.get(path).cloned()) {
-        return Some(data);
+        let config = island_config(entry);
+        let ctx = IslandRenderContext {
+            shared,
+            config: &config,
+            position,
+            open_panel: open_panel.clone(),
+        };
+        if !island.is_visible(&ctx) {
+            continue;
+        }
+        widgets.push(island.build(&ctx));
     }
-    let data = std::fs::metadata(path)
-        .ok()
-        .filter(|meta| meta.len() <= MAX_ART_BYTES)
-        .and_then(|_| ImageData::from_path(path).ok())?;
-    if let Ok(mut cache) = cache.lock() {
-        cache.insert(path.clone(), data.clone());
+    widgets
+}
+
+/// Converts an island entry's inline TOML overrides into the scalar-only
+/// shape islands read at render time. Non-scalar values (arrays, nested
+/// tables, datetimes) aren't representable and are dropped.
+fn island_config(entry: &IslandEntry) -> IslandConfig {
+    let mut config: IslandConfig = HashMap::new();
+    for (key, value) in &entry.config {
+        let value = match value {
+            toml::Value::Boolean(value) => ConfigValue::Bool(*value),
+            toml::Value::Integer(value) => ConfigValue::Int(*value),
+            toml::Value::Float(value) => ConfigValue::Float(*value),
+            toml::Value::String(value) => ConfigValue::String(value.clone()),
+            _ => continue,
+        };
+        config.insert(key.clone(), value);
     }
-    Some(data)
-}
-
-fn fallback_icon(app_name: &str) -> String {
-    app_name
-        .chars()
-        .next()
-        .unwrap_or('•')
-        .to_uppercase()
-        .to_string()
-}
-
-fn square_style(background: Color) -> Style {
-    Style::new()
-        .layout(LayoutStyle {
-            size: fixed(TASK_SIZE, TASK_SIZE),
-            ..Default::default()
-        })
-        .background(background)
-        .corner_radius(8.0)
-        .hover(StateStyle::new().background(control_hover()))
-        .pressed(StateStyle::new().background(primary_color()))
-}
-
-fn side_button_style(background: Color) -> Style {
-    Style::new()
-        .layout(LayoutStyle {
-            size: fixed(SIDE_ITEM_SIZE, SIDE_ITEM_SIZE),
-            ..Default::default()
-        })
-        .background(background)
-        .corner_radius(8.0)
-        .hover(StateStyle::new().background(control_hover()))
-        .pressed(StateStyle::new().background(primary_color()))
-}
-
-fn island_button_style(width: f32, height: f32) -> Style {
-    Style::new()
-        .layout(LayoutStyle {
-            size: fixed(width, height),
-            ..Default::default()
-        })
-        .background(island_color())
-        .corner_radius(9.0)
-        .hover(StateStyle::new().background(control_hover()))
-        .pressed(StateStyle::new().background(selected_color()))
-}
-
-fn window_style(active: bool) -> Style {
-    let background = if active {
-        selected_color()
-    } else {
-        Color::rgba(0, 0, 0, 0)
-    };
-    Style::new()
-        .layout(LayoutStyle {
-            size: fixed(TASK_SIZE, TASK_SIZE),
-            ..Default::default()
-        })
-        .background(background)
-        .corner_radius(10.0)
-        .hover(StateStyle::new().background(control_hover()))
-        .pressed(StateStyle::new().background(selected_color()))
-}
-
-fn media_control_style() -> Style {
-    Style::new()
-        .layout(LayoutStyle {
-            size: fixed(18.0, 24.0),
-            ..Default::default()
-        })
-        .corner_radius(6.0)
-        .hover(StateStyle::new().background(control_hover()))
-        .pressed(StateStyle::new().background(primary_color()))
+    config
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{bar_section, control_button_width, decode_svg_icon, dock_width, fallback_icon};
-    use creamui_core::BoxedWidget;
-    use creamui_widgets::layout::{Flex, Justify};
+    use super::*;
     use std::collections::HashMap;
-    use std::path::Path;
 
-    #[test]
-    fn dock_fits_visible_tasks() {
-        assert_eq!(dock_width(0), 46.0);
-        assert_eq!(dock_width(4), 192.0);
+    struct StubIsland(&'static str);
+    impl Island for StubIsland {
+        fn id(&self) -> &'static str {
+            self.0
+        }
+        fn build(&self, _ctx: &IslandRenderContext) -> BoxedWidget {
+            Box::new(Flex::row())
+        }
     }
 
     #[test]
-    fn fallback_uses_the_app_initial() {
-        assert_eq!(fallback_icon("firefox"), "F");
+    fn section_resolution_skips_unknown_but_allows_repeated_ids() {
+        let mut known: HashMap<&str, Rc<dyn Island>> = HashMap::new();
+        known.insert("a", Rc::new(StubIsland("a")));
+        known.insert("b", Rc::new(StubIsland("b")));
+        let shared = SharedState::default();
+        let open_panel: Rc<dyn Fn(&'static str, Point)> = Rc::new(|_, _| {});
+        let section = SectionConfig {
+            gap: "10px".into(),
+            islands: vec![
+                IslandEntry::with_id("a"),
+                IslandEntry::with_id("unknown"),
+                IslandEntry::with_id("a"),
+            ],
+        };
+        let widgets = build_islands(
+            &section,
+            DockPosition::Bottom,
+            |id| known.get(id).cloned(),
+            &shared,
+            &open_panel,
+        );
+        // "a" renders twice (once per entry, a non-destructive lookup);
+        // "unknown" is silently skipped.
+        assert_eq!(widgets.len(), 2);
     }
 
     #[test]
-    fn control_button_grows_with_visible_icons() {
-        assert!(control_button_width(0) < control_button_width(3));
-        assert!(control_button_width(3) < control_button_width(5));
-    }
-
-    #[test]
-    fn svg_window_icons_are_decoded() {
-        let icon = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/icons/brightness.svg");
-        assert!(decode_svg_icon(&icon).is_some());
-    }
-
-    #[test]
-    fn bar_section_skips_unknown_and_already_placed_ids() {
-        let mut catalog: HashMap<String, BoxedWidget> = HashMap::new();
-        catalog.insert("a".to_owned(), Box::new(Flex::row()));
-        catalog.insert("b".to_owned(), Box::new(Flex::row()));
-        let ids = vec!["a".to_owned(), "unknown".to_owned(), "b".to_owned()];
-
-        let mut widget = bar_section(&ids, &mut catalog, 100.0, Justify::Start, false, false);
-
-        assert_eq!(widget.children().len(), 2);
-        assert!(catalog.is_empty());
+    fn section_justify_hugs_the_dock_edges() {
+        assert_eq!(section_justify(true, false), Justify::Start);
+        assert_eq!(section_justify(false, true), Justify::End);
+        assert_eq!(section_justify(false, false), Justify::Center);
+        assert_eq!(section_justify(true, true), Justify::Center);
     }
 }

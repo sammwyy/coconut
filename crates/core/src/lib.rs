@@ -1,20 +1,20 @@
 mod appearance;
-mod bar;
 mod desktop;
+mod dock;
 pub mod geo;
 pub mod ipc;
+pub mod modules;
 mod profile;
-mod tray;
-mod widgets;
 
 pub use appearance::AppearanceConfig;
-pub use bar::{BarConfig, BarLayout, BarPosition};
 pub use desktop::{
     ClickAction, DesktopColor, DesktopConfig, DesktopIconsConfig, IconShape, WallpaperMode,
 };
+pub use dock::{
+    ordered_islands, DockAlign, DockConfig, DockDirection, DockPosition, IslandEntry,
+    SectionConfig,
+};
 pub use profile::UserProfile;
-pub use tray::{TrayConfig, TrayMode, TrayVisibility};
-pub use widgets::WidgetsConfig;
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -23,9 +23,8 @@ use std::path::PathBuf;
 #[serde(default)]
 pub struct ShellConfig {
     pub appearance: AppearanceConfig,
-    pub bar: BarConfig,
-    pub tray: TrayConfig,
-    pub widgets: WidgetsConfig,
+    #[serde(rename = "dock")]
+    pub docks: Vec<DockConfig>,
     pub desktop: DesktopConfig,
 }
 
@@ -33,9 +32,7 @@ impl Default for ShellConfig {
     fn default() -> Self {
         Self {
             appearance: AppearanceConfig::default(),
-            bar: BarConfig::default(),
-            tray: TrayConfig::default(),
-            widgets: WidgetsConfig::default(),
+            docks: vec![DockConfig::default()],
             desktop: DesktopConfig::default(),
         }
     }
@@ -48,56 +45,44 @@ const DEFAULT_SHELL_TOML: &str = r#"# Coconut configuration.
 # Edit this file before launching the desktop session, or use Settings for
 # changes that apply immediately. Missing keys fall back to their defaults,
 # so you only need to list what you want to change.
-
-[bar]
-# Where the bar sits on screen: "top", "bottom", "left" or "right".
-position = "bottom"
+#
+# Per-island settings (the clock's time format, tray visibility, etc.) live
+# in their own files under the "modules" directory next to this one, e.g.
+# modules/clock.toml — this file only describes which docks exist and what
+# sits in them.
 
 [appearance]
 # Freedesktop application icon and desktop sound themes used by Coconut.
 icon_theme = "hicolor"
 sound_theme = "freedesktop"
 
-[bar.layout]
-# Widget ids shown in each section of the bar. On a horizontal bar they are
-# arranged left to right; on a vertical bar, top to bottom. Known ids:
-# "logo", "weather", "current_playing", "app_launcher", "control_center",
-# "clock". Remove an id to hide it, or move it to another section.
-left = ["logo", "weather", "current_playing"]
-center = ["app_launcher"]
-right = ["control_center", "clock"]
+[[dock]]
+# Where this dock sits on screen: "top", "bottom", "left" or "right". You
+# can declare more than one [[dock]] block to have several docks at once.
+position = "bottom"
 
-[tray]
-# How tray icons open their controls: "grouped" (one button opens the
-# control center, whose device tiles and sliders link to their dedicated
-# panels) or "individual" (each icon opens its own dedicated panel
-# directly).
-mode = "grouped"
-# Visibility of each status icon: "always" (shown in the bar), "hidden"
-# (not in the bar, but still available when the control center is opened),
-# or "off" (never shown).
-wifi = "always"
-bluetooth = "always"
-battery = "always"
-volume = "always"
-brightness = "always"
+[[dock.section]]
+# Spacing between the islands in this section: a fixed length ("10px"), a
+# percentage of the section's length ("30%"), or "between"/"evenly".
+gap = "10px"
+[[dock.section.island]]
+id = "logo"
+[[dock.section.island]]
+id = "weather"
+[[dock.section.island]]
+id = "current_playing"
 
-[widgets.weather]
-enabled = true
+[[dock.section]]
+gap = "10px"
+[[dock.section.island]]
+id = "app_launcher"
 
-[widgets.current_playing]
-enabled = true
-
-[widgets.app_launcher]
-enabled = true
-
-[widgets.control_center]
-enabled = true
-
-[widgets.clock]
-enabled = true
-# strftime pattern for the bar clock, e.g. "%I:%M %p" for a 12-hour clock.
-format = "%H:%M"
+[[dock.section]]
+gap = "10px"
+[[dock.section.island]]
+id = "control_center"
+[[dock.section.island]]
+id = "clock"
 
 [desktop]
 # Path to a wallpaper image. Unset uses the built-in background.
@@ -218,16 +203,15 @@ mod tests {
 
     #[test]
     fn missing_keys_fall_back_to_defaults() {
-        let parsed: ShellConfig = toml::from_str("[bar]\nposition = \"top\"\n").unwrap();
-        assert_eq!(parsed.bar.position, BarPosition::Top);
-        assert_eq!(parsed.bar.layout, BarLayout::default());
-        assert_eq!(parsed.tray, TrayConfig::default());
-        assert_eq!(parsed.widgets, WidgetsConfig::default());
+        let parsed: ShellConfig = toml::from_str("[[dock]]\nposition = \"top\"\n").unwrap();
+        assert_eq!(parsed.docks.len(), 1);
+        assert_eq!(parsed.docks[0].position, DockPosition::Top);
+        assert_eq!(parsed.docks[0].sections, DockConfig::default().sections);
     }
 
     #[test]
     fn invalid_toml_is_rejected_rather_than_silently_accepted() {
-        let result: Result<ShellConfig, _> = toml::from_str("bar = \"not a table\"");
+        let result: Result<ShellConfig, _> = toml::from_str("dock = \"not an array\"");
         assert!(result.is_err());
     }
 }

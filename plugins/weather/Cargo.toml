@@ -1,0 +1,18 @@
+[package]
+name = "coconut-plugin-weather"
+version = "0.1.0"
+edition = "2021"
+description = "Coconut dock plugin: the weather island and panel"
+license = "Apache-2.0"
+
+[dependencies]
+coconut-core = { path = "../../crates/core" }
+coconut-plugin-kit = { path = "../../crates/plugin-kit" }
+chrono = "0.4"
+creamui-core = { path = "../../../creamui/crates/core" }
+creamui-jsx = { path = "../../../creamui/crates/jsx" }
+creamui-macros = { path = "../../../creamui/crates/macros" }
+creamui-reactive = { path = "../../../creamui/crates/reactive" }
+creamui-widgets = { path = "../../../creamui/crates/widgets" }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "gzip", "json", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }

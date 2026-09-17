@@ -1,0 +1,13 @@
+[package]
+name = "coconut-plugin-logo"
+version = "0.1.0"
+edition = "2021"
+description = "Coconut dock plugin: the logo island"
+license = "Apache-2.0"
+
+[dependencies]
+coconut-plugin-kit = { path = "../../crates/plugin-kit" }
+creamui-core = { path = "../../../creamui/crates/core" }
+creamui-jsx = { path = "../../../creamui/crates/jsx" }
+creamui-macros = { path = "../../../creamui/crates/macros" }
+creamui-widgets = { path = "../../../creamui/crates/widgets" }

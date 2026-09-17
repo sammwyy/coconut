@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["apps/*", "crates/*", "integrations/*"]
+members = ["apps/*", "crates/*", "integrations/*", "plugins/*"]
 
 [profile.dev.package."*"]
 opt-level = 2

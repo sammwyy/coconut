@@ -1,6 +1,5 @@
 use crate::bar::DOCK_HEIGHT;
-use crate::icon_theme::{build_icon_index, load_icon, resolve_icon};
-use crate::icons::pixel_icon;
+use coconut_plugin_kit::{build_icon_index, load_icon, pixel_icon, resolve_icon};
 use coconut_api::desktop::DesktopWorkArea;
 use coconut_core::{ClickAction, DesktopIconsConfig, IconShape, ShellConfig, WallpaperMode};
 use creamui_core::layout::{
@@ -235,7 +234,8 @@ pub fn build(
     let desktop = shell.desktop;
     let theme = use_theme();
     let layout = IconLayout::from_config(&desktop.icons, theme.colors);
-    let work_area = usable_area(viewport, work_area.get(), shell.bar.position);
+    let dock_position = shell.docks.first().map(|dock| dock.position).unwrap_or_default();
+    let work_area = usable_area(viewport, work_area.get(), dock_position);
     Box::new(
         RawView::new(
             Style::new()
@@ -705,7 +705,7 @@ fn icon_position(position: Point, viewport: Size, layout: &IconLayout) -> Point 
         position,
         viewport,
         layout,
-        usable_area(viewport, None, coconut_core::BarPosition::Bottom),
+        usable_area(viewport, None, coconut_core::DockPosition::Bottom),
     )
 }
 
@@ -738,29 +738,29 @@ fn icon_position_in_area(
 fn usable_area(
     viewport: Size,
     area: Option<DesktopWorkArea>,
-    position: coconut_core::BarPosition,
+    position: coconut_core::DockPosition,
 ) -> Rect {
     let thickness = DOCK_HEIGHT as f32;
     let fallback = match position {
-        coconut_core::BarPosition::Top => Rect {
+        coconut_core::DockPosition::Top => Rect {
             x: 0.0,
             y: thickness,
             width: viewport.width,
             height: (viewport.height - thickness).max(1.0),
         },
-        coconut_core::BarPosition::Bottom => Rect {
+        coconut_core::DockPosition::Bottom => Rect {
             x: 0.0,
             y: 0.0,
             width: viewport.width,
             height: (viewport.height - thickness).max(1.0),
         },
-        coconut_core::BarPosition::Left => Rect {
+        coconut_core::DockPosition::Left => Rect {
             x: thickness,
             y: 0.0,
             width: (viewport.width - thickness).max(1.0),
             height: viewport.height,
         },
-        coconut_core::BarPosition::Right => Rect {
+        coconut_core::DockPosition::Right => Rect {
             x: 0.0,
             y: 0.0,
             width: (viewport.width - thickness).max(1.0),

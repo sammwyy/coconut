@@ -1,0 +1,16 @@
+[package]
+name = "coconut-plugin-tray"
+version = "0.1.0"
+edition = "2021"
+description = "Coconut dock plugin: the tray islands (control center / individual devices) and the control center, network, bluetooth, energy, brightness and volume panels"
+license = "Apache-2.0"
+
+[dependencies]
+coconut-api = { path = "../../crates/api" }
+coconut-plugin-kit = { path = "../../crates/plugin-kit" }
+creamui-core = { path = "../../../creamui/crates/core" }
+creamui-jsx = { path = "../../../creamui/crates/jsx" }
+creamui-macros = { path = "../../../creamui/crates/macros" }
+creamui-reactive = { path = "../../../creamui/crates/reactive" }
+creamui-widgets = { path = "../../../creamui/crates/widgets" }
+serde = { version = "1", features = ["derive"] }

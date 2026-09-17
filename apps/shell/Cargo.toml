@@ -20,7 +20,16 @@ perf-metrics = [
 [dependencies]
 coconut-api = { path = "../../crates/api" }
 coconut-core = { path = "../../crates/core" }
+coconut-plugin-kit = { path = "../../crates/plugin-kit" }
+coconut-plugin-logo = { path = "../../plugins/logo" }
+coconut-plugin-clock = { path = "../../plugins/clock" }
+coconut-plugin-weather = { path = "../../plugins/weather" }
+coconut-plugin-current-playing = { path = "../../plugins/current_playing" }
+coconut-plugin-app-launcher = { path = "../../plugins/app_launcher" }
+coconut-plugin-app-drawer = { path = "../../plugins/app_drawer" }
+coconut-plugin-tray = { path = "../../plugins/tray" }
 chrono = "0.4"
+toml = "0.9"
 creamui-core = { path = "../../../creamui/crates/core" }
 creamui-devtools = { path = "../../../creamui/crates/devtools", optional = true }
 creamui-image = { path = "../../../creamui/crates/image", features = ["webp", "jpeg", "svg"] }
@@ -31,8 +40,6 @@ creamui-render = { path = "../../../creamui/crates/render", features = ["platfor
 creamui-theme = { path = "../../../creamui/crates/theme" }
 creamui-theme-loader = { path = "../../../creamui/crates/theme-loader" }
 creamui-widgets = { path = "../../../creamui/crates/widgets" }
-resvg = "0.45.1"
-reqwest = { version = "0.12", default-features = false, features = ["blocking", "gzip", "json", "rustls-tls"] }
 serde = { version = "1", features = ["derive"] }
 
 [target.'cfg(not(target_os = "windows"))'.dependencies]
