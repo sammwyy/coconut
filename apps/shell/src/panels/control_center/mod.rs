@@ -1,7 +1,7 @@
 use crate::icons::pixel_icon;
 use crate::panels::chrome::{
-    compact_switch, fat_slider, wifi_strength_icon, BORDER, CARD, CARD_RADIUS, CONTROL_HOVER,
-    ISLAND_RADIUS, MUTED, PANEL, SELECTED, TEXT,
+    compact_switch, fat_slider, shell_border, shell_card, shell_control_hover, shell_muted,
+    shell_panel, shell_selected, shell_text, wifi_strength_icon, CARD_RADIUS, ISLAND_RADIUS,
 };
 use crate::panels::{
     bluetooth as bluetooth_panel, brightness as brightness_panel, energy as energy_panel,
@@ -313,8 +313,8 @@ pub fn build_with_integrations(
     };
 
     Box::new(jsx! {
-        <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={16.0} gap={12.0} background={CARD} border={(BORDER, 1.0)} corner_radius={CARD_RADIUS}>
-            <RawText color={MUTED} font_size={14.0}>"CONTROL"</RawText>
+        <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={16.0} gap={12.0} background={shell_card()} border={(shell_border(), 1.0)} corner_radius={CARD_RADIUS}>
+            <RawText color={shell_muted()} font_size={14.0}>"shell_control()"</RawText>
             {Box::new(device_row) as BoxedWidget}
             {Box::new(status_row) as BoxedWidget}
             {brightness_card}
@@ -331,8 +331,8 @@ fn slider_container() -> Flex {
         .grow(1.0)
         .padding(12.0)
         .justify(creamui_widgets::layout::Justify::Center)
-        .property(StyleProp::Background(PANEL.into()))
-        .property(StyleProp::Border(Border::new(BORDER, 1.0)))
+        .property(StyleProp::Background(shell_panel().into()))
+        .property(StyleProp::Border(Border::new(shell_border(), 1.0)))
         .property(StyleProp::CornerRadius(ISLAND_RADIUS))
 }
 
@@ -345,19 +345,19 @@ fn device_tile(
     on_toggle: Rc<dyn Fn()>,
     on_open: Rc<dyn Fn()>,
 ) -> BoxedWidget {
-    let mut name = RawMarquee::new(name, TEXT, 15.0, TILE_W - 20.0);
+    let mut name = RawMarquee::new(name, shell_text(), 15.0, TILE_W - 20.0);
     name.style.layout.size.height = creamui_core::layout::Dimension::Length(18.0);
     let name = Box::new(name) as BoxedWidget;
     let content = Box::new(jsx! {
         <Flex direction={FlexDirection::Column} size={(TILE_W, TILE_H)} padding={10.0} gap={7.0}>
             <Flex direction={FlexDirection::Row} gap={8.0} align={Align::Center}>
-                {pixel_icon(icon, 16.0, TEXT)}
-                <RawText color={MUTED} font_size={11.0} align={TextAlign::Start}>{kicker}</RawText>
+                {pixel_icon(icon, 16.0, shell_text())}
+                <RawText color={shell_muted()} font_size={11.0} align={TextAlign::Start}>{kicker}</RawText>
                 <Flex grow={1.0} />
                 {compact_switch(enabled, on_toggle)}
             </Flex>
             {name}
-            <RawText color={MUTED} font_size={10.0} align={TextAlign::Start}>{caption}</RawText>
+            <RawText color={shell_muted()} font_size={10.0} align={TextAlign::Start}>{caption}</RawText>
         </Flex>
     });
     Box::new(RawButton::new(tile_style(), move || on_open()).child(content))
@@ -373,12 +373,12 @@ fn status_tile(
     let content = Box::new(jsx! {
         <Flex direction={FlexDirection::Column} size={(TILE_W, TILE_H)} padding={10.0} gap={6.0} justify={creamui_widgets::layout::Justify::Center}>
             <Flex direction={FlexDirection::Row} gap={8.0} align={Align::Center}>
-                {pixel_icon(icon, 16.0, TEXT)}
-                <RawText color={MUTED} font_size={11.0} align={TextAlign::Start}>{kicker}</RawText>
+                {pixel_icon(icon, 16.0, shell_text())}
+                <RawText color={shell_muted()} font_size={11.0} align={TextAlign::Start}>{kicker}</RawText>
             </Flex>
             <Flex direction={FlexDirection::Row} align={Align::Center} gap={8.0}>
-                <RawText color={TEXT} font_size={18.0} align={TextAlign::Start}>{value}</RawText>
-                <RawText color={MUTED} font_size={11.0} align={TextAlign::Start}>{caption}</RawText>
+                <RawText color={shell_text()} font_size={18.0} align={TextAlign::Start}>{value}</RawText>
+                <RawText color={shell_muted()} font_size={11.0} align={TextAlign::Start}>{caption}</RawText>
             </Flex>
         </Flex>
     });
@@ -391,11 +391,11 @@ fn tile_style() -> Style {
             size: fixed(TILE_W, TILE_H),
             ..Default::default()
         })
-        .background(PANEL)
-        .border(BORDER, 1.0)
+        .background(shell_panel())
+        .border(shell_border(), 1.0)
         .corner_radius(ISLAND_RADIUS)
-        .hover(StateStyle::new().background(CONTROL_HOVER))
-        .pressed(StateStyle::new().background(SELECTED))
+        .hover(StateStyle::new().background(shell_control_hover()))
+        .pressed(StateStyle::new().background(shell_selected()))
 }
 
 fn back_to_main(view: Signal<PanelView>) -> Rc<dyn Fn()> {
@@ -405,13 +405,13 @@ fn back_to_main(view: Signal<PanelView>) -> Rc<dyn Fn()> {
 fn awake_tile(awake: bool, toggle_awake: Rc<dyn Fn()>) -> BoxedWidget {
     let caption = if awake { "Holding" } else { "Idle" };
     Box::new(jsx! {
-        <Flex direction={FlexDirection::Column} size={(TILE_W, TILE_H)} padding={10.0} gap={6.0} background={PANEL} border={(BORDER, 1.0)} corner_radius={ISLAND_RADIUS} justify={creamui_widgets::layout::Justify::Center}>
+        <Flex direction={FlexDirection::Column} size={(TILE_W, TILE_H)} padding={10.0} gap={6.0} background={shell_panel()} border={(shell_border(), 1.0)} corner_radius={ISLAND_RADIUS} justify={creamui_widgets::layout::Justify::Center}>
             <Flex direction={FlexDirection::Row} gap={8.0} align={Align::Center}>
-                <RawText color={MUTED} font_size={11.0} align={TextAlign::Start}>"Keep awake"</RawText>
+                <RawText color={shell_muted()} font_size={11.0} align={TextAlign::Start}>"Keep awake"</RawText>
                 <Flex grow={1.0} />
                 {compact_switch(awake, toggle_awake)}
             </Flex>
-            <RawText color={TEXT} font_size={15.0} align={TextAlign::Start}>{caption}</RawText>
+            <RawText color={shell_text()} font_size={15.0} align={TextAlign::Start}>{caption}</RawText>
         </Flex>
     })
 }

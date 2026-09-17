@@ -1,3 +1,4 @@
+mod appearance;
 mod bar;
 mod desktop;
 pub mod geo;
@@ -6,6 +7,7 @@ mod profile;
 mod tray;
 mod widgets;
 
+pub use appearance::AppearanceConfig;
 pub use bar::{BarConfig, BarLayout, BarPosition};
 pub use desktop::{
     ClickAction, DesktopColor, DesktopConfig, DesktopIconsConfig, IconShape, WallpaperMode,
@@ -20,6 +22,7 @@ use std::path::PathBuf;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ShellConfig {
+    pub appearance: AppearanceConfig,
     pub bar: BarConfig,
     pub tray: TrayConfig,
     pub widgets: WidgetsConfig,
@@ -29,6 +32,7 @@ pub struct ShellConfig {
 impl Default for ShellConfig {
     fn default() -> Self {
         Self {
+            appearance: AppearanceConfig::default(),
             bar: BarConfig::default(),
             tray: TrayConfig::default(),
             widgets: WidgetsConfig::default(),
@@ -48,6 +52,11 @@ const DEFAULT_SHELL_TOML: &str = r#"# Coconut configuration.
 [bar]
 # Where the bar sits on screen: "top", "bottom", "left" or "right".
 position = "bottom"
+
+[appearance]
+# Freedesktop application icon and desktop sound themes used by Coconut.
+icon_theme = "hicolor"
+sound_theme = "freedesktop"
 
 [bar.layout]
 # Widget ids shown in each section of the bar. On a horizontal bar they are

@@ -7,7 +7,7 @@ mod process;
 mod weather;
 
 use crate::bar::{
-    build_dock, warn_unknown_widgets, BarActions, CreamTheme, SystemStatus, DOCK_HEIGHT, DOCK_WIDTH,
+    build_dock, warn_unknown_widgets, BarActions, SystemStatus, DOCK_HEIGHT, DOCK_WIDTH,
 };
 use crate::panels::{
     app_drawer, bluetooth as bluetooth_panel, brightness as brightness_panel, clock,
@@ -20,14 +20,14 @@ use coconut_core::{ipc::RuntimeEvent, BarPosition, ShellConfig, UserProfile};
 use creamui_core::{BoxedWidget, Point, Rect, Size};
 use creamui_reactive::Signal;
 use creamui_render::{AppBuilder, AppHandle, PopupOptions, WindowHandle, WindowOptions};
-use creamui_theme::Color;
+use creamui_theme::{Color, Theme};
 use creamui_widgets::ScrollController;
 use std::rc::Rc;
 use std::{
     cell::{Cell, RefCell},
     process::Child,
     process::Command,
-    sync::{mpsc::Receiver, Arc, Mutex},
+    sync::{mpsc::Receiver, Arc, Mutex, OnceLock},
     time::Duration,
 };
 
@@ -42,6 +42,7 @@ pub fn run() {
         ..Default::default()
     });
 
+    initialize_system_theme();
     let initial_config = ShellConfig::load();
     warn_unknown_widgets(&initial_config.bar.layout);
     let popup_position_state = Rc::new(Cell::new(initial_config.bar.position));
@@ -115,7 +116,8 @@ pub fn run() {
                 refresh_weather(app.clone(), weather_state.clone());
             }
             let desktop_state = desktop_state.clone();
-            desktop_state.start_loading(&app);
+            desktop_state.start_loading(&app, initial_config.appearance.icon_theme.clone());
+            let desktop_for_window = desktop_state.clone();
             app.append_window(
                 WindowOptions {
                     title: "Coconut Desktop".into(),
@@ -125,10 +127,10 @@ pub fn run() {
                     resizable: false,
                     transparent: false,
                     role: creamui_render::platform::WindowRole::Desktop,
-                    theme: CreamTheme::theme(),
+                    theme: system_theme(),
                     ..Default::default()
                 },
-                desktop::BACKGROUND,
+                system_theme().colors.surface,
                 {
                     let themed_windows = themed_windows.clone();
                     let desktop_state = desktop_state.clone();
@@ -143,7 +145,7 @@ pub fn run() {
                     move |viewport| {
                         desktop::build(
                             viewport,
-                            desktop_state.clone(),
+                            desktop_for_window.clone(),
                             config.clone(),
                             work_area.clone(),
                         )
@@ -181,7 +183,7 @@ pub fn run() {
             let bluetooth_panel_revision = bluetooth_revision.clone();
             let energy_panel_revision = battery_revision.clone();
             let energy_panel_power_profile_revision = power_profile_revision.clone();
-            applications.start_loading(&app);
+            applications.start_loading(&app, initial_config.appearance.icon_theme.clone());
             if !schedule_window_events(
                 app.clone(),
                 bar_windows_backend.clone(),
@@ -773,7 +775,7 @@ pub fn run() {
                             resizable: false,
                             transparent: true,
                             role,
-                            theme: CreamTheme::theme(),
+                            theme: system_theme(),
                             ..Default::default()
                         },
                         Color::rgba(0, 0, 0, 0),
@@ -882,6 +884,8 @@ pub fn run() {
                 append_bar,
                 desktop_work_area,
                 weather_state,
+                applications,
+                desktop_state,
             );
         })
         .run();
@@ -908,6 +912,8 @@ fn schedule_runtime_events(
     reappend_bar: Rc<dyn Fn(BarPosition)>,
     work_area: Signal<Option<coconut_api::desktop::DesktopWorkArea>>,
     weather_state: Signal<weather::WeatherState>,
+    applications: app_drawer::AppCatalog,
+    desktop_state: desktop::DesktopState,
 ) {
     let next_app = app.clone();
     let next_events = events.clone();
@@ -916,6 +922,8 @@ fn schedule_runtime_events(
     let next_reappend_bar = reappend_bar.clone();
     let next_work_area = work_area.clone();
     let next_weather_state = weather_state.clone();
+    let next_applications = applications.clone();
+    let next_desktop_state = desktop_state.clone();
     app.clone().spawn_background(
         move || {
             std::thread::sleep(Duration::from_millis(100));
@@ -928,7 +936,7 @@ fn schedule_runtime_events(
             if let Some(event) = event {
                 match event {
                     RuntimeEvent::ReloadTheme => {
-                        let theme = creamui_theme::active_theme();
+                        let theme = reload_system_theme();
                         for window in themed_windows.borrow().iter() {
                             window.set_theme(theme);
                         }
@@ -937,7 +945,15 @@ fn schedule_runtime_events(
                         let weather_was_enabled = config.peek().widgets.weather.enabled;
                         let position_changed = config.peek().bar.position != updated.bar.position;
                         warn_unknown_widgets(&updated.bar.layout);
+                        let icon_theme_changed =
+                            config.peek().appearance.icon_theme != updated.appearance.icon_theme;
                         config.set(updated);
+                        if icon_theme_changed {
+                            applications
+                                .start_loading(&app, config.peek().appearance.icon_theme.clone());
+                            desktop_state
+                                .start_loading(&app, config.peek().appearance.icon_theme.clone());
+                        }
                         if !weather_was_enabled && config.peek().widgets.weather.enabled {
                             refresh_weather(app.clone(), weather_state.clone());
                         }
@@ -963,6 +979,8 @@ fn schedule_runtime_events(
                 next_reappend_bar,
                 next_work_area,
                 next_weather_state,
+                next_applications,
+                next_desktop_state,
             );
         },
     );
@@ -1272,7 +1290,40 @@ fn popup_options(title: &str, width: u32, height: u32) -> WindowOptions {
         decorations: false,
         resizable: false,
         transparent: true,
-        theme: CreamTheme::theme(),
+        theme: system_theme(),
         ..Default::default()
+    }
+}
+
+static SYSTEM_THEME: OnceLock<Mutex<Theme>> = OnceLock::new();
+
+fn initialize_system_theme() {
+    let theme = load_system_theme();
+    let _ = SYSTEM_THEME.set(Mutex::new(theme));
+}
+
+fn system_theme() -> Theme {
+    *SYSTEM_THEME
+        .get_or_init(|| Mutex::new(load_system_theme()))
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+}
+
+fn reload_system_theme() -> Theme {
+    let theme = load_system_theme();
+    *SYSTEM_THEME
+        .get_or_init(|| Mutex::new(theme))
+        .lock()
+        .unwrap_or_else(|error| error.into_inner()) = theme;
+    theme
+}
+
+fn load_system_theme() -> Theme {
+    match creamui_theme_loader::SystemThemeLoader::new().load() {
+        Ok(appearance) => appearance.theme,
+        Err(error) => {
+            eprintln!("shell: failed to load CreamUI system appearance: {error}");
+            Theme::default()
+        }
     }
 }

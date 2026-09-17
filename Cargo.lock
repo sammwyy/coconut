@@ -652,6 +652,7 @@ dependencies = [
  "creamui-reactive",
  "creamui-render",
  "creamui-theme",
+ "creamui-theme-loader",
  "creamui-widgets",
  "dbus",
  "image",
@@ -676,6 +677,7 @@ dependencies = [
  "creamui-reactive",
  "creamui-render",
  "creamui-theme",
+ "creamui-theme-loader",
  "creamui-widgets",
  "reqwest",
  "resvg",
@@ -931,6 +933,7 @@ dependencies = [
  "creamui-platform",
  "creamui-reactive",
  "creamui-theme",
+ "creamui-theme-loader",
  "env_logger",
  "fontdue",
  "libc",
@@ -947,10 +950,17 @@ dependencies = [
 
 [[package]]
 name = "creamui-theme"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "creamui-fonts",
  "creamui-reactive",
+]
+
+[[package]]
+name = "creamui-theme-loader"
+version = "0.1.1"
+dependencies = [
+ "creamui-theme",
  "serde",
  "toml 0.9.12+spec-1.1.0",
 ]

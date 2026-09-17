@@ -22,6 +22,9 @@ use std::rc::Rc;
 enum Section {
     Appearance,
     Theme,
+    IconPack,
+    Sound,
+    Desktop,
     Wallpaper,
     DesktopIcons,
     Taskbar,
@@ -48,6 +51,7 @@ enum Section {
 fn category_default(section: Section) -> Section {
     match section {
         Section::Appearance => Section::Theme,
+        Section::Desktop => Section::Wallpaper,
         Section::Taskbar => Section::General,
         Section::WindowBehaviour => Section::Compositor,
         Section::Users => Section::Profile,
@@ -64,19 +68,31 @@ fn tree(accounts: &[users::Account], icons: &SettingsIcons) -> Vec<SidebarNode<S
     vec![
         SidebarNode::parent(
             Section::Appearance,
-            icons.appearance.clone(),
+            icons.paintbrush.clone(),
             "Appearance",
             vec![
                 SidebarNode::leaf(Section::Theme, icons.paintbrush.clone(), "Theme"),
-                SidebarNode::leaf(Section::Wallpaper, icons.wallpaper.clone(), "Wallpaper"),
                 SidebarNode::leaf(
-                    Section::DesktopIcons,
+                    Section::IconPack,
                     IconSource::Symbol(Symbol::Grid),
-                    "Desktop icons",
+                    "Icon Pack",
+                ),
+                SidebarNode::leaf(Section::Sound, IconSource::Symbol(Symbol::Sliders), "Sound"),
+                SidebarNode::group(
+                    Section::Desktop,
+                    "Desktop (Coconut)",
+                    vec![
+                        SidebarNode::leaf(Section::Wallpaper, icons.wallpaper.clone(), "Wallpaper"),
+                        SidebarNode::leaf(
+                            Section::DesktopIcons,
+                            IconSource::Symbol(Symbol::Grid),
+                            "Desktop icons",
+                        ),
+                    ],
                 ),
                 SidebarNode::group(
                     Section::Taskbar,
-                    "Taskbar",
+                    "Taskbar (Coconut)",
                     vec![
                         SidebarNode::leaf(Section::General, icons.position.clone(), "Position"),
                         SidebarNode::leaf(Section::Tray, icons.status.clone(), "Status area"),
@@ -155,11 +171,13 @@ fn tree(accounts: &[users::Account], icons: &SettingsIcons) -> Vec<SidebarNode<S
 
 pub fn run() {
     let config = Signal::new(ShellConfig::load());
-    let active_theme_id = Signal::new(creamui_theme::active_theme_id());
+    let appearance = Signal::new(load_system_appearance());
     let view = Signal::new(Section::Theme);
     let nav = SidebarNavController::new();
     let wallpaper_color_picker = ColorPickerController::new();
     let desktop_icons_color_picker = ColorPickerController::new();
+    let appearance_accent_picker = ColorPickerController::new();
+    let appearance_custom_accent = Signal::new(false);
     let account_list = users::list_accounts();
     let profile = users::ProfileControllers::load(&account_list);
     let users = Signal::new(account_list);
@@ -169,7 +187,7 @@ pub fn run() {
     let shortcut_settings = sections::window::ShortcutState::load();
     polkit::ensure_kde_agent();
     let window: Rc<RefCell<Option<WindowHandle>>> = Rc::new(RefCell::new(None));
-    let initial_theme = creamui_theme::active_theme();
+    let initial_theme = appearance.peek().theme;
 
     AppBuilder::new()
         .on_started(move |app| {
@@ -194,12 +212,14 @@ pub fn run() {
                     build(
                         size,
                         &config,
-                        &active_theme_id,
+                        &appearance,
                         &view,
                         &nav,
                         &window,
                         &wallpaper_color_picker,
                         &desktop_icons_color_picker,
+                        &appearance_accent_picker,
+                        &appearance_custom_accent,
                         &users,
                         &profile,
                         &icons,
@@ -213,15 +233,35 @@ pub fn run() {
         .run();
 }
 
+fn load_system_appearance() -> creamui_theme::ResolvedAppearance {
+    match creamui_theme_loader::SystemThemeLoader::new().load() {
+        Ok(appearance) => appearance,
+        Err(error) => {
+            eprintln!("settings: failed to load CreamUI system appearance: {error}");
+            let theme = creamui_theme_loader::builtin_theme();
+            let variant_id = theme.default_variant.clone();
+            let resolved = theme.default_theme();
+            creamui_theme::ResolvedAppearance {
+                theme_id: theme.id,
+                variant_id,
+                accent: resolved.colors.accent,
+                theme: resolved,
+            }
+        }
+    }
+}
+
 fn build(
     size: Size,
     config: &Signal<ShellConfig>,
-    active_theme_id: &Signal<String>,
+    appearance: &Signal<creamui_theme::ResolvedAppearance>,
     view: &Signal<Section>,
     nav: &SidebarNavController<Section>,
     window: &Rc<RefCell<Option<WindowHandle>>>,
     wallpaper_color_picker: &ColorPickerController,
     desktop_icons_color_picker: &ColorPickerController,
+    appearance_accent_picker: &ColorPickerController,
+    appearance_custom_accent: &Signal<bool>,
     users: &Signal<Vec<users::Account>>,
     profile: &users::ProfileControllers,
     icons: &SettingsIcons,
@@ -269,7 +309,15 @@ fn build(
     );
 
     let content = match current {
-        Section::Theme => sections::appearance::build(size, active_theme_id, window),
+        Section::Theme => sections::appearance::build(
+            size,
+            appearance,
+            window,
+            appearance_accent_picker,
+            appearance_custom_accent,
+        ),
+        Section::IconPack => sections::asset_packs::icon_packs(size, config),
+        Section::Sound => sections::asset_packs::sound_themes(size, config),
         Section::Wallpaper => sections::wallpaper::build(
             size,
             config,
@@ -293,7 +341,11 @@ fn build(
         Section::Profile => users::build(size, profile),
         Section::User(username) => users::account_view(size, &account_list, &username),
         Section::CreateUser => users::create_user_view(size),
-        Section::Appearance | Section::Taskbar | Section::WindowBehaviour | Section::Users => {
+        Section::Appearance
+        | Section::Desktop
+        | Section::Taskbar
+        | Section::WindowBehaviour
+        | Section::Users => {
             unreachable!("sidebar parents are not selectable")
         }
     };

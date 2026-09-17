@@ -1,4 +1,6 @@
-use crate::panels::chrome::{fat_slider, hero_card, panel_header, BORDER, CARD, CARD_RADIUS};
+use crate::panels::chrome::{
+    fat_slider, hero_card, panel_header, shell_border, shell_card, CARD_RADIUS,
+};
 use coconut_api::brightness::BrightnessIntegration;
 use creamui_core::layout::FlexDirection;
 use creamui_core::{BoxedWidget, Size};
@@ -22,7 +24,7 @@ pub fn build(
     let set_brightness = brightness_level.clone();
 
     Box::new(jsx! {
-        <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={16.0} gap={12.0} background={CARD} border={(BORDER, 1.0)} corner_radius={CARD_RADIUS}>
+        <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={16.0} gap={12.0} background={shell_card()} border={(shell_border(), 1.0)} corner_radius={CARD_RADIUS}>
             {panel_header("BRIGHTNESS", on_back)}
             {hero_card("brightness", value_text.clone(), "Display".to_owned())}
             {fat_slider("brightness", "Brightness", value, value_text, SLIDER_W, None, move |level| {

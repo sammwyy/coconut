@@ -13,7 +13,7 @@ use creamui_macros::jsx;
 use creamui_reactive::Signal;
 use creamui_render::platform::DragIcon;
 use creamui_render::{AppHandle, WindowHandle};
-use creamui_theme::Color;
+use creamui_theme::{use_theme, Color, ColorScheme};
 use creamui_widgets::layout::{fixed, Align, Justify};
 use creamui_widgets::{clamp_to_lines, row_height_family, RawButton, RawView};
 use std::cell::{Cell, RefCell};
@@ -24,14 +24,7 @@ use std::process::Command;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-pub const BACKGROUND: Color = Color::rgb(29, 37, 48);
-
 const GRID_INSET: f32 = 24.0;
-const ICON_LABEL: Color = Color::rgb(248, 249, 251);
-const ICON_HOVER: Color = Color::rgba(255, 255, 255, 30);
-const ICON_PRESSED: Color = Color::rgba(255, 255, 255, 46);
-const ICON_BORDER: Color = Color::rgba(255, 255, 255, 34);
-const ICON_SELECTED: Color = Color::rgba(120, 170, 255, 56);
 const TRANSPARENT: Color = Color::rgba(0, 0, 0, 0);
 const UNSELECTED_LABEL_LINES: usize = 2;
 const SELECTED_LABEL_LINES: usize = 4;
@@ -69,11 +62,16 @@ struct IconLayout {
     grid_cell_y: f32,
     background: bool,
     background_color: Color,
+    foreground: Color,
+    hover: Color,
+    pressed: Color,
+    border: Color,
+    selection: Color,
     click: ClickAction,
 }
 
 impl IconLayout {
-    fn from_config(config: &DesktopIconsConfig) -> Self {
+    fn from_config(config: &DesktopIconsConfig, colors: ColorScheme) -> Self {
         let icon_box = config.size.max(24.0);
         let scale = icon_box / BASE_ICON;
         let padding = config.padding.clamp(0.0, icon_box / 2.0 - 4.0).max(0.0);
@@ -113,6 +111,11 @@ impl IconLayout {
                 config.background_color.g,
                 config.background_color.b,
             ),
+            foreground: colors.text_primary,
+            hover: colors.surface_hover,
+            pressed: colors.accent_pressed,
+            border: colors.border,
+            selection: colors.selection_background,
             click: config.click,
         }
     }
@@ -184,9 +187,12 @@ impl Default for DesktopState {
 }
 
 impl DesktopState {
-    pub fn start_loading(&self, app: &AppHandle) {
+    pub fn start_loading(&self, app: &AppHandle, icon_theme: String) {
         let entries = self.entries.clone();
-        app.spawn_background(load_entries, move |next| entries.set(next));
+        app.spawn_background(
+            move || load_entries(&icon_theme),
+            move |next| entries.set(next),
+        );
     }
 
     pub fn set_desktop_window(&self, window: WindowHandle) {
@@ -227,7 +233,8 @@ pub fn build(
 ) -> BoxedWidget {
     let shell = config.get();
     let desktop = shell.desktop;
-    let layout = IconLayout::from_config(&desktop.icons);
+    let theme = use_theme();
+    let layout = IconLayout::from_config(&desktop.icons, theme.colors);
     let work_area = usable_area(viewport, work_area.get(), shell.bar.position);
     Box::new(
         RawView::new(
@@ -236,7 +243,7 @@ pub fn build(
                     size: fixed(viewport.width, viewport.height),
                     ..Default::default()
                 })
-                .background(BACKGROUND),
+                .background(theme.colors.surface),
         )
         .with_children(vec![
             wallpaper_layer(desktop),
@@ -386,14 +393,14 @@ fn desktop_icon(
 }
 
 fn icon_content(entry: &DesktopEntry, layout: &IconLayout, selected: bool) -> BoxedWidget {
-    let icon = entry_icon(entry, layout.glyph);
+    let icon = entry_icon(entry, layout.glyph, layout.foreground);
     let fill = if layout.background {
         layout.background_color
     } else {
         TRANSPARENT
     };
     let border = if layout.background {
-        (ICON_BORDER, 1.0)
+        (layout.border, 1.0)
     } else {
         (TRANSPARENT, 0.0)
     };
@@ -410,13 +417,17 @@ fn icon_content(entry: &DesktopEntry, layout: &IconLayout, selected: bool) -> Bo
         max_lines,
     );
     let (tile_width, tile_height) = layout.tile_size(selected);
-    let selection_tint = if selected { ICON_SELECTED } else { TRANSPARENT };
+    let selection_tint = if selected {
+        layout.selection
+    } else {
+        TRANSPARENT
+    };
     Box::new(jsx! {
         <Flex direction={FlexDirection::Column} size={(tile_width, tile_height)} padding={layout.outer_padding} gap={layout.gap} align={Align::Center} justify={Justify::Start} background={selection_tint} corner_radius={layout.hover_radius}>
             <Flex size={(layout.icon_box, layout.icon_box)} align={Align::Center} justify={Justify::Center} background={fill} border={border} corner_radius={layout.corner_radius}>
                 {icon}
             </Flex>
-            <RawText color={ICON_LABEL} font_size={layout.label_font} width={layout.icon_box}>{label}</RawText>
+            <RawText color={layout.foreground} font_size={layout.label_font} width={layout.icon_box}>{label}</RawText>
         </Flex>
     })
 }
@@ -441,7 +452,7 @@ fn free_icon_position(
     }
 }
 
-fn entry_icon(entry: &DesktopEntry, size: f32) -> BoxedWidget {
+fn entry_icon(entry: &DesktopEntry, size: f32, foreground: Color) -> BoxedWidget {
     if let Some(data) = entry.icon.clone() {
         return Box::new(
             Image::new(data)
@@ -459,7 +470,7 @@ fn entry_icon(entry: &DesktopEntry, size: f32) -> BoxedWidget {
             EntryKind::Launcher => "appgrid",
         },
         size,
-        ICON_LABEL,
+        foreground,
     )
 }
 
@@ -470,8 +481,8 @@ fn configured_wallpaper(wallpaper: Option<PathBuf>) -> Option<ImageData> {
         .and_then(|path| ImageData::from_path(path).ok())
 }
 
-fn load_entries() -> Vec<DesktopEntry> {
-    let icon_index = build_icon_index();
+fn load_entries(icon_theme: &str) -> Vec<DesktopEntry> {
+    let icon_index = build_icon_index(icon_theme);
     let mut entries: Vec<_> = fs::read_dir(desktop_directory())
         .ok()
         .into_iter()
@@ -677,8 +688,8 @@ fn icon_style(position: Point, layout: &IconLayout, selected: bool) -> Style {
             ..Default::default()
         })
         .corner_radius(layout.hover_radius)
-        .hover(StateStyle::new().background(ICON_HOVER))
-        .pressed(StateStyle::new().background(ICON_PRESSED))
+        .hover(StateStyle::new().background(layout.hover))
+        .pressed(StateStyle::new().background(layout.pressed))
 }
 
 fn initial_position_in_area(index: usize, layout: &IconLayout, area: Rect) -> Point {
@@ -782,7 +793,7 @@ mod tests {
     use super::*;
 
     fn test_layout() -> IconLayout {
-        IconLayout::from_config(&DesktopIconsConfig::default())
+        IconLayout::from_config(&DesktopIconsConfig::default(), ColorScheme::default())
     }
 
     #[test]

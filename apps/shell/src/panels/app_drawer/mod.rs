@@ -1,7 +1,7 @@
 use crate::icon_theme::{build_icon_index, load_icon, resolve_icon, xdg_data_directories};
 use crate::panels::chrome::{
-    ACCENT, BORDER, CARD, CARD_RADIUS, CONTROL, CONTROL_HOVER, ISLAND_RADIUS, MUTED, PANEL,
-    SELECTED, TEXT,
+    shell_accent, shell_border, shell_card, shell_control, shell_control_hover, shell_muted,
+    shell_panel, shell_selected, shell_text, CARD_RADIUS, ISLAND_RADIUS,
 };
 use creamui_core::layout::{FlexDirection, Style as LayoutStyle};
 use creamui_core::{BoxedWidget, Size, StateStyle, Style, Styled};
@@ -73,14 +73,14 @@ impl AppCatalog {
         }
     }
 
-    pub fn start_loading(&self, app: &AppHandle) {
+    pub fn start_loading(&self, app: &AppHandle, icon_theme: String) {
         let after_scan = self.entries.clone();
         let icon_app = app.clone();
         app.spawn_background(load_apps, move |apps: Vec<AppEntry>| {
             after_scan.set(apps.clone());
             let after_icons = after_scan.clone();
             icon_app.spawn_background(
-                move || resolve_icons(apps),
+                move || resolve_icons(apps, &icon_theme),
                 move |resolved| after_icons.set(resolved),
             );
         });
@@ -110,7 +110,7 @@ pub fn build(
         let message = if loaded { "No matches" } else { "Scanning" };
         Box::new(jsx! {
             <Flex grow={1.0} size={(580.0, 396.0)} align={Align::Center} justify={Justify::Center}>
-                <RawText color={MUTED} font_size={16.0}>{message}</RawText>
+                <RawText color={shell_muted()} font_size={16.0}>{message}</RawText>
             </Flex>
         })
     } else {
@@ -136,8 +136,8 @@ pub fn build(
     let search = Box::new(
         TextInput::controlled_with_style(search_style(), &state.query)
             .placeholder("Search apps")
-            .background(PANEL)
-            .border(BORDER, 1.0)
+            .background(shell_panel())
+            .border(shell_border(), 1.0)
             .corner_radius(ISLAND_RADIUS)
             .layout(search_style()),
     ) as BoxedWidget;
@@ -147,17 +147,17 @@ pub fn build(
         .unwrap_or_else(|| Box::new(Flex::row().size(34.0, 34.0)) as BoxedWidget);
     let scroll = Box::new(
         ScrollView::controlled(scroll_style(), state.scroll.clone())
-            .background(PANEL)
-            .border(BORDER, 1.0)
+            .background(shell_panel())
+            .border(shell_border(), 1.0)
             .corner_radius(ISLAND_RADIUS)
             .child(content),
     ) as BoxedWidget;
     let title = user_name();
 
     Box::new(jsx! {
-        <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={14.0} gap={10.0} background={CARD} border={(BORDER, 1.0)} corner_radius={CARD_RADIUS}>
+        <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={14.0} gap={10.0} background={shell_card()} border={(shell_border(), 1.0)} corner_radius={CARD_RADIUS}>
             <Flex direction={FlexDirection::Row} align={Align::Center}>
-                <RawText color={TEXT} font_size={18.0}>{title}</RawText>
+                <RawText color={shell_text()} font_size={18.0}>{title}</RawText>
                 <Flex grow={1.0} />
                 {settings}
             </Flex>
@@ -188,15 +188,15 @@ fn app_card(app: &AppEntry) -> BoxedWidget {
         })
         .unwrap_or_else(|| {
             Box::new(jsx! {
-                <Flex size={(48.0, 48.0)} align={Align::Center} justify={Justify::Center} background={ACCENT} corner_radius={14.0}>
-                    <RawText color={TEXT} font_size={20.0}>{app.name.chars().next().unwrap_or('•').to_uppercase().to_string()}</RawText>
+                <Flex size={(48.0, 48.0)} align={Align::Center} justify={Justify::Center} background={shell_accent()} corner_radius={14.0}>
+                    <RawText color={shell_text()} font_size={20.0}>{app.name.chars().next().unwrap_or('•').to_uppercase().to_string()}</RawText>
                 </Flex>
             })
         });
     Box::new(jsx! {
         <Flex direction={FlexDirection::Column} size={(TILE, TILE_H)} padding={10.0} gap={8.0} align={Align::Center} justify={Justify::Center}>
             {icon}
-            <RawText color={MUTED} font_size={11.0}>{short_name(&app.name)}</RawText>
+            <RawText color={shell_muted()} font_size={11.0}>{short_name(&app.name)}</RawText>
         </Flex>
     })
 }
@@ -362,8 +362,8 @@ fn load_windows_apps() -> Vec<AppEntry> {
     apps
 }
 
-fn resolve_icons(mut apps: Vec<AppEntry>) -> Vec<AppEntry> {
-    let icon_index = build_icon_index();
+fn resolve_icons(mut apps: Vec<AppEntry>, icon_theme: &str) -> Vec<AppEntry> {
+    let icon_index = build_icon_index(icon_theme);
     for app in &mut apps {
         app.icon = app
             .icon_name
@@ -506,10 +506,10 @@ fn app_style() -> Style {
             size: fixed(TILE, TILE_H),
             ..Default::default()
         })
-        .background(PANEL)
+        .background(shell_panel())
         .corner_radius(14.0)
-        .hover(StateStyle::new().background(CONTROL_HOVER))
-        .pressed(StateStyle::new().background(SELECTED))
+        .hover(StateStyle::new().background(shell_control_hover()))
+        .pressed(StateStyle::new().background(shell_selected()))
 }
 
 fn search_style() -> creamui_core::layout::Style {
@@ -554,10 +554,10 @@ fn settings_button_style() -> Style {
             size: fixed(34.0, 34.0),
             ..Default::default()
         })
-        .background(CONTROL)
+        .background(shell_control())
         .corner_radius(9.0)
-        .hover(StateStyle::new().background(CONTROL_HOVER))
-        .pressed(StateStyle::new().background(SELECTED))
+        .hover(StateStyle::new().background(shell_control_hover()))
+        .pressed(StateStyle::new().background(shell_selected()))
 }
 
 fn settings_button(program: PathBuf) -> BoxedWidget {
@@ -565,7 +565,7 @@ fn settings_button(program: PathBuf) -> BoxedWidget {
         RawButton::new(settings_button_style(), move || {
             open_settings(program.clone())
         })
-        .child(Box::new(Icon::new(Symbol::Sliders, MUTED).size(18.0)) as BoxedWidget),
+        .child(Box::new(Icon::new(Symbol::Sliders, shell_muted()).size(18.0)) as BoxedWidget),
     )
 }
 

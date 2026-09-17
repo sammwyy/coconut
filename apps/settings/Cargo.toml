@@ -18,8 +18,9 @@ creamui-image = { path = "../../../creamui/crates/image", features = ["webp", "j
 creamui-jsx = { path = "../../../creamui/crates/jsx" }
 creamui-macros = { path = "../../../creamui/crates/macros" }
 creamui-reactive = { path = "../../../creamui/crates/reactive" }
-creamui-render = { path = "../../../creamui/crates/render", features = ["platform-wayland"] }
+creamui-render = { path = "../../../creamui/crates/render", features = ["platform-wayland", "system-theme"] }
 creamui-theme = { path = "../../../creamui/crates/theme" }
+creamui-theme-loader = { path = "../../../creamui/crates/theme-loader" }
 creamui-widgets = { path = "../../../creamui/crates/widgets" }
 image-rs = { package = "image", version = "0.25.10", default-features = false, features = ["png", "jpeg", "webp"] }
 dbus = "0.9"

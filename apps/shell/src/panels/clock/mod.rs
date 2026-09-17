@@ -1,4 +1,6 @@
-use crate::panels::chrome::{BORDER, CARD, CARD_RADIUS, MUTED, PANEL, TEXT};
+use crate::panels::chrome::{
+    shell_border, shell_card, shell_muted, shell_panel, shell_text, CARD_RADIUS,
+};
 use chrono::Local;
 use creamui_core::layout::{FlexDirection, Style as LayoutStyle};
 use creamui_core::{BoxedWidget, Painter, Rect, Size, Style, TextAlign, Widget};
@@ -10,8 +12,8 @@ pub const HEIGHT: u32 = 188;
 
 pub fn build(_: Size) -> BoxedWidget {
     Box::new(jsx! {
-        <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={16.0} gap={12.0} background={CARD} border={(BORDER, 1.0)} corner_radius={CARD_RADIUS}>
-            <Flex direction={FlexDirection::Column} size={(248.0, 122.0)} padding={10.0} gap={4.0} align={Align::Center} justify={Justify::Center} background={PANEL} border={(BORDER, 1.0)} corner_radius={14.0}>
+        <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={16.0} gap={12.0} background={shell_card()} border={(shell_border(), 1.0)} corner_radius={CARD_RADIUS}>
+            <Flex direction={FlexDirection::Column} size={(248.0, 122.0)} padding={10.0} gap={4.0} align={Align::Center} justify={Justify::Center} background={shell_panel()} border={(shell_border(), 1.0)} corner_radius={14.0}>
                 {Box::new(LiveTime) as BoxedWidget}
                 {Box::new(LiveDate) as BoxedWidget}
             </Flex>
@@ -38,7 +40,7 @@ impl Widget for LiveTime {
         painter.fill_text_font(
             rect,
             &time,
-            TEXT,
+            shell_text(),
             56.0,
             TextAlign::Center,
             None,
@@ -62,7 +64,7 @@ impl Widget for LiveDate {
         painter.fill_text_font(
             rect,
             &date,
-            MUTED,
+            shell_muted(),
             14.0,
             TextAlign::Center,
             None,
@@ -88,13 +90,22 @@ impl Widget for LiveFooter {
         painter.fill_text_font(
             rect,
             &weekday,
-            MUTED,
+            shell_muted(),
             14.0,
             TextAlign::Start,
             None,
             false,
             false,
         );
-        painter.fill_text_font(rect, &year, MUTED, 14.0, TextAlign::End, None, false, false);
+        painter.fill_text_font(
+            rect,
+            &year,
+            shell_muted(),
+            14.0,
+            TextAlign::End,
+            None,
+            false,
+            false,
+        );
     }
 }

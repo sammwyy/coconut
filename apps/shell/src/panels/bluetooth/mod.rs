@@ -1,7 +1,8 @@
 use crate::icons::pixel_icon;
 use crate::panels::chrome::{
     action_button, compact_switch, detail_row, icon_button, list_row, panel_header, section_label,
-    BORDER, CARD, CARD_RADIUS, ISLAND_RADIUS, LIST_WIDTH, MUTED, PANEL, TEXT,
+    shell_border, shell_card, shell_muted, shell_panel, shell_text, CARD_RADIUS, ISLAND_RADIUS,
+    LIST_WIDTH,
 };
 use coconut_api::bluetooth::{BluetoothDevice, BluetoothIntegration};
 use creamui_core::layout::{Dimension, FlexDirection, Style as LayoutStyle};
@@ -101,14 +102,14 @@ pub fn build(
 
     let scroll_view = Box::new(
         ScrollView::controlled(scroll_style(), scroll)
-            .background(PANEL)
-            .border(BORDER, 1.0)
+            .background(shell_panel())
+            .border(shell_border(), 1.0)
             .corner_radius(ISLAND_RADIUS)
             .child(Box::new(list)),
     ) as BoxedWidget;
 
     Box::new(jsx! {
-        <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={16.0} gap={12.0} background={CARD} border={(BORDER, 1.0)} corner_radius={CARD_RADIUS}>
+        <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={16.0} gap={12.0} background={shell_card()} border={(shell_border(), 1.0)} corner_radius={CARD_RADIUS}>
             {panel_header("BLUETOOTH", on_back)}
             {scroll_view}
         </Flex>
@@ -125,7 +126,9 @@ fn paired_device_row(device: &BluetoothDevice, view: &Signal<Option<String>>) ->
     } else {
         "Paired"
     };
-    let trailing = device.connected.then(|| pixel_icon("check", 14.0, TEXT));
+    let trailing = device
+        .connected
+        .then(|| pixel_icon("check", 14.0, shell_text()));
     let address = device.address.clone();
     let view = view.clone();
     let on_click = Rc::new(move || view.set(Some(address.clone())));
@@ -267,7 +270,7 @@ fn build_detail(
         .child(action_button("trash", "Forget", forget_action));
 
     Box::new(jsx! {
-        <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={16.0} gap={12.0} background={CARD} border={(BORDER, 1.0)} corner_radius={CARD_RADIUS}>
+        <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={16.0} gap={12.0} background={shell_card()} border={(shell_border(), 1.0)} corner_radius={CARD_RADIUS}>
             {panel_header(&device.name, Some(on_back))}
             {Box::new(rows) as BoxedWidget}
             {Box::new(actions) as BoxedWidget}
@@ -290,7 +293,7 @@ fn devices_section_header(
     };
     Box::new(jsx! {
         <Flex direction={FlexDirection::Row} align={Align::Center} gap={8.0} padding={4.0}>
-            <RawText color={MUTED} font_size={11.0} align={TextAlign::Start}>"DEVICES"</RawText>
+            <RawText color={shell_muted()} font_size={11.0} align={TextAlign::Start}>"DEVICES"</RawText>
             {compact_switch(powered, on_toggle_power)}
             <Flex grow={1.0} />
             {action}
@@ -301,7 +304,7 @@ fn devices_section_header(
 fn empty_row(message: &str) -> BoxedWidget {
     Box::new(jsx! {
         <Flex padding={10.0} align={Align::Center} justify={Justify::Center}>
-            <RawText color={MUTED} font_size={12.0}>{message.to_owned()}</RawText>
+            <RawText color={shell_muted()} font_size={12.0}>{message.to_owned()}</RawText>
         </Flex>
     })
 }

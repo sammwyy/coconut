@@ -12,7 +12,7 @@ use creamui_core::{
 use creamui_image::{Image, ImageData, ImageFit};
 use creamui_macros::jsx;
 use creamui_reactive::Signal;
-use creamui_theme::{Color, Theme};
+use creamui_theme::{use_theme, Color};
 use creamui_widgets::layout::{fixed, Align, Flex, Justify};
 use creamui_widgets::{Icon, RawButton, RawMarquee, Symbol};
 use std::collections::HashMap;
@@ -29,16 +29,33 @@ const MAX_TASKS: usize = 10;
 const CLOCK_WIDTH: f32 = 60.0;
 const EDGE_GAP: f32 = 16.0;
 
-const BAR: Color = Color::rgba(20, 21, 22, 248);
-const ISLAND: Color = Color::rgba(39, 40, 42, 245);
-const ISLAND_BORDER: Color = Color::rgba(255, 255, 255, 20);
-const CONTROL: Color = Color::rgba(255, 255, 255, 12);
-const CONTROL_HOVER: Color = Color::rgba(255, 255, 255, 26);
-const SELECTED: Color = Color::rgba(255, 255, 255, 42);
-const PRIMARY: Color = Color::rgb(244, 244, 245);
-const MUTED: Color = Color::rgb(166, 168, 171);
-
-pub struct CreamTheme;
+fn bar_color() -> Color {
+    use_theme().colors.surface
+}
+fn island_color() -> Color {
+    use_theme().colors.surface_elevated
+}
+fn island_border() -> Color {
+    use_theme().colors.border
+}
+fn control_color() -> Color {
+    use_theme().colors.surface_hover
+}
+fn control_hover() -> Color {
+    use_theme().colors.surface_hover
+}
+fn selected_color() -> Color {
+    use_theme().colors.selection_background
+}
+fn accent_color() -> Color {
+    use_theme().colors.accent
+}
+fn primary_color() -> Color {
+    use_theme().colors.text_primary
+}
+fn muted_color() -> Color {
+    use_theme().colors.text_secondary
+}
 
 #[derive(Clone)]
 pub struct BarActions {
@@ -70,12 +87,6 @@ pub struct SystemStatus {
     pub bluetooth_connected: bool,
     pub volume: f32,
     pub volume_muted: bool,
-}
-
-impl CreamTheme {
-    pub fn theme() -> Theme {
-        creamui_theme::active_theme()
-    }
 }
 
 /// Widget ids known to the bar. Any other id in `shell.toml`'s
@@ -128,9 +139,9 @@ pub fn build_dock(
     }
 
     let launcher_background = if launcher_open.get() {
-        SELECTED
+        selected_color()
     } else {
-        CONTROL
+        control_color()
     };
     let (tasks, task_count) = window_strip(
         windows,
@@ -151,7 +162,7 @@ pub fn build_dock(
 
     let weather_condition: BoxedWidget = Box::new(RawMarquee::new(
         weather.bar_condition(),
-        PRIMARY,
+        primary_color(),
         12.0,
         58.0,
     ));
@@ -160,8 +171,8 @@ pub fn build_dock(
             .with_click_position(move |point| weather_click(point))
             .child(Box::new(jsx! {
                 <Flex direction={FlexDirection::Row} size={(120.0, 32.0)} padding={6.0} gap={4.0} align={Align::Center}>
-                    {pixel_icon(weather_icon(weather), 14.0, PRIMARY)}
-                    <RawText color={PRIMARY} font_size={12.0} width={32.0} align={TextAlign::Start}>{weather.bar_temperature()}</RawText>
+                    {pixel_icon(weather_icon(weather), 14.0, primary_color())}
+                    <RawText color={primary_color()} font_size={12.0} width={32.0} align={TextAlign::Start}>{weather.bar_temperature()}</RawText>
                     {weather_condition}
                 </Flex>
             })),
@@ -179,7 +190,7 @@ pub fn build_dock(
         RawButton::new(square_style(launcher_background), || {})
             .with_click_position(move |point| drawer_click(point))
             .child(Box::new(jsx! {
-                <Flex size={(32.0, 32.0)} align={Align::Center} justify={Justify::Center}>{pixel_icon("appgrid", 21.0, PRIMARY)}</Flex>
+                <Flex size={(32.0, 32.0)} align={Align::Center} justify={Justify::Center}>{pixel_icon("appgrid", 21.0, primary_color())}</Flex>
             })),
     );
     let control_button = match config.tray.mode {
@@ -255,7 +266,7 @@ pub fn build_dock(
 
     Box::new(jsx! {
         <Flex direction={FlexDirection::Column} size={(viewport.width, viewport.height)} justify={Justify::End} align={Align::Center} background={Color::rgba(0, 0, 0, 0)}>
-            <Flex direction={FlexDirection::Row} size={(viewport.width, BAR_HEIGHT)} align={Align::Center} background={BAR} border={(ISLAND_BORDER, 1.0)}>
+            <Flex direction={FlexDirection::Row} size={(viewport.width, BAR_HEIGHT)} align={Align::Center} background={bar_color()} border={(island_border(), 1.0)}>
                 {left}
                 {center}
                 {right}
@@ -345,7 +356,7 @@ fn build_side_dock(
     );
 
     Box::new(jsx! {
-        <Flex direction={FlexDirection::Column} size={(viewport.width, viewport.height)} align={Align::Center} background={BAR} border={(ISLAND_BORDER, 1.0)}>
+        <Flex direction={FlexDirection::Column} size={(viewport.width, viewport.height)} align={Align::Center} background={bar_color()} border={(island_border(), 1.0)}>
             {top}
             {middle}
             {bottom}
@@ -376,7 +387,7 @@ fn side_section(
 fn side_icon(name: &'static str) -> BoxedWidget {
     Box::new(jsx! {
         <Flex size={(SIDE_ITEM_SIZE, SIDE_ITEM_SIZE)} align={Align::Center} justify={Justify::Center}>
-            {pixel_icon(name, 19.0, PRIMARY)}
+            {pixel_icon(name, 19.0, primary_color())}
         </Flex>
     })
 }
@@ -400,8 +411,8 @@ fn side_app_launcher_widget(
         .padding(4.0)
         .gap(6.0)
         .align(Align::Center)
-        .background(ISLAND)
-        .border(ISLAND_BORDER, 1.0)
+        .background(island_color())
+        .border(island_border(), 1.0)
         .corner_radius(12.0)
         .child(drawer);
 
@@ -429,7 +440,11 @@ fn side_icon_button_styled(
 ) -> BoxedWidget {
     Box::new(
         RawButton::new(
-            side_button_style(if selected { SELECTED } else { CONTROL }),
+            side_button_style(if selected {
+                selected_color()
+            } else {
+                control_color()
+            }),
             || {},
         )
         .with_click_position(move |point| on_click(point))
@@ -439,11 +454,11 @@ fn side_icon_button_styled(
 
 fn side_symbol_button(symbol: Symbol, on_click: Rc<dyn Fn(Point)>) -> BoxedWidget {
     Box::new(
-        RawButton::new(side_button_style(CONTROL), || {})
+        RawButton::new(side_button_style(control_color()), || {})
             .with_click_position(move |point| on_click(point))
             .child(Box::new(jsx! {
                 <Flex size={(SIDE_ITEM_SIZE, SIDE_ITEM_SIZE)} align={Align::Center} justify={Justify::Center}>
-                    {Box::new(Icon::new(symbol, PRIMARY).size(19.0)) as BoxedWidget}
+                    {Box::new(Icon::new(symbol, primary_color()).size(19.0)) as BoxedWidget}
                 </Flex>
             })),
     )
@@ -461,7 +476,7 @@ fn compact_playback_widget(
     let duration_widget: BoxedWidget = duration
         .map(|duration| {
             Box::new(jsx! {
-                <RawText color={MUTED} font_size={10.0} align={TextAlign::End}>{duration}</RawText>
+                <RawText color={muted_color()} font_size={10.0} align={TextAlign::End}>{duration}</RawText>
             }) as BoxedWidget
         })
         .unwrap_or_else(|| Box::new(Flex::row().size(0.0, 0.0)));
@@ -491,7 +506,7 @@ fn compact_media_button(icon: &'static str, on_click: Rc<dyn Fn()>) -> BoxedWidg
             .with_click_position(move |_| on_click())
             .child(Box::new(jsx! {
                 <Flex size={(18.0, 24.0)} align={Align::Center} justify={Justify::Center}>
-                    {pixel_icon(icon, 13.0, PRIMARY)}
+                    {pixel_icon(icon, 13.0, primary_color())}
                 </Flex>
             })),
     )
@@ -529,12 +544,12 @@ fn bar_section(
 
 fn logo_widget() -> BoxedWidget {
     Box::new(jsx! {
-        <Flex direction={FlexDirection::Row} size={(48.0, 32.0)} padding={5.0} gap={2.0} align={Align::Center} background={ISLAND} border={(ISLAND_BORDER, 1.0)} corner_radius={9.0}>
-            <Flex size={(5.0, 5.0)} background={PRIMARY} corner_radius={2.5} />
-            <Flex size={(3.0, 3.0)} background={MUTED} corner_radius={1.5} />
-            <Flex size={(3.0, 3.0)} background={MUTED} corner_radius={1.5} />
-            <Flex size={(3.0, 3.0)} background={MUTED} corner_radius={1.5} />
-            <Flex size={(3.0, 3.0)} background={MUTED} corner_radius={1.5} />
+        <Flex direction={FlexDirection::Row} size={(48.0, 32.0)} padding={5.0} gap={2.0} align={Align::Center} background={island_color()} border={(island_border(), 1.0)} corner_radius={9.0}>
+            <Flex size={(5.0, 5.0)} background={primary_color()} corner_radius={2.5} />
+            <Flex size={(3.0, 3.0)} background={muted_color()} corner_radius={1.5} />
+            <Flex size={(3.0, 3.0)} background={muted_color()} corner_radius={1.5} />
+            <Flex size={(3.0, 3.0)} background={muted_color()} corner_radius={1.5} />
+            <Flex size={(3.0, 3.0)} background={muted_color()} corner_radius={1.5} />
         </Flex>
     })
 }
@@ -545,7 +560,7 @@ fn app_launcher_widget(
     tasks: BoxedWidget,
 ) -> BoxedWidget {
     Box::new(jsx! {
-        <Flex direction={FlexDirection::Row} size={(dock_width, 40.0)} padding={4.0} gap={6.0} align={Align::Center} background={ISLAND} border={(ISLAND_BORDER, 1.0)} corner_radius={12.0}>
+        <Flex direction={FlexDirection::Row} size={(dock_width, 40.0)} padding={4.0} gap={6.0} align={Align::Center} background={island_color()} border={(island_border(), 1.0)} corner_radius={12.0}>
             {drawer_button}
             {tasks}
         </Flex>
@@ -584,26 +599,26 @@ fn control_button_widget(
         .justify(Justify::Center)
         .align(Align::Center);
     if tray.wifi.shows_in_bar() {
-        row = row.child(pixel_icon(network_icon, 16.0, PRIMARY));
+        row = row.child(pixel_icon(network_icon, 16.0, primary_color()));
         icon_count += 1;
     }
     if tray.brightness.shows_in_bar() {
-        row = row.child(pixel_icon("brightness", 16.0, PRIMARY));
+        row = row.child(pixel_icon("brightness", 16.0, primary_color()));
         icon_count += 1;
     }
     if tray.volume.shows_in_bar() {
-        row = row.child(pixel_icon(volume_icon, 16.0, PRIMARY));
+        row = row.child(pixel_icon(volume_icon, 16.0, primary_color()));
         icon_count += 1;
     }
     if tray.bluetooth.shows_in_bar() {
-        row = row.child(pixel_icon(bluetooth_icon, 16.0, PRIMARY));
+        row = row.child(pixel_icon(bluetooth_icon, 16.0, primary_color()));
         icon_count += 1;
     }
     if tray.battery.shows_in_bar() {
-        row = row.child(pixel_icon(battery_icon, 16.0, PRIMARY));
+        row = row.child(pixel_icon(battery_icon, 16.0, primary_color()));
         icon_count += 1;
     }
-    row = row.child(pixel_icon("chevron-up", 13.0, PRIMARY));
+    row = row.child(pixel_icon("chevron-up", 13.0, primary_color()));
     let width = control_button_width(icon_count);
     row = row.size(width, 32.0);
 
@@ -661,7 +676,7 @@ fn tray_icon_button(icon: &str, on_click: Rc<dyn Fn(Point)>) -> BoxedWidget {
         RawButton::new(island_button_style(32.0, 32.0), || {})
             .with_click_position(move |point| on_click(point))
             .child(Box::new(jsx! {
-                <Flex size={(32.0, 32.0)} align={Align::Center} justify={Justify::Center}>{pixel_icon(icon, 16.0, PRIMARY)}</Flex>
+                <Flex size={(32.0, 32.0)} align={Align::Center} justify={Justify::Center}>{pixel_icon(icon, 16.0, primary_color())}</Flex>
             })),
     )
 }
@@ -718,7 +733,7 @@ impl Widget for LiveClock {
         painter.fill_text_font(
             rect,
             &self.text,
-            PRIMARY,
+            primary_color(),
             13.0,
             TextAlign::Center,
             None,
@@ -768,7 +783,7 @@ fn dock_width(tasks: usize) -> f32 {
 fn task_icon(window: &OpenWindow, active: bool) -> BoxedWidget {
     let indicator_width = if active { 10.0 } else { 3.0 };
     let indicator_color = if active {
-        PRIMARY
+        accent_color()
     } else {
         Color::rgba(0, 0, 0, 0)
     };
@@ -792,8 +807,8 @@ fn app_icon(window: &OpenWindow) -> BoxedWidget {
         );
     }
     Box::new(jsx! {
-        <Flex size={(TASK_ICON_SIZE, TASK_ICON_SIZE)} align={Align::Center} justify={Justify::Center} background={CONTROL} corner_radius={7.0}>
-            <RawText color={PRIMARY} font_size={11.0} align={TextAlign::Center}>{fallback_icon(&window.app_name)}</RawText>
+        <Flex size={(TASK_ICON_SIZE, TASK_ICON_SIZE)} align={Align::Center} justify={Justify::Center} background={control_color()} corner_radius={7.0}>
+            <RawText color={primary_color()} font_size={11.0} align={TextAlign::Center}>{fallback_icon(&window.app_name)}</RawText>
         </Flex>
     })
 }
@@ -900,8 +915,8 @@ fn square_style(background: Color) -> Style {
         })
         .background(background)
         .corner_radius(8.0)
-        .hover(StateStyle::new().background(CONTROL_HOVER))
-        .pressed(StateStyle::new().background(PRIMARY))
+        .hover(StateStyle::new().background(control_hover()))
+        .pressed(StateStyle::new().background(primary_color()))
 }
 
 fn side_button_style(background: Color) -> Style {
@@ -912,8 +927,8 @@ fn side_button_style(background: Color) -> Style {
         })
         .background(background)
         .corner_radius(8.0)
-        .hover(StateStyle::new().background(CONTROL_HOVER))
-        .pressed(StateStyle::new().background(PRIMARY))
+        .hover(StateStyle::new().background(control_hover()))
+        .pressed(StateStyle::new().background(primary_color()))
 }
 
 fn island_button_style(width: f32, height: f32) -> Style {
@@ -922,15 +937,15 @@ fn island_button_style(width: f32, height: f32) -> Style {
             size: fixed(width, height),
             ..Default::default()
         })
-        .background(ISLAND)
+        .background(island_color())
         .corner_radius(9.0)
-        .hover(StateStyle::new().background(CONTROL_HOVER))
-        .pressed(StateStyle::new().background(SELECTED))
+        .hover(StateStyle::new().background(control_hover()))
+        .pressed(StateStyle::new().background(selected_color()))
 }
 
 fn window_style(active: bool) -> Style {
     let background = if active {
-        Color::rgba(255, 255, 255, 18)
+        selected_color()
     } else {
         Color::rgba(0, 0, 0, 0)
     };
@@ -941,8 +956,8 @@ fn window_style(active: bool) -> Style {
         })
         .background(background)
         .corner_radius(10.0)
-        .hover(StateStyle::new().background(CONTROL_HOVER))
-        .pressed(StateStyle::new().background(SELECTED))
+        .hover(StateStyle::new().background(control_hover()))
+        .pressed(StateStyle::new().background(selected_color()))
 }
 
 fn media_control_style() -> Style {
@@ -952,8 +967,8 @@ fn media_control_style() -> Style {
             ..Default::default()
         })
         .corner_radius(6.0)
-        .hover(StateStyle::new().background(CONTROL_HOVER))
-        .pressed(StateStyle::new().background(PRIMARY))
+        .hover(StateStyle::new().background(control_hover()))
+        .pressed(StateStyle::new().background(primary_color()))
 }
 
 #[cfg(test)]

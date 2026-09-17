@@ -1,5 +1,7 @@
 use crate::icons::pixel_icon;
-use crate::panels::chrome::{BORDER, CARD, CARD_RADIUS, MUTED, PANEL, TEXT};
+use crate::panels::chrome::{
+    shell_border, shell_card, shell_muted, shell_panel, shell_text, CARD_RADIUS,
+};
 use crate::weather::{condition_label, format_temperature, icon_for, HourlyForecast, WeatherState};
 use chrono::{DateTime, Local};
 use creamui_core::layout::FlexDirection;
@@ -53,23 +55,23 @@ pub fn build(_: Size, state: Signal<WeatherState>) -> BoxedWidget {
     }
 
     Box::new(jsx! {
-        <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={18.0} gap={14.0} background={CARD} border={(BORDER, 1.0)} corner_radius={CARD_RADIUS}>
+        <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={18.0} gap={14.0} background={shell_card()} border={(shell_border(), 1.0)} corner_radius={CARD_RADIUS}>
             <Flex direction={FlexDirection::Row} gap={10.0} align={Align::Center}>
-                {pixel_icon(icon, 52.0, TEXT)}
+                {pixel_icon(icon, 52.0, shell_text())}
                 <Flex direction={FlexDirection::Column} gap={3.0} grow={1.0}>
-                    <RawText color={TEXT} font_size={52.0}>{temperature}</RawText>
+                    <RawText color={shell_text()} font_size={52.0}>{temperature}</RawText>
                 </Flex>
                 <Flex direction={FlexDirection::Column} gap={3.0} grow={1.0}>
-                    <RawText color={MUTED} font_size={16.0}>{condition}</RawText>
-                    <RawText color={TEXT} font_size={13.0}>{city}</RawText>
-                    <RawText color={MUTED} font_size={11.0}>{location_codes}</RawText>
+                    <RawText color={shell_muted()} font_size={16.0}>{condition}</RawText>
+                    <RawText color={shell_text()} font_size={13.0}>{city}</RawText>
+                    <RawText color={shell_muted()} font_size={11.0}>{location_codes}</RawText>
                 </Flex>
             </Flex>
             <Flex direction={FlexDirection::Row} gap={10.0}>
                 {stat_chip("H", high)}
                 {stat_chip("L", low)}
             </Flex>
-            <Flex direction={FlexDirection::Row} padding={8.0} background={PANEL} border={(BORDER, 1.0)} corner_radius={12.0}>
+            <Flex direction={FlexDirection::Row} padding={8.0} background={shell_panel()} border={(shell_border(), 1.0)} corner_radius={12.0}>
                 {Box::new(strip) as BoxedWidget}
             </Flex>
         </Flex>
@@ -78,9 +80,9 @@ pub fn build(_: Size, state: Signal<WeatherState>) -> BoxedWidget {
 
 fn stat_chip(label: &str, value: String) -> BoxedWidget {
     Box::new(jsx! {
-        <Flex direction={FlexDirection::Row} grow={1.0} padding={10.0} gap={10.0} align={Align::Center} justify={Justify::Center} background={PANEL} border={(BORDER, 1.0)} corner_radius={10.0}>
-            <RawText color={MUTED} font_size={12.0}>{label}</RawText>
-            <RawText color={TEXT} font_size={16.0}>{value}</RawText>
+        <Flex direction={FlexDirection::Row} grow={1.0} padding={10.0} gap={10.0} align={Align::Center} justify={Justify::Center} background={shell_panel()} border={(shell_border(), 1.0)} corner_radius={10.0}>
+            <RawText color={shell_muted()} font_size={12.0}>{label}</RawText>
+            <RawText color={shell_text()} font_size={16.0}>{value}</RawText>
         </Flex>
     })
 }
@@ -91,9 +93,9 @@ fn hour_cell(hour: &HourlyForecast) -> BoxedWidget {
         .unwrap_or_else(|_| "--".into());
     Box::new(jsx! {
         <Flex direction={FlexDirection::Column} size={(44.0, 64.0)} gap={5.0} align={Align::Center} justify={Justify::Center}>
-            <RawText color={MUTED} font_size={10.0}>{label}</RawText>
-            {pixel_icon(icon_for(&hour.condition), 18.0, TEXT)}
-            <RawText color={TEXT} font_size={13.0}>{format_temperature(hour.temperature_c)}</RawText>
+            <RawText color={shell_muted()} font_size={10.0}>{label}</RawText>
+            {pixel_icon(icon_for(&hour.condition), 18.0, shell_text())}
+            <RawText color={shell_text()} font_size={13.0}>{format_temperature(hour.temperature_c)}</RawText>
         </Flex>
     })
 }

@@ -8,7 +8,6 @@ use std::rc::Rc;
 /// recolors it to match the active/hover state and theme the same way a
 /// built-in [`Symbol`] would.
 pub struct SettingsIcons {
-    pub appearance: IconSource,
     pub paintbrush: IconSource,
     pub wallpaper: IconSource,
     pub position: IconSource,
@@ -20,9 +19,6 @@ pub struct SettingsIcons {
 impl SettingsIcons {
     pub fn load() -> Self {
         Self {
-            appearance: decode(include_bytes!(
-                "../../../assets/icons/settings/appearance.svg"
-            )),
             paintbrush: decode(include_bytes!(
                 "../../../assets/icons/settings/paintbrush.svg"
             )),
@@ -60,7 +56,6 @@ mod tests {
     fn every_bundled_icon_decodes() {
         let icons = SettingsIcons::load();
         for icon in [
-            &icons.appearance,
             &icons.paintbrush,
             &icons.wallpaper,
             &icons.position,
