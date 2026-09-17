@@ -11,11 +11,12 @@ use creamui_core::{BoxedWidget, Point, Rect, Size, StateStyle, Style, Styled};
 use creamui_image::{Image, ImageData, ImageFit};
 use creamui_macros::jsx;
 use creamui_reactive::Signal;
-use creamui_render::AppHandle;
+use creamui_render::platform::DragIcon;
+use creamui_render::{AppHandle, WindowHandle};
 use creamui_theme::Color;
 use creamui_widgets::layout::{fixed, Align, Justify};
 use creamui_widgets::{clamp_to_lines, row_height_family, RawButton, RawView};
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -38,6 +39,11 @@ const DOUBLE_CLICK: Duration = Duration::from_millis(400);
 /// Rasterizes SVG icons bigger than any configured icon size, so scaling
 /// down (rather than up) is what `ImageFit::Contain` ends up doing.
 const ICON_RASTER_SIZE: u32 = 160;
+/// Identifies a desktop-icon drag to whatever it's dropped on. Not consumed
+/// by anything yet (nothing accepts drops today) — offered so a real drop
+/// target can eventually recognize the drag without renegotiating the
+/// protocol from scratch.
+const DESKTOP_ICON_MIME: &str = "application/x.coconut.desktop-icon";
 
 // Ratios lifted from the original hardcoded layout (58px icon box, 8px
 // gaps), used to scale the tile, gaps and label together whenever the icon
@@ -142,7 +148,6 @@ fn tile_height_for(
 #[derive(Clone)]
 pub struct DesktopState {
     positions: Signal<HashMap<usize, Point>>,
-    drag_preview: Signal<Option<DragPreview>>,
     entries: Signal<Vec<DesktopEntry>>,
     selected: Signal<Option<usize>>,
     /// The pointer's grab offset within the dragged icon, captured once at
@@ -152,6 +157,13 @@ pub struct DesktopState {
     /// to live on `DesktopState`, which reconciliation never touches, or a
     /// rebuild mid-drag would silently reset it to zero.
     grab: Rc<Cell<Point>>,
+    /// The candidate drop position from the most recent `with_drag` call,
+    /// read back by `with_drag_end` — same reconciliation-survival reason
+    /// as `grab`. The compositor renders the dragged icon itself now, so
+    /// this is the only state a drag needs; no preview widget to rebuild.
+    drag_target: Rc<Cell<Option<Point>>>,
+    /// The desktop window, so a drag can call `start_drag` on it.
+    desktop_window: Rc<RefCell<Option<WindowHandle>>>,
     /// The last single click's icon and time, for the same reconciliation
     /// reason as `grab` — used to detect a second click as a double click.
     last_click: Rc<Cell<Option<(usize, Instant)>>>,
@@ -161,10 +173,11 @@ impl Default for DesktopState {
     fn default() -> Self {
         Self {
             positions: Signal::new(HashMap::new()),
-            drag_preview: Signal::new(None),
             entries: Signal::new(Vec::new()),
             selected: Signal::new(None),
             grab: Rc::new(Cell::new(Point::default())),
+            drag_target: Rc::new(Cell::new(None)),
+            desktop_window: Rc::new(RefCell::new(None)),
             last_click: Rc::new(Cell::new(None)),
         }
     }
@@ -174,6 +187,10 @@ impl DesktopState {
     pub fn start_loading(&self, app: &AppHandle) {
         let entries = self.entries.clone();
         app.spawn_background(load_entries, move |next| entries.set(next));
+    }
+
+    pub fn set_desktop_window(&self, window: WindowHandle) {
+        *self.desktop_window.borrow_mut() = Some(window);
     }
 }
 
@@ -202,12 +219,6 @@ struct DesktopEntry {
     target: DesktopTarget,
 }
 
-#[derive(Clone)]
-struct DragPreview {
-    position: Point,
-    entry: DesktopEntry,
-}
-
 pub fn build(
     viewport: Size,
     state: DesktopState,
@@ -232,34 +243,6 @@ pub fn build(
             widget_layer(),
             icon_layer(viewport, state, layout, work_area),
         ]),
-    )
-}
-
-pub fn build_drag_overlay(
-    viewport: Size,
-    state: DesktopState,
-    config: Signal<ShellConfig>,
-) -> BoxedWidget {
-    let layout = IconLayout::from_config(&config.get().desktop.icons);
-    let children = state
-        .drag_preview
-        .get()
-        .map(|preview| {
-            vec![Box::new(
-                RawView::new(icon_style(preview.position, &layout, false)).child(icon_content(
-                    &preview.entry,
-                    &layout,
-                    false,
-                )),
-            ) as BoxedWidget]
-        })
-        .unwrap_or_default();
-    Box::new(
-        RawView::new(LayoutStyle {
-            size: fixed(viewport.width, viewport.height),
-            ..Default::default()
-        })
-        .with_children(children),
     )
 }
 
@@ -336,9 +319,10 @@ fn desktop_icon(
     let click_state = state.clone();
     let click_action = layout.click;
     let grab = state.grab.clone();
-    let drag_start = grab.clone();
+    let drag_start_grab = grab.clone();
+    let drag_start_window = state.desktop_window.clone();
+    let drag_start_icon = entry.icon.clone();
     let drag_state = state.clone();
-    let drag_entry = entry.clone();
     let drop_state = state.clone();
     Box::new(
         RawButton::new(
@@ -366,7 +350,15 @@ fn desktop_icon(
             },
         )
         .with_drag_start(move |local, _| {
-            drag_start.set(local);
+            drag_start_grab.set(local);
+            if let Some(window) = drag_start_window.borrow().as_ref() {
+                let icon = drag_start_icon.as_ref().map(|data| DragIcon {
+                    pixels: data.pixels().to_vec(),
+                    width: data.width(),
+                    height: data.height(),
+                });
+                let _ = window.start_drag(&[DESKTOP_ICON_MIME.to_owned()], icon);
+            }
         })
         .with_drag(move |local, rect| {
             let next = free_icon_position(
@@ -378,18 +370,11 @@ fn desktop_icon(
                 work_area,
                 &layout,
             );
-            drag_state.drag_preview.set(Some(DragPreview {
-                position: next,
-                entry: drag_entry.clone(),
-            }));
+            drag_state.drag_target.set(Some(next));
         })
         .with_drag_end(move || {
-            let dropped = drop_state
-                .drag_preview
-                .peek()
-                .map_or(position, |preview| preview.position);
+            let dropped = drop_state.drag_target.take().unwrap_or(position);
             let position = icon_position_in_area(dropped, viewport, &layout, work_area);
-            drop_state.drag_preview.set(None);
             if drop_state.positions.peek().get(&index) != Some(&position) {
                 drop_state.positions.update(|positions| {
                     positions.insert(index, position);

@@ -32,6 +32,16 @@ use std::{
 };
 
 pub fn run() {
+    // F3 can't reach the desktop/wallpaper layer-shell surface (it never
+    // gets keyboard interactivity, by design, so it doesn't steal focus
+    // from other apps) — start the overlay visible everywhere instead of
+    // relying on the toggle.
+    #[cfg(feature = "perf-metrics")]
+    creamui_devtools::init_with(creamui_devtools::DevtoolsOptions {
+        initially_visible: true,
+        ..Default::default()
+    });
+
     let initial_config = ShellConfig::load();
     warn_unknown_widgets(&initial_config.bar.layout);
     let popup_position_state = Rc::new(Cell::new(initial_config.bar.position));
@@ -106,7 +116,6 @@ pub fn run() {
             }
             let desktop_state = desktop_state.clone();
             desktop_state.start_loading(&app);
-            let drag_overlay_state = desktop_state.clone();
             app.append_window(
                 WindowOptions {
                     title: "Coconut Desktop".into(),
@@ -122,7 +131,11 @@ pub fn run() {
                 desktop::BACKGROUND,
                 {
                     let themed_windows = themed_windows.clone();
-                    move |window| themed_windows.borrow_mut().push(window)
+                    let desktop_state = desktop_state.clone();
+                    move |window| {
+                        desktop_state.set_desktop_window(window.clone());
+                        themed_windows.borrow_mut().push(window);
+                    }
                 },
                 {
                     let config = config.clone();
@@ -133,34 +146,6 @@ pub fn run() {
                             desktop_state.clone(),
                             config.clone(),
                             work_area.clone(),
-                        )
-                    }
-                },
-            );
-            app.append_window(
-                WindowOptions {
-                    title: "Coconut Drag Overlay".into(),
-                    width: 1280,
-                    height: 720,
-                    decorations: false,
-                    resizable: false,
-                    transparent: true,
-                    role: creamui_render::platform::WindowRole::Overlay,
-                    theme: CreamTheme::theme(),
-                    ..Default::default()
-                },
-                Color::rgba(0, 0, 0, 0),
-                {
-                    let themed_windows = themed_windows.clone();
-                    move |window| themed_windows.borrow_mut().push(window)
-                },
-                {
-                    let config = config.clone();
-                    move |viewport| {
-                        desktop::build_drag_overlay(
-                            viewport,
-                            drag_overlay_state.clone(),
-                            config.clone(),
                         )
                     }
                 },
