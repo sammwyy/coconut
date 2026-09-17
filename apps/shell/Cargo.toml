@@ -9,11 +9,20 @@ license = "Apache-2.0"
 name = "coconut"
 path = "src/main.rs"
 
+[features]
+perf-metrics = [
+    "creamui-core/perf-metrics",
+    "creamui-render/perf-metrics",
+    "creamui-devtools/perf-metrics",
+    "dep:creamui-devtools",
+]
+
 [dependencies]
 coconut-api = { path = "../../crates/api" }
 coconut-core = { path = "../../crates/core" }
 chrono = "0.4"
 creamui-core = { path = "../../../creamui/crates/core" }
+creamui-devtools = { path = "../../../creamui/crates/devtools", optional = true }
 creamui-image = { path = "../../../creamui/crates/image", features = ["webp", "jpeg", "svg"] }
 creamui-jsx = { path = "../../../creamui/crates/jsx" }
 creamui-macros = { path = "../../../creamui/crates/macros" }
