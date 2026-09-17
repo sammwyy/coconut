@@ -11,8 +11,8 @@ use creamui_macros::jsx;
 use creamui_reactive::Signal;
 use creamui_render::{platform::WindowRole, AppBuilder, WindowHandle, WindowOptions};
 use creamui_widgets::{
-    nested_sidebar, ColorPickerController, IconSource, SidebarNavController, SidebarNode, Surface,
-    SurfaceRole, Symbol,
+    nested_sidebar, ColorPickerController, IconSource, ScrollController, SidebarNavController,
+    SidebarNode, Surface, SurfaceRole, Symbol,
 };
 use icons::SettingsIcons;
 use std::cell::RefCell;
@@ -28,7 +28,8 @@ enum Section {
     Wallpaper,
     DesktopIcons,
     Taskbar,
-    General,
+    Dock(usize),
+    AddDock,
     Tray,
     Widgets,
     WindowBehaviour,
@@ -52,14 +53,18 @@ fn category_default(section: Section) -> Section {
     match section {
         Section::Appearance => Section::Theme,
         Section::Desktop => Section::Wallpaper,
-        Section::Taskbar => Section::General,
+        Section::Taskbar => Section::Dock(0),
         Section::WindowBehaviour => Section::Compositor,
         Section::Users => Section::Profile,
         leaf => leaf,
     }
 }
 
-fn tree(accounts: &[users::Account], icons: &SettingsIcons) -> Vec<SidebarNode<Section>> {
+fn tree(
+    accounts: &[users::Account],
+    icons: &SettingsIcons,
+    docks: &[coconut_core::DockConfig],
+) -> Vec<SidebarNode<Section>> {
     let profile_icon = std::env::var("USER")
         .ok()
         .and_then(|username| accounts.iter().find(|account| account.username == username))
@@ -92,12 +97,27 @@ fn tree(accounts: &[users::Account], icons: &SettingsIcons) -> Vec<SidebarNode<S
                 ),
                 SidebarNode::group(
                     Section::Taskbar,
-                    "Taskbar (Coconut)",
-                    vec![
-                        SidebarNode::leaf(Section::General, icons.position.clone(), "Position"),
-                        SidebarNode::leaf(Section::Tray, icons.status.clone(), "Status area"),
-                        SidebarNode::leaf(Section::Widgets, icons.widgets.clone(), "Widgets"),
-                    ],
+                    "Docks (Coconut)",
+                    docks
+                        .iter()
+                        .enumerate()
+                        .map(|(index, dock)| {
+                            SidebarNode::leaf(
+                                Section::Dock(index),
+                                icons.position.clone(),
+                                sections::general::dock_label(index, dock),
+                            )
+                        })
+                        .chain(std::iter::once(SidebarNode::leaf(
+                            Section::AddDock,
+                            icons.position.clone(),
+                            "+ Add dock",
+                        )))
+                        .chain([
+                            SidebarNode::leaf(Section::Tray, icons.status.clone(), "Status area"),
+                            SidebarNode::leaf(Section::Widgets, icons.widgets.clone(), "Widgets"),
+                        ])
+                        .collect(),
                 ),
             ],
         ),
@@ -185,6 +205,7 @@ pub fn run() {
     let wallpaper_gallery = sections::wallpaper::GalleryState::new();
     let window_settings = sections::window::WindowState::load();
     let shortcut_settings = sections::window::ShortcutState::load();
+    let dock_scroll = ScrollController::new(0.0);
     polkit::ensure_kde_agent();
     let window: Rc<RefCell<Option<WindowHandle>>> = Rc::new(RefCell::new(None));
     let initial_theme = appearance.peek().theme;
@@ -226,6 +247,7 @@ pub fn run() {
                         &wallpaper_gallery,
                         &window_settings,
                         &shortcut_settings,
+                        &dock_scroll,
                     )
                 },
             );
@@ -268,6 +290,7 @@ fn build(
     wallpaper_gallery: &sections::wallpaper::GalleryState,
     window_settings: &sections::window::WindowState,
     shortcut_settings: &sections::window::ShortcutState,
+    dock_scroll: &ScrollController,
 ) -> BoxedWidget {
     let theme = creamui_theme::use_theme();
 
@@ -292,16 +315,30 @@ fn build(
     };
     let current = view.get();
     let account_list = users.get();
-    let navigation = tree(&account_list, icons);
+    let docks = config.get().docks;
+    let navigation = tree(&account_list, icons, &docks);
     let select = view.clone();
     let enter_category = view.clone();
+    let add_dock_config = config.clone();
     let sidebar = nested_sidebar(
         sidebar_style,
         &navigation,
         nav,
         Some(&current),
         move |section| {
-            select.set(section);
+            if section == Section::AddDock {
+                let mut new_index = 0;
+                common::update_config(&add_dock_config, |c| {
+                    c.docks.push(coconut_core::DockConfig {
+                        name: None,
+                        ..coconut_core::DockConfig::default()
+                    });
+                    new_index = c.docks.len() - 1;
+                });
+                select.set(Section::Dock(new_index));
+            } else {
+                select.set(section);
+            }
         },
         move |section| {
             enter_category.set(category_default(section));
@@ -328,7 +365,8 @@ fn build(
         Section::DesktopIcons => {
             sections::desktop_icons::build(size, config, desktop_icons_color_picker)
         }
-        Section::General => sections::general::build(size, config),
+        Section::Dock(index) => sections::general::build_dock_page(size, config, &dock_scroll, index),
+        Section::AddDock => sections::general::build_dock_page(size, config, &dock_scroll, 0),
         Section::Tray => sections::tray::build(size, config),
         Section::Widgets => sections::widgets::build(size, config),
         Section::Layout => sections::window::build_layout(size, window_settings),

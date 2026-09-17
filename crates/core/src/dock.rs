@@ -56,6 +56,10 @@ pub struct DockConfig {
     /// as it was.
     #[serde(default = "default_true")]
     pub enabled: bool,
+    /// A human-readable label for this dock in Settings (e.g. "Dockbar").
+    /// `None` falls back to a positional label ("Dock 2", ...) there —
+    /// purely cosmetic, never read by the rendering engine.
+    pub name: Option<String>,
     pub position: DockPosition,
     pub direction: Option<DockDirection>,
     pub align: DockAlign,
@@ -83,6 +87,7 @@ impl Default for DockConfig {
     fn default() -> Self {
         Self {
             enabled: true,
+            name: Some("Dockbar".to_owned()),
             position: DockPosition::default(),
             direction: None,
             align: DockAlign::default(),
