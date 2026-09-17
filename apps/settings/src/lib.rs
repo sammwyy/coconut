@@ -28,6 +28,7 @@ enum Section {
     General,
     Tray,
     Widgets,
+    WindowBehaviour,
     Layout,
     Compositor,
     WorkingArea,
@@ -48,6 +49,7 @@ fn category_default(section: Section) -> Section {
     match section {
         Section::Appearance => Section::Theme,
         Section::Taskbar => Section::General,
+        Section::WindowBehaviour => Section::Compositor,
         Section::Users => Section::Profile,
         leaf => leaf,
     }
@@ -81,46 +83,43 @@ fn tree(accounts: &[users::Account], icons: &SettingsIcons) -> Vec<SidebarNode<S
                         SidebarNode::leaf(Section::Widgets, icons.widgets.clone(), "Widgets"),
                     ],
                 ),
-                SidebarNode::group(
-                    Section::Layout,
-                    "Compositor (Blair)",
-                    vec![
-                        SidebarNode::leaf(
-                            Section::Compositor,
-                            IconSource::Symbol(Symbol::Controls),
-                            "Compositor",
-                        ),
-                        SidebarNode::leaf(
-                            Section::Layout,
-                            IconSource::Symbol(Symbol::Controls),
-                            "Layout",
-                        ),
-                        SidebarNode::leaf(
-                            Section::WorkingArea,
-                            IconSource::Symbol(Symbol::Grid),
-                            "Workspaces",
-                        ),
-                        SidebarNode::leaf(
-                            Section::Effects,
-                            IconSource::Symbol(Symbol::Controls),
-                            "Effects",
-                        ),
-                        SidebarNode::leaf(
-                            Section::Input,
-                            IconSource::Symbol(Symbol::Controls),
-                            "Input",
-                        ),
-                        SidebarNode::leaf(
-                            Section::Focus,
-                            IconSource::Symbol(Symbol::Controls),
-                            "Focus",
-                        ),
-                        SidebarNode::leaf(
-                            Section::Shortcuts,
-                            IconSource::Symbol(Symbol::Controls),
-                            "Shortcuts",
-                        ),
-                    ],
+            ],
+        ),
+        SidebarNode::parent(
+            Section::WindowBehaviour,
+            IconSource::Symbol(Symbol::Controls),
+            "Window behaviour",
+            vec![
+                SidebarNode::leaf(
+                    Section::Compositor,
+                    IconSource::Symbol(Symbol::Controls),
+                    "Compositor",
+                ),
+                SidebarNode::leaf(Section::Layout, IconSource::Symbol(Symbol::Grid), "Layout"),
+                SidebarNode::leaf(
+                    Section::WorkingArea,
+                    IconSource::Symbol(Symbol::Grid),
+                    "Workspaces",
+                ),
+                SidebarNode::leaf(
+                    Section::Effects,
+                    IconSource::Symbol(Symbol::Controls),
+                    "Effects",
+                ),
+                SidebarNode::leaf(
+                    Section::Input,
+                    IconSource::Symbol(Symbol::Controls),
+                    "Input",
+                ),
+                SidebarNode::leaf(
+                    Section::Focus,
+                    IconSource::Symbol(Symbol::Controls),
+                    "Focus",
+                ),
+                SidebarNode::leaf(
+                    Section::Shortcuts,
+                    IconSource::Symbol(Symbol::Keyboard),
+                    "Shortcuts",
                 ),
             ],
         ),
@@ -167,6 +166,7 @@ pub fn run() {
     let icons = SettingsIcons::load();
     let wallpaper_gallery = sections::wallpaper::GalleryState::new();
     let window_settings = sections::window::WindowState::load();
+    let shortcut_settings = sections::window::ShortcutState::load();
     polkit::ensure_kde_agent();
     let window: Rc<RefCell<Option<WindowHandle>>> = Rc::new(RefCell::new(None));
     let initial_theme = creamui_theme::active_theme();
@@ -205,6 +205,7 @@ pub fn run() {
                         &icons,
                         &wallpaper_gallery,
                         &window_settings,
+                        &shortcut_settings,
                     )
                 },
             );
@@ -226,6 +227,7 @@ fn build(
     icons: &SettingsIcons,
     wallpaper_gallery: &sections::wallpaper::GalleryState,
     window_settings: &sections::window::WindowState,
+    shortcut_settings: &sections::window::ShortcutState,
 ) -> BoxedWidget {
     let theme = creamui_theme::use_theme();
 
@@ -287,11 +289,11 @@ fn build(
         Section::Effects => sections::window::build_effects(size, window_settings),
         Section::Input => sections::window::build_input(size, window_settings),
         Section::Focus => sections::window::build_focus(size, window_settings),
-        Section::Shortcuts => sections::window::build_shortcuts(size, window_settings),
+        Section::Shortcuts => sections::window::build_shortcuts(size, shortcut_settings),
         Section::Profile => users::build(size, profile),
         Section::User(username) => users::account_view(size, &account_list, &username),
         Section::CreateUser => users::create_user_view(size),
-        Section::Appearance | Section::Taskbar | Section::Users => {
+        Section::Appearance | Section::Taskbar | Section::WindowBehaviour | Section::Users => {
             unreachable!("sidebar parents are not selectable")
         }
     };

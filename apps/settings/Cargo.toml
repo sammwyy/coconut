@@ -11,6 +11,8 @@ path = "src/main.rs"
 
 [dependencies]
 coconut-core = { path = "../../crates/core" }
+blair-client = { path = "../../../blair/crates/client" }
+blair-protocol = { path = "../../../blair/crates/protocol" }
 creamui-core = { path = "../../../creamui/crates/core" }
 creamui-image = { path = "../../../creamui/crates/image", features = ["webp", "jpeg", "svg"] }
 creamui-jsx = { path = "../../../creamui/crates/jsx" }
@@ -23,3 +25,4 @@ image-rs = { package = "image", version = "0.25.10", default-features = false, f
 dbus = "0.9"
 rfd = "0.17"
 toml = "0.9"
+tokio = { version = "1", features = ["rt"] }

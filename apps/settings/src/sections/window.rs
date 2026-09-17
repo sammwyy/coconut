@@ -1,12 +1,16 @@
-//! File-backed Blair settings.  Blair watches this TOML itself; Settings does
-//! not use its optional D-Bus API to apply compositor configuration.
+//! Blair settings edited through its D-Bus client. Blair validates, applies,
+//! and persists its own configuration.
 use crate::common::{group, row, section};
-use creamui_core::{BoxedWidget, Size};
+use blair_client::BlairClient;
+use blair_protocol::{ShortcutArgument, ShortcutBinding, ShortcutCommand};
+use creamui_core::layout::Style;
+use creamui_core::{BoxedWidget, Key, KeyInput, Size, Styled, Widget};
 use creamui_reactive::Signal;
 use creamui_widgets::{
-    Button, ButtonSize, ButtonState, ButtonVariant, SegmentedControl, Slider, Switch, TextArea,
+    Button, ButtonSize, ButtonState, ButtonVariant, RawButton, SegmentedControl, Select,
+    SelectController, Slider, Switch, Text, TextInput, TextSize,
 };
-use std::path::PathBuf;
+use std::rc::Rc;
 
 const DEFAULT: &str = r#"
 [general]
@@ -49,30 +53,114 @@ corner_radius = 12
 
 pub struct WindowState {
     config: Signal<toml::Value>,
-    path: PathBuf,
+}
+
+/// Editable persistent shortcuts. Blair remains the authority: this state is
+/// populated and committed through `blair-client`, never by editing its TOML.
+pub struct ShortcutState {
+    bindings: Signal<Vec<ShortcutBinding>>,
+    capturing: Signal<Option<usize>>,
+    status: Signal<String>,
+}
+
+impl ShortcutState {
+    pub fn load() -> Self {
+        let (bindings, status) = match load_shortcuts() {
+            Ok(bindings) => (bindings, String::new()),
+            Err(error) => (Vec::new(), format!("Blair is unavailable: {error}")),
+        };
+        Self {
+            bindings: Signal::new(bindings),
+            capturing: Signal::new(None),
+            status: Signal::new(status),
+        }
+    }
+
+    fn save(&self) {
+        let bindings = self.bindings.get();
+        match save_shortcuts(&bindings) {
+            Ok(true) => self.status.set("Saved to Blair".to_owned()),
+            Ok(false) => self.status.set("Blair rejected these shortcuts".to_owned()),
+            Err(error) => self.status.set(format!("Could not save: {error}")),
+        }
+    }
+}
+
+fn blair_runtime() -> Result<tokio::runtime::Runtime, String> {
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|error| error.to_string())
+}
+
+fn load_shortcuts() -> Result<Vec<ShortcutBinding>, String> {
+    let runtime = blair_runtime()?;
+    runtime.block_on(async {
+        BlairClient::connect()
+            .await
+            .map_err(|error| error.to_string())?
+            .configured_shortcuts()
+            .await
+            .map_err(|error| error.to_string())
+    })
+}
+
+fn save_shortcuts(bindings: &[ShortcutBinding]) -> Result<bool, String> {
+    let runtime = blair_runtime()?;
+    runtime.block_on(async {
+        BlairClient::connect()
+            .await
+            .map_err(|error| error.to_string())?
+            .set_configured_shortcuts(bindings)
+            .await
+            .map_err(|error| error.to_string())
+    })
+}
+
+fn load_configuration() -> Result<String, String> {
+    let runtime = blair_runtime()?;
+    runtime.block_on(async {
+        BlairClient::connect()
+            .await
+            .map_err(|error| error.to_string())?
+            .configuration()
+            .await
+            .map_err(|error| error.to_string())
+    })
+}
+
+fn save_configuration(configuration: &str) -> Result<(), String> {
+    let runtime = blair_runtime()?;
+    let saved = runtime.block_on(async {
+        BlairClient::connect()
+            .await
+            .map_err(|error| error.to_string())?
+            .set_configuration(configuration)
+            .await
+            .map_err(|error| error.to_string())
+    })?;
+    saved
+        .then_some(())
+        .ok_or_else(|| "Blair rejected the configuration".to_owned())
 }
 #[derive(Clone)]
 struct Writer {
     config: Signal<toml::Value>,
-    path: PathBuf,
 }
 
 impl WindowState {
     pub fn load() -> Self {
-        let path = config_path();
-        let config = std::fs::read_to_string(&path)
+        let config = load_configuration()
             .ok()
-            .and_then(|s| toml::from_str(&s).ok())
+            .and_then(|document| toml::from_str(&document).ok())
             .unwrap_or_else(|| toml::from_str(DEFAULT).expect("valid built-in Blair TOML"));
         Self {
             config: Signal::new(config),
-            path,
         }
     }
     fn writer(&self) -> Writer {
         Writer {
             config: self.config.clone(),
-            path: self.path.clone(),
         }
     }
     fn hot_reload(&self) -> bool {
@@ -99,18 +187,11 @@ impl Writer {
         }
     }
     fn save(&self) {
-        let result = self
-            .path
-            .parent()
-            .ok_or_else(|| std::io::Error::other("Blair config has no parent"))
-            .and_then(std::fs::create_dir_all)
-            .and_then(|()| {
-                toml::to_string_pretty(&self.config.peek())
-                    .map_err(|e| std::io::Error::other(e.to_string()))
-            })
-            .and_then(|contents| std::fs::write(&self.path, contents));
+        let result = toml::to_string_pretty(&self.config.peek())
+            .map_err(|error| error.to_string())
+            .and_then(|contents| save_configuration(&contents));
         if let Err(error) = result {
-            eprintln!("settings: failed to save Blair TOML: {error}");
+            eprintln!("settings: failed to save Blair configuration: {error}");
         }
     }
 }
@@ -352,33 +433,220 @@ pub fn build_focus(_: Size, state: &WindowState) -> BoxedWidget {
     )
 }
 
-pub fn build_shortcuts(_: Size, state: &WindowState) -> BoxedWidget {
-    let bindings = state
-        .config
-        .get()
-        .get("bindings")
-        .cloned()
-        .unwrap_or(toml::Value::Array(vec![]));
-    let mut root = toml::map::Map::new();
-    root.insert("bindings".into(), bindings);
-    let text = toml::to_string_pretty(&toml::Value::Table(root)).unwrap_or_default();
-    let writer = state.writer();
-    let editor: BoxedWidget = Box::new(
-        TextArea::new(text, move |contents| {
-            if let Ok(document) = toml::from_str::<toml::Value>(&contents) {
-                if let Some(bindings) = document.get("bindings").cloned() {
-                    writer.update(|c| put(c, &["bindings"], bindings));
-                }
-            }
-        })
-        .placeholder("[[bindings]]\nkeys = [\"SUPER\", \"RETURN\"]\nexec = \"foot\""),
-    );
-    finish(
-        state,
+pub fn build_shortcuts(_: Size, state: &ShortcutState) -> BoxedWidget {
+    let bindings = state.bindings.get();
+    let mut body = Vec::new();
+    let add_state = state.bindings.clone();
+    body.push(Box::new(Button::styled(
+        ButtonVariant::Primary,
+        ButtonSize::Sm,
+        "Add shortcut",
+        ButtonState::Normal,
+        move || {
+            add_state.update(|bindings| {
+                bindings.push(ShortcutBinding {
+                    accelerator: String::new(),
+                    command: ShortcutCommand::Close,
+                    argument: None,
+                });
+            });
+        },
+    )) as BoxedWidget);
+
+    for (index, binding) in bindings.into_iter().enumerate() {
+        body.push(shortcut_editor(index, binding, state));
+    }
+
+    let save_state = state.clone_handles();
+    body.push(Box::new(Button::styled(
+        ButtonVariant::Primary,
+        ButtonSize::Md,
+        "Save shortcuts",
+        ButtonState::Normal,
+        move || save_state.save(),
+    )) as BoxedWidget);
+    let status = state.status.get();
+    if !status.is_empty() {
+        body.push(Box::new(Text::secondary(status).size(TextSize::Sm)) as BoxedWidget);
+    }
+    section(
         "Shortcuts",
-        "Edit Blair [[bindings]] TOML. Only valid TOML is committed.",
-        vec![editor],
+        "Shortcuts are recorded here and saved through Blair's live compositor API.",
+        body,
     )
+}
+
+impl ShortcutState {
+    fn clone_handles(&self) -> Self {
+        Self {
+            bindings: self.bindings.clone(),
+            capturing: self.capturing.clone(),
+            status: self.status.clone(),
+        }
+    }
+}
+
+fn shortcut_editor(index: usize, binding: ShortcutBinding, state: &ShortcutState) -> BoxedWidget {
+    let capture = state.capturing.get() == Some(index);
+    let bindings = state.bindings.clone();
+    let capturing = state.capturing.clone();
+    let start_capture = capturing.clone();
+    let recorder = shortcut_recorder(
+        if capture {
+            "Press shortcut…"
+        } else if binding.accelerator.is_empty() {
+            "Record shortcut"
+        } else {
+            &binding.accelerator
+        },
+        move || start_capture.set(Some(index)),
+        move |accelerator| {
+            bindings.update(|items| items[index].accelerator = accelerator);
+            capturing.set(None);
+        },
+    );
+
+    let selected = ShortcutCommand::ALL
+        .iter()
+        .position(|command| *command == binding.command)
+        .unwrap_or(0);
+    let controller = SelectController::new(selected);
+    let command_state = state.bindings.clone();
+    let labels: Vec<&str> = ShortcutCommand::ALL
+        .iter()
+        .map(|command| command.label())
+        .collect();
+    let command: BoxedWidget = Box::new(Select::controlled(&labels, controller).on_select(
+        move |selected| {
+            let command = ShortcutCommand::ALL[selected];
+            command_state.update(|items| {
+                let binding = &mut items[index];
+                binding.command = command;
+                binding.argument = match command.argument() {
+                    ShortcutArgument::None => None,
+                    ShortcutArgument::Workspace => Some("1".to_owned()),
+                    ShortcutArgument::Command => Some(String::new()),
+                };
+            });
+        },
+    ));
+    let mut rows = vec![row("Shortcut", recorder), row("Action", command)];
+    if binding.command.argument() != ShortcutArgument::None {
+        let argument_state = state.bindings.clone();
+        let placeholder = match binding.command.argument() {
+            ShortcutArgument::Workspace => "Workspace number",
+            ShortcutArgument::Command => "Command to run",
+            ShortcutArgument::None => unreachable!(),
+        };
+        let value = binding.argument.unwrap_or_default();
+        rows.push(row(
+            "Argument",
+            Box::new(
+                TextInput::new(value, move |value| {
+                    argument_state.update(|items| items[index].argument = Some(value));
+                })
+                .placeholder(placeholder),
+            ) as BoxedWidget,
+        ));
+    }
+    let clear_state = state.bindings.clone();
+    let remove_state = state.bindings.clone();
+    rows.push(row(
+        "",
+        Box::new(creamui_macros::jsx! {
+            <Flex direction={creamui_core::layout::FlexDirection::Row} gap={8.0}>
+                {Box::new(Button::styled(ButtonVariant::Secondary, ButtonSize::Sm, "Clear", ButtonState::Normal, move || {
+                    clear_state.update(|items| items[index].accelerator.clear());
+                })) as BoxedWidget}
+                {Box::new(Button::styled(ButtonVariant::Destructive, ButtonSize::Sm, "Remove", ButtonState::Normal, move || {
+                    remove_state.update(|items| { if index < items.len() { items.remove(index); } });
+                })) as BoxedWidget}
+            </Flex>
+        }) as BoxedWidget,
+    ));
+    group(rows)
+}
+
+fn shortcut_recorder(
+    label: &str,
+    on_click: impl Fn() + 'static,
+    on_record: impl Fn(String) + 'static,
+) -> BoxedWidget {
+    let theme = creamui_theme::use_theme();
+    let style = Style {
+        size: creamui_core::layout::Size {
+            width: creamui_core::layout::Dimension::Length(200.0),
+            height: creamui_core::layout::Dimension::Length(34.0),
+        },
+        ..Default::default()
+    };
+    let button = RawButton::new(style, on_click)
+        .background(theme.surface_elevated)
+        .border(theme.border_strong, 1.0)
+        .corner_radius(theme.button_radius)
+        .child(Box::new(Text::new(label.to_owned()).size(TextSize::Sm)) as BoxedWidget);
+    Box::new(ShortcutRecorder {
+        inner: button,
+        on_record: Rc::new(on_record),
+    })
+}
+
+struct ShortcutRecorder {
+    inner: RawButton,
+    on_record: Rc<dyn Fn(String)>,
+}
+
+impl Widget for ShortcutRecorder {
+    fn style(&self) -> creamui_core::Style {
+        self.inner.style()
+    }
+    fn style_state(&self) -> creamui_core::StyleState {
+        self.inner.style_state()
+    }
+    fn paint(&self, painter: &mut dyn creamui_core::Painter, rect: creamui_core::Rect) {
+        self.inner.paint(painter, rect)
+    }
+    fn children(&mut self) -> Vec<BoxedWidget> {
+        self.inner.children()
+    }
+    fn focusable(&self) -> bool {
+        true
+    }
+    fn on_click(&self) -> Option<Rc<dyn Fn()>> {
+        self.inner.on_click()
+    }
+    fn cursor_icon(&self) -> Option<creamui_core::CursorIcon> {
+        self.inner.cursor_icon()
+    }
+    fn on_key(&self) -> Option<Rc<dyn Fn(KeyInput)>> {
+        let record = self.on_record.clone();
+        Some(Rc::new(move |input| {
+            let key = match input.key {
+                Key::Char(key) => key.to_ascii_uppercase().to_string(),
+                Key::Enter => "Return".to_owned(),
+                Key::Escape => "Escape".to_owned(),
+                _ => return,
+            };
+            let mut parts = Vec::new();
+            if input.modifiers.ctrl {
+                parts.push("Ctrl");
+            }
+            if input.modifiers.alt {
+                parts.push("Alt");
+            }
+            if input.modifiers.shift {
+                parts.push("Shift");
+            }
+            if input.modifiers.logo {
+                parts.push("Super");
+            }
+            if parts.is_empty() {
+                return;
+            }
+            parts.push(&key);
+            record(parts.join("+"));
+        }))
+    }
 }
 
 fn finish(
@@ -412,13 +680,6 @@ fn slider(
             })
         })) as BoxedWidget,
     )
-}
-fn config_path() -> PathBuf {
-    std::env::var_os("XDG_CONFIG_HOME")
-        .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("blair/config.toml")
 }
 fn at<'a>(v: &'a toml::Value, path: &[&str]) -> Option<&'a toml::Value> {
     path.iter().try_fold(v, |current, key| current.get(*key))
