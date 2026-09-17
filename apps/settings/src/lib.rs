@@ -29,7 +29,12 @@ enum Section {
     Tray,
     Widgets,
     Layout,
+    Compositor,
     WorkingArea,
+    Effects,
+    Input,
+    Focus,
+    Shortcuts,
     Users,
     Profile,
     User(String),
@@ -48,11 +53,7 @@ fn category_default(section: Section) -> Section {
     }
 }
 
-fn tree(
-    accounts: &[users::Account],
-    icons: &SettingsIcons,
-    blair_available: bool,
-) -> Vec<SidebarNode<Section>> {
+fn tree(accounts: &[users::Account], icons: &SettingsIcons) -> Vec<SidebarNode<Section>> {
     let profile_icon = std::env::var("USER")
         .ok()
         .and_then(|username| accounts.iter().find(|account| account.username == username))
@@ -83,22 +84,43 @@ fn tree(
                 SidebarNode::group(
                     Section::Layout,
                     "Compositor (Blair)",
-                    if blair_available {
-                        vec![
-                            SidebarNode::leaf(
-                                Section::Layout,
-                                IconSource::Symbol(Symbol::Controls),
-                                "Layout",
-                            ),
-                            SidebarNode::leaf(
-                                Section::WorkingArea,
-                                IconSource::Symbol(Symbol::Controls),
-                                "Working area",
-                            ),
-                        ]
-                    } else {
-                        Vec::new()
-                    },
+                    vec![
+                        SidebarNode::leaf(
+                            Section::Compositor,
+                            IconSource::Symbol(Symbol::Controls),
+                            "Compositor",
+                        ),
+                        SidebarNode::leaf(
+                            Section::Layout,
+                            IconSource::Symbol(Symbol::Controls),
+                            "Layout",
+                        ),
+                        SidebarNode::leaf(
+                            Section::WorkingArea,
+                            IconSource::Symbol(Symbol::Grid),
+                            "Workspaces",
+                        ),
+                        SidebarNode::leaf(
+                            Section::Effects,
+                            IconSource::Symbol(Symbol::Controls),
+                            "Effects",
+                        ),
+                        SidebarNode::leaf(
+                            Section::Input,
+                            IconSource::Symbol(Symbol::Controls),
+                            "Input",
+                        ),
+                        SidebarNode::leaf(
+                            Section::Focus,
+                            IconSource::Symbol(Symbol::Controls),
+                            "Focus",
+                        ),
+                        SidebarNode::leaf(
+                            Section::Shortcuts,
+                            IconSource::Symbol(Symbol::Controls),
+                            "Shortcuts",
+                        ),
+                    ],
                 ),
             ],
         ),
@@ -144,7 +166,7 @@ pub fn run() {
     let users = Signal::new(account_list);
     let icons = SettingsIcons::load();
     let wallpaper_gallery = sections::wallpaper::GalleryState::new();
-    let window_settings = sections::window::WindowState::connect();
+    let window_settings = sections::window::WindowState::load();
     polkit::ensure_kde_agent();
     let window: Rc<RefCell<Option<WindowHandle>>> = Rc::new(RefCell::new(None));
     let initial_theme = creamui_theme::active_theme();
@@ -182,7 +204,7 @@ pub fn run() {
                         &profile,
                         &icons,
                         &wallpaper_gallery,
-                        window_settings.as_ref(),
+                        &window_settings,
                     )
                 },
             );
@@ -203,7 +225,7 @@ fn build(
     profile: &users::ProfileControllers,
     icons: &SettingsIcons,
     wallpaper_gallery: &sections::wallpaper::GalleryState,
-    window_settings: Option<&sections::window::WindowState>,
+    window_settings: &sections::window::WindowState,
 ) -> BoxedWidget {
     let theme = creamui_theme::use_theme();
 
@@ -228,7 +250,7 @@ fn build(
     };
     let current = view.get();
     let account_list = users.get();
-    let navigation = tree(&account_list, icons, window_settings.is_some());
+    let navigation = tree(&account_list, icons);
     let select = view.clone();
     let enter_category = view.clone();
     let sidebar = nested_sidebar(
@@ -259,14 +281,13 @@ fn build(
         Section::General => sections::general::build(size, config),
         Section::Tray => sections::tray::build(size, config),
         Section::Widgets => sections::widgets::build(size, config),
-        Section::Layout => sections::window::build_layout(
-            size,
-            window_settings.expect("Blair settings are available"),
-        ),
-        Section::WorkingArea => sections::window::build_working_area(
-            size,
-            window_settings.expect("Blair settings are available"),
-        ),
+        Section::Layout => sections::window::build_layout(size, window_settings),
+        Section::Compositor => sections::window::build_general(size, window_settings),
+        Section::WorkingArea => sections::window::build_working_area(size, window_settings),
+        Section::Effects => sections::window::build_effects(size, window_settings),
+        Section::Input => sections::window::build_input(size, window_settings),
+        Section::Focus => sections::window::build_focus(size, window_settings),
+        Section::Shortcuts => sections::window::build_shortcuts(size, window_settings),
         Section::Profile => users::build(size, profile),
         Section::User(username) => users::account_view(size, &account_list, &username),
         Section::CreateUser => users::create_user_view(size),
