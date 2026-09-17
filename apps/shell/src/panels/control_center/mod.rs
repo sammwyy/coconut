@@ -293,7 +293,10 @@ pub fn build_with_integrations(
             },
         )))
     } else {
-        Box::new(jsx! { <Flex/> })
+        // Keep the same grown, styled island even with nothing to show —
+        // an unstyled `<Flex/>` collapses to zero height, leaving a gap of
+        // bare (transparent) window below the wifi/battery cards instead.
+        Box::new(slider_container())
     };
     let volume_card: BoxedWidget = if tray.volume.shows_in_panel() {
         Box::new(slider_container().child(fat_slider(
@@ -309,12 +312,12 @@ pub fn build_with_integrations(
             },
         )))
     } else {
-        Box::new(jsx! { <Flex/> })
+        Box::new(slider_container())
     };
 
     Box::new(jsx! {
         <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={16.0} gap={12.0} background={shell_card()} border={(shell_border(), 1.0)} corner_radius={CARD_RADIUS}>
-            <RawText color={shell_muted()} font_size={14.0}>"shell_control()"</RawText>
+            <RawText color={shell_muted()} font_size={14.0}>"CONTROL"</RawText>
             {Box::new(device_row) as BoxedWidget}
             {Box::new(status_row) as BoxedWidget}
             {brightness_card}
