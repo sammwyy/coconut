@@ -58,7 +58,7 @@ pub fn build(_: Size, state: Signal<WeatherState>) -> BoxedWidget {
         <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={18.0} gap={14.0} background={shell_card()} border={(shell_border(), 1.0)} corner_radius={CARD_RADIUS}>
             <Flex direction={FlexDirection::Row} gap={10.0} align={Align::Center}>
                 {pixel_icon(icon, 52.0, shell_text())}
-                <Flex direction={FlexDirection::Column} gap={3.0} grow={1.0}>
+                <Flex direction={FlexDirection::Column} gap={3.0} shrink={0.0}>
                     <RawText color={shell_text()} font_size={52.0}>{temperature}</RawText>
                 </Flex>
                 <Flex direction={FlexDirection::Column} gap={3.0} grow={1.0}>
