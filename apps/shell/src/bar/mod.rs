@@ -116,7 +116,15 @@ pub fn build_dock(
     config: &ShellConfig,
 ) -> BoxedWidget {
     if config.bar.position.is_vertical() {
-        return build_side_dock(viewport, launcher_open, status, clock_text, actions, config);
+        return build_side_dock(
+            viewport,
+            windows,
+            launcher_open,
+            status,
+            clock_text,
+            actions,
+            config,
+        );
     }
 
     let launcher_background = if launcher_open.get() {
@@ -269,6 +277,7 @@ fn weather_icon(weather: &WeatherState) -> &'static str {
 /// avoids truncating text or squeezing controls into an unreadable column.
 fn build_side_dock(
     viewport: Size,
+    windows: Vec<OpenWindow>,
     launcher_open: Signal<bool>,
     _status: SystemStatus,
     _clock_text: Signal<String>,
@@ -293,7 +302,13 @@ fn build_side_dock(
         let selected = launcher_open.get();
         catalog.insert(
             "app_launcher".to_owned(),
-            side_icon_button_styled("appgrid", actions.open_app_drawer.clone(), selected),
+            side_app_launcher_widget(
+                windows,
+                actions.activate_window.clone(),
+                actions.refresh_windows.clone(),
+                actions.open_app_drawer.clone(),
+                selected,
+            ),
         );
     }
     if config.widgets.control_center.enabled {
@@ -368,6 +383,43 @@ fn side_icon(name: &'static str) -> BoxedWidget {
 
 fn side_icon_button(name: &'static str, on_click: Rc<dyn Fn(Point)>) -> BoxedWidget {
     side_icon_button_styled(name, on_click, false)
+}
+
+/// The launcher also serves as the task switcher. Keeping the task icons in
+/// this compact vertical island makes open windows available on side bars
+/// without turning every configured bar section into a separate task list.
+fn side_app_launcher_widget(
+    windows: Vec<OpenWindow>,
+    activate_window: Rc<dyn Fn(String)>,
+    refresh_windows: Rc<dyn Fn()>,
+    open_drawer: Rc<dyn Fn(Point)>,
+    selected: bool,
+) -> BoxedWidget {
+    let drawer = side_icon_button_styled("appgrid", open_drawer, selected);
+    let mut island = Flex::column()
+        .padding(4.0)
+        .gap(6.0)
+        .align(Align::Center)
+        .background(ISLAND)
+        .border(ISLAND_BORDER, 1.0)
+        .corner_radius(12.0)
+        .child(drawer);
+
+    for entry in windows.into_iter().take(MAX_TASKS) {
+        let id = entry.id.clone();
+        let active = entry.active;
+        let activate = activate_window.clone();
+        let refresh = refresh_windows.clone();
+        island = island.child(Box::new(
+            RawButton::new(window_style(active), move || {
+                activate(id.clone());
+                refresh();
+            })
+            .child(task_icon(&entry, active)),
+        ));
+    }
+
+    Box::new(island)
 }
 
 fn side_icon_button_styled(
@@ -682,14 +734,7 @@ fn window_strip(
     refresh_windows: Rc<dyn Fn()>,
 ) -> (BoxedWidget, usize) {
     if windows.is_empty() {
-        return (
-            Box::new(jsx! {
-                <Flex direction={FlexDirection::Row} grow={1.0} align={Align::Center}>
-                    <RawText color={MUTED} font_size={13.0}>"No windows"</RawText>
-                </Flex>
-            }),
-            0,
-        );
+        return (Box::new(Flex::row()), 0);
     }
 
     let count = windows.len().min(MAX_TASKS);
@@ -714,7 +759,7 @@ fn window_strip(
 
 fn dock_width(tasks: usize) -> f32 {
     if tasks == 0 {
-        120.0
+        46.0
     } else {
         46.0 + tasks as f32 * TASK_SIZE + (tasks - 1) as f32 * 6.0
     }
@@ -921,7 +966,7 @@ mod tests {
 
     #[test]
     fn dock_fits_visible_tasks() {
-        assert_eq!(dock_width(0), 120.0);
+        assert_eq!(dock_width(0), 46.0);
         assert_eq!(dock_width(4), 192.0);
     }
 
