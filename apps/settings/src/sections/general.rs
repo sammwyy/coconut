@@ -3,8 +3,8 @@ use coconut_core::{DockConfig, DockPosition, IslandEntry, SectionConfig, ShellCo
 use creamui_core::{BoxedWidget, Size, StateStyle, Style};
 use creamui_reactive::Signal;
 use creamui_theme::use_theme;
-use creamui_widgets::layout::{Align, Flex, Justify};
-use creamui_widgets::{RawButton, SegmentedControl, Switch, Text, TextSize};
+use creamui_widgets::layout::{Align, Flex};
+use creamui_widgets::{RawButton, SegmentedControl, Select, SelectController, Switch, Text, TextSize};
 
 const POSITIONS: [DockPosition; 4] = [
     DockPosition::Top,
@@ -100,8 +100,15 @@ fn dock_group(
         row(&format!("Dock {} enabled", dock_index + 1), enabled_switch),
         row(&format!("Dock {} position", dock_index + 1), position_control),
     ];
+    let section_count = dock.sections.len();
     for (section_index, dock_section) in dock.sections.iter().enumerate() {
-        rows.push(section_row(config, dock_index, section_index, dock_section));
+        rows.push(section_row(
+            config,
+            dock_index,
+            section_index,
+            section_count,
+            dock_section,
+        ));
     }
     rows.push(row(
         "Add a section",
@@ -134,14 +141,15 @@ fn dock_group(
     group(rows)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn section_row(
     config: &Signal<ShellConfig>,
     dock_index: usize,
     section_index: usize,
+    section_count: usize,
     dock_section: &SectionConfig,
 ) -> BoxedWidget {
-    let mut chips = Flex::row().gap(6.0).align(Align::Center).justify(Justify::End);
-    chips = chips.child(Box::new(Switch::new(dock_section.enabled, {
+    let enabled_switch: BoxedWidget = Box::new(Switch::new(dock_section.enabled, {
         let config = config.clone();
         move || {
             update_config(&config, |c| {
@@ -152,41 +160,149 @@ fn section_row(
                 }
             });
         }
-    })));
-    for entry in &dock_section.islands {
-        let id = entry.id.clone();
-        chips = chips.child(text_button(&format!("{id} \u{2715}"), {
+    }));
+    let mut rows = vec![row(
+        &format!("Section {} enabled", section_index + 1),
+        enabled_switch,
+    )];
+
+    let island_count = dock_section.islands.len();
+    for (island_index, entry) in dock_section.islands.iter().enumerate() {
+        rows.push(row(
+            &format!("  {}", entry.id),
+            island_controls(
+                config,
+                dock_index,
+                section_index,
+                section_count,
+                island_index,
+                island_count,
+            ),
+        ));
+    }
+
+    let missing: Vec<&'static str> = KNOWN_ISLAND_IDS
+        .iter()
+        .copied()
+        .filter(|id| !dock_section.islands.iter().any(|entry| entry.id == *id))
+        .collect();
+    if !missing.is_empty() {
+        let controller = SelectController::new(0);
+        let picker: BoxedWidget = Box::new(
+            Select::controlled(&missing, controller)
+                .searchable()
+                .on_select({
+                    let config = config.clone();
+                    move |index: usize| {
+                        let Some(&id) = missing.get(index) else {
+                            return;
+                        };
+                        update_config(&config, |c| {
+                            if let Some(d) = c.docks.get_mut(dock_index) {
+                                if let Some(s) = d.sections.get_mut(section_index) {
+                                    s.islands.push(IslandEntry::with_id(id));
+                                }
+                            }
+                        });
+                    }
+                }),
+        );
+        rows.push(row(&format!("Add to section {}", section_index + 1), picker));
+    }
+
+    Box::new(Flex::column().gap(4.0).with_children(rows))
+}
+
+/// Move/remove controls for one island: "up" swaps it earlier in this
+/// section, or — if it's already first — moves it to the end of the
+/// previous section; "down" is the mirror image into the next section. At
+/// either end of a dock's section list, the corresponding button is simply
+/// omitted rather than wrapping around or crossing into another dock.
+#[allow(clippy::too_many_arguments)]
+fn island_controls(
+    config: &Signal<ShellConfig>,
+    dock_index: usize,
+    section_index: usize,
+    section_count: usize,
+    island_index: usize,
+    island_count: usize,
+) -> BoxedWidget {
+    let mut controls = Flex::row().gap(4.0).align(Align::Center);
+    if island_index > 0 || section_index > 0 {
+        controls = controls.child(text_button("\u{2191}", {
             let config = config.clone();
-            let id = id.clone();
             move || {
                 update_config(&config, |c| {
-                    if let Some(d) = c.docks.get_mut(dock_index) {
-                        if let Some(s) = d.sections.get_mut(section_index) {
-                            s.islands.retain(|entry| entry.id != id);
-                        }
-                    }
+                    move_island_up(c, dock_index, section_index, island_index);
                 });
             }
         }));
     }
-    for &id in KNOWN_ISLAND_IDS {
-        if dock_section.islands.iter().any(|entry| entry.id == id) {
-            continue;
+    if island_index + 1 < island_count || section_index + 1 < section_count {
+        controls = controls.child(text_button("\u{2193}", {
+            let config = config.clone();
+            move || {
+                update_config(&config, |c| {
+                    move_island_down(c, dock_index, section_index, island_index);
+                });
+            }
+        }));
+    }
+    controls = controls.child(text_button("\u{2715}", {
+        let config = config.clone();
+        move || {
+            update_config(&config, |c| {
+                if let Some(d) = c.docks.get_mut(dock_index) {
+                    if let Some(s) = d.sections.get_mut(section_index) {
+                        if island_index < s.islands.len() {
+                            s.islands.remove(island_index);
+                        }
+                    }
+                }
+            });
         }
-        chips = chips.child(text_button(&format!("+ {id}"), {
-            let config = config.clone();
-            move || {
-                update_config(&config, |c| {
-                    if let Some(d) = c.docks.get_mut(dock_index) {
-                        if let Some(s) = d.sections.get_mut(section_index) {
-                            s.islands.push(IslandEntry::with_id(id));
-                        }
-                    }
-                });
-            }
-        }));
+    }));
+    Box::new(controls)
+}
+
+fn move_island_up(config: &mut ShellConfig, dock_index: usize, section_index: usize, island_index: usize) {
+    let Some(dock) = config.docks.get_mut(dock_index) else {
+        return;
+    };
+    if island_index == 0 {
+        if section_index == 0 || island_index >= dock.sections[section_index].islands.len() {
+            return;
+        }
+        let entry = dock.sections[section_index].islands.remove(island_index);
+        dock.sections[section_index - 1].islands.push(entry);
+    } else if island_index < dock.sections[section_index].islands.len() {
+        dock.sections[section_index]
+            .islands
+            .swap(island_index - 1, island_index);
     }
-    row(&format!("Section {}", section_index + 1), Box::new(chips))
+}
+
+fn move_island_down(config: &mut ShellConfig, dock_index: usize, section_index: usize, island_index: usize) {
+    let Some(dock) = config.docks.get_mut(dock_index) else {
+        return;
+    };
+    let Some(current) = dock.sections.get(section_index) else {
+        return;
+    };
+    let last = current.islands.len().saturating_sub(1);
+    if island_index != last {
+        if island_index + 1 < current.islands.len() {
+            dock.sections[section_index]
+                .islands
+                .swap(island_index, island_index + 1);
+        }
+        return;
+    }
+    if section_index + 1 >= dock.sections.len() {
+        return;
+    }
+    let entry = dock.sections[section_index].islands.remove(island_index);
+    dock.sections[section_index + 1].islands.insert(0, entry);
 }
 
 fn text_button(label: &str, on_click: impl Fn() + 'static) -> BoxedWidget {
