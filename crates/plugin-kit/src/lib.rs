@@ -22,6 +22,7 @@ mod plugin;
 mod registry;
 mod state;
 
+pub use chrome::{with_island_chrome, IslandChrome};
 pub use config::{ConfigValue, IslandConfig};
 pub use gap::{parse_gap, Gap};
 pub use icon_theme::{build_icon_index, load_icon, resolve_icon, xdg_data_directories};

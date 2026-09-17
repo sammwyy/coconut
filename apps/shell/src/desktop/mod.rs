@@ -1,7 +1,7 @@
 use crate::bar::DOCK_HEIGHT;
-use coconut_plugin_kit::{build_icon_index, load_icon, pixel_icon, resolve_icon};
 use coconut_api::desktop::DesktopWorkArea;
 use coconut_core::{ClickAction, DesktopIconsConfig, IconShape, ShellConfig, WallpaperMode};
+use coconut_plugin_kit::{build_icon_index, load_icon, pixel_icon, resolve_icon};
 use creamui_core::layout::{
     Dimension, FlexDirection, LengthPercentageAuto, Position, Rect as LayoutRect,
     Size as LayoutSize, Style as LayoutStyle,
@@ -234,7 +234,11 @@ pub fn build(
     let desktop = shell.desktop;
     let theme = use_theme();
     let layout = IconLayout::from_config(&desktop.icons, theme.colors);
-    let dock_position = shell.docks.first().map(|dock| dock.position).unwrap_or_default();
+    let dock_position = shell
+        .docks
+        .first()
+        .map(|dock| dock.position)
+        .unwrap_or_default();
     let work_area = usable_area(viewport, work_area.get(), dock_position);
     Box::new(
         RawView::new(

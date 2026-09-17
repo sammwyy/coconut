@@ -11,7 +11,6 @@ use creamui_widgets::{
 use dbus::arg::{PropMap, RefArg};
 use dbus::blocking::Connection;
 use std::path::PathBuf;
-use std::rc::Rc;
 use std::time::Duration;
 
 #[derive(Clone)]
@@ -31,9 +30,7 @@ pub fn account_icon(account: &Account) -> IconSource {
         .and_then(|path| creamui_image::ImageData::from_path(path).ok())
     {
         return IconSource::Image(IconImage {
-            width: image.width(),
-            height: image.height(),
-            rgba: Rc::from(image.pixels()),
+            image: image.image().clone(),
             monochrome: false,
         });
     }

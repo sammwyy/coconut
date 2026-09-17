@@ -8,7 +8,6 @@ use creamui_theme::Color;
 use creamui_widgets::{Icon, IconImage, IconSource};
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::rc::Rc;
 
 /// Bundled icons are rasterized once, at a size generous enough for any
 /// on-screen use, then tinted to whatever `color` a call site asks for —
@@ -43,9 +42,7 @@ fn decode(bytes: &'static [u8]) -> IconSource {
     let image =
         ImageData::from_svg(bytes, SvgSize::Max(RASTER_SIZE)).expect("bundled icon must decode");
     IconSource::Image(IconImage {
-        width: image.width(),
-        height: image.height(),
-        rgba: Rc::from(image.pixels()),
+        image: image.image().clone(),
         monochrome: true,
     })
 }

@@ -30,10 +30,8 @@ pub enum DockDirection {
     Column,
 }
 
-/// Where sections sit along the dock. Parsed and defaulted today; the actual
-/// positioning is a no-op until sections can declare non-tiling sizes (see
-/// the refactor plan's "Deferred" section) — every section currently tiles
-/// an equal share of the dock's length regardless of this value.
+/// Where a dock's section group sits along its main axis when it is not
+/// configured to fill the available space.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum DockAlign {
@@ -63,6 +61,27 @@ pub struct DockConfig {
     pub position: DockPosition,
     pub direction: Option<DockDirection>,
     pub align: DockAlign,
+    /// Empty space at each end of the dock, in logical pixels.
+    pub edge_gap: f32,
+    /// Empty space between consecutive sections, in logical pixels.
+    pub section_gap: f32,
+    /// When true, sections divide the entire dock length. When false, the
+    /// section group uses up to three equal slots and follows [`Self::align`].
+    #[serde(default = "default_true")]
+    pub fill_available_space: bool,
+    /// Maximum dock length in logical pixels. `None` leaves the panel at the
+    /// compositor-provided length.
+    pub max_length: Option<f32>,
+    /// Space between the dock and the screen edge it is anchored to.
+    pub margin: f32,
+    #[serde(default = "default_true")]
+    pub show_background: bool,
+    #[serde(default = "default_true")]
+    pub show_border: bool,
+    #[serde(default = "default_true")]
+    pub show_island_background: bool,
+    #[serde(default = "default_true")]
+    pub show_island_border: bool,
     #[serde(rename = "section")]
     pub sections: Vec<SectionConfig>,
 }
@@ -91,6 +110,15 @@ impl Default for DockConfig {
             position: DockPosition::default(),
             direction: None,
             align: DockAlign::default(),
+            edge_gap: 16.0,
+            section_gap: 0.0,
+            fill_available_space: true,
+            max_length: None,
+            margin: 0.0,
+            show_background: true,
+            show_border: true,
+            show_island_background: true,
+            show_island_border: true,
             sections: vec![
                 SectionConfig {
                     enabled: true,

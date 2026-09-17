@@ -25,7 +25,9 @@ impl SharedState {
     /// Stores `value`, replacing whatever was previously stored under `T`'s
     /// type (there is at most one value per type in the bag).
     pub fn insert<T: Clone + 'static>(&self, value: T) {
-        self.0.borrow_mut().insert(TypeId::of::<T>(), Box::new(value));
+        self.0
+            .borrow_mut()
+            .insert(TypeId::of::<T>(), Box::new(value));
     }
 
     /// Returns a clone of the value stored under `T`, if any.

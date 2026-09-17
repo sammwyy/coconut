@@ -1,6 +1,6 @@
 use coconut_core::ShellConfig;
 use creamui_core::layout::{Dimension, FlexDirection};
-use creamui_core::{BoxedWidget, Styled};
+use creamui_core::{BoxedWidget, Styled, TextAlign};
 use creamui_macros::jsx;
 use creamui_reactive::Signal;
 use creamui_theme::use_theme;
@@ -13,7 +13,7 @@ pub fn section(title: &str, subtitle: &str, body: Vec<BoxedWidget>) -> BoxedWidg
     Box::new(jsx! {
         <Flex direction={FlexDirection::Column} gap={theme.spacing_large}>
             {Box::new(Heading::xl(title.to_owned())) as BoxedWidget}
-            {Box::new(Text::secondary(subtitle.to_owned()).size(TextSize::Sm)) as BoxedWidget}
+            {Box::new(Text::secondary(subtitle.to_owned()).size(TextSize::Sm).text_align(TextAlign::Start)) as BoxedWidget}
             <Flex direction={FlexDirection::Column} gap={theme.spacing_large} children={body} />
         </Flex>
     })

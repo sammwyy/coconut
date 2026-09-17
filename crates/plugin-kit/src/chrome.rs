@@ -6,12 +6,44 @@ use creamui_theme::{use_theme, Color};
 use creamui_widgets::layout::{fixed, full_width, Align, Flex, Justify};
 use creamui_widgets::{RawButton, RawSlider, RawSwitch};
 use std::rc::Rc;
+use std::{cell::Cell, thread_local};
+
+#[derive(Clone, Copy)]
+pub struct IslandChrome {
+    pub background: bool,
+    pub border: bool,
+}
+
+thread_local! {
+    static ISLAND_CHROME: Cell<IslandChrome> = const { Cell::new(IslandChrome { background: true, border: true }) };
+}
+
+/// Runs an island builder with the dock-specific chrome policy that its
+/// shared palette helpers should use. The policy is scoped to construction,
+/// so multiple docks can use different chrome in the same process.
+pub fn with_island_chrome<T>(chrome: IslandChrome, build: impl FnOnce() -> T) -> T {
+    ISLAND_CHROME.with(|current| {
+        let previous = current.replace(chrome);
+        let output = build();
+        current.set(previous);
+        output
+    })
+}
+
+fn island_chrome() -> IslandChrome {
+    ISLAND_CHROME.with(Cell::get)
+}
 
 pub fn shell_card() -> Color {
     use_theme().colors.surface
 }
 pub fn shell_panel() -> Color {
-    use_theme().colors.surface_elevated
+    let theme = use_theme();
+    if island_chrome().background {
+        theme.colors.surface_elevated
+    } else {
+        Color::rgba(0, 0, 0, 0)
+    }
 }
 pub fn shell_text() -> Color {
     use_theme().colors.text_primary
@@ -35,7 +67,12 @@ pub fn shell_selected() -> Color {
     use_theme().colors.selection_background
 }
 pub fn shell_border() -> Color {
-    use_theme().colors.border
+    let theme = use_theme();
+    if island_chrome().border {
+        theme.colors.border
+    } else {
+        Color::rgba(0, 0, 0, 0)
+    }
 }
 pub fn shell_track() -> Color {
     use_theme().colors.border_strong

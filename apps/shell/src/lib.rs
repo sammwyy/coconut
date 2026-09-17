@@ -15,8 +15,8 @@ use coconut_plugin_clock::{ClockConfig, ClockText};
 use coconut_plugin_current_playing::{
     CurrentPlayback, NextPlayback, PreviousPlayback, SeekPlayback, TogglePlayback,
 };
-use coconut_plugin_kit::{warn_unknown_islands, PanelHost, PluginInitContext, PluginRegistry};
 use coconut_plugin_kit::SharedState;
+use coconut_plugin_kit::{warn_unknown_islands, PanelHost, PluginInitContext, PluginRegistry};
 use coconut_plugin_tray::{
     BatteryRevision, BluetoothPowered, BluetoothRevision, BrightnessLevel, KeepAwakeState,
     NetworkRevision, PowerProfileRevision, ToggleKeepAwake, VolumeLevel, WifiEnabled,
@@ -226,7 +226,11 @@ pub fn run() {
                 },
             );
 
-            schedule_playback_refresh(app.clone(), playback_backend.clone(), playback_state.clone());
+            schedule_playback_refresh(
+                app.clone(),
+                playback_backend.clone(),
+                playback_state.clone(),
+            );
             schedule_clock_refresh(app.clone(), clock_text.clone(), clock_format.clone());
             schedule_change_events(app.clone(), network_changes, network_revision.clone());
             schedule_change_events(app.clone(), bluetooth_changes, bluetooth_revision.clone());
@@ -237,7 +241,12 @@ pub fn run() {
                 power_profile_revision.clone(),
             );
             schedule_brightness_events(app.clone(), poll_brightness, brightness_level.clone());
-            schedule_volume_events(app.clone(), poll_volume, volume_changes, volume_level.clone());
+            schedule_volume_events(
+                app.clone(),
+                poll_volume,
+                volume_changes,
+                volume_level.clone(),
+            );
             if !schedule_window_events(
                 app.clone(),
                 bar_windows_backend.clone(),
@@ -334,10 +343,12 @@ fn append_docks(
             DockPosition::Left => creamui_render::platform::WindowRole::LeftPanel,
             DockPosition::Right => creamui_render::platform::WindowRole::RightPanel,
         };
+        let length = dock.max_length.unwrap_or(800.0).clamp(160.0, 8000.0) as u32;
+        let margin = dock.margin.max(0.0).round() as u32;
         let (width, height) = if position.is_vertical() {
-            (DOCK_WIDTH, 800)
+            (DOCK_WIDTH + margin, length)
         } else {
-            (800, DOCK_HEIGHT)
+            (length, DOCK_HEIGHT + margin)
         };
         let is_primary = index == 0;
         let dock = dock.clone();
@@ -532,7 +543,11 @@ fn wait_for_window_event(
     );
 }
 
-fn schedule_playback_refresh(app: AppHandle, backend: Rc<dyn AudioIntegration>, state: Signal<Option<Playback>>) {
+fn schedule_playback_refresh(
+    app: AppHandle,
+    backend: Rc<dyn AudioIntegration>,
+    state: Signal<Option<Playback>>,
+) {
     let next_app = app.clone();
     let next_backend = backend.clone();
     let next_state = state.clone();
@@ -548,14 +563,22 @@ fn schedule_playback_refresh(app: AppHandle, backend: Rc<dyn AudioIntegration>, 
 /// Wakes an open device panel as soon as its integration's native hook (a
 /// D-Bus signal, a platform event) observes a change; falls back to a
 /// couple-second poll for integrations that expose no such hook.
-fn schedule_change_events(app: AppHandle, listener: Option<coconut_api::ChangeListener>, revision: Signal<()>) {
+fn schedule_change_events(
+    app: AppHandle,
+    listener: Option<coconut_api::ChangeListener>,
+    revision: Signal<()>,
+) {
     match listener {
         Some(listener) => wait_for_change_event(app, listener, revision),
         None => schedule_poll_refresh(app, revision),
     }
 }
 
-fn wait_for_change_event(app: AppHandle, listener: coconut_api::ChangeListener, revision: Signal<()>) {
+fn wait_for_change_event(
+    app: AppHandle,
+    listener: coconut_api::ChangeListener,
+    revision: Signal<()>,
+) {
     let next_app = app.clone();
     let next_listener = listener.clone();
     let next_revision = revision.clone();
@@ -667,7 +690,11 @@ fn wait_for_volume_event(
     );
 }
 
-fn schedule_volume_poll(app: AppHandle, backend: Rc<dyn coconut_api::volume::VolumeIntegration>, level: Signal<f32>) {
+fn schedule_volume_poll(
+    app: AppHandle,
+    backend: Rc<dyn coconut_api::volume::VolumeIntegration>,
+    level: Signal<f32>,
+) {
     let next_app = app.clone();
     let next_backend = backend.clone();
     let next_level = level.clone();

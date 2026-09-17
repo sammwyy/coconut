@@ -206,6 +206,7 @@ pub fn run() {
     let window_settings = sections::window::WindowState::load();
     let shortcut_settings = sections::window::ShortcutState::load();
     let dock_scroll = ScrollController::new(0.0);
+    let dock_tab = Signal::new(sections::general::DockTab::Display);
     polkit::ensure_kde_agent();
     let window: Rc<RefCell<Option<WindowHandle>>> = Rc::new(RefCell::new(None));
     let initial_theme = appearance.peek().theme;
@@ -248,6 +249,7 @@ pub fn run() {
                         &window_settings,
                         &shortcut_settings,
                         &dock_scroll,
+                        &dock_tab,
                     )
                 },
             );
@@ -291,6 +293,7 @@ fn build(
     window_settings: &sections::window::WindowState,
     shortcut_settings: &sections::window::ShortcutState,
     dock_scroll: &ScrollController,
+    dock_tab: &Signal<sections::general::DockTab>,
 ) -> BoxedWidget {
     let theme = creamui_theme::use_theme();
 
@@ -365,8 +368,12 @@ fn build(
         Section::DesktopIcons => {
             sections::desktop_icons::build(size, config, desktop_icons_color_picker)
         }
-        Section::Dock(index) => sections::general::build_dock_page(size, config, &dock_scroll, index),
-        Section::AddDock => sections::general::build_dock_page(size, config, &dock_scroll, 0),
+        Section::Dock(index) => {
+            sections::general::build_dock_page(size, config, &dock_scroll, dock_tab, index)
+        }
+        Section::AddDock => {
+            sections::general::build_dock_page(size, config, &dock_scroll, dock_tab, 0)
+        }
         Section::Tray => sections::tray::build(size, config),
         Section::Widgets => sections::widgets::build(size, config),
         Section::Layout => sections::window::build_layout(size, window_settings),

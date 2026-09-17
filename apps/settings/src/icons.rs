@@ -1,6 +1,5 @@
 use creamui_image::{ImageData, SvgSize};
 use creamui_widgets::{IconImage, IconSource, Symbol};
-use std::rc::Rc;
 
 /// Rasterized versions of the custom sidebar icons in `assets/icons/settings/`,
 /// decoded once at startup and cloned (cheaply — an `Rc` underneath) into the
@@ -36,9 +35,7 @@ impl SettingsIcons {
 fn decode(source: &[u8]) -> IconSource {
     match ImageData::from_svg(source, SvgSize::Max(64)) {
         Ok(image) => IconSource::Image(IconImage {
-            width: image.width(),
-            height: image.height(),
-            rgba: Rc::from(image.pixels()),
+            image: image.image().clone(),
             monochrome: true,
         }),
         Err(error) => {

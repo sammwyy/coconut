@@ -1,7 +1,9 @@
-use coconut_core::{ordered_islands, DockConfig, DockPosition, IslandEntry, SectionConfig};
+use coconut_core::{
+    ordered_islands, DockAlign, DockConfig, DockPosition, IslandEntry, SectionConfig,
+};
 use coconut_plugin_kit::{
-    parse_gap, ConfigValue, Gap, Island, IslandConfig, IslandRenderContext, PluginRegistry,
-    SharedState,
+    parse_gap, with_island_chrome, ConfigValue, Gap, Island, IslandChrome, IslandConfig,
+    IslandRenderContext, PluginRegistry, SharedState,
 };
 use creamui_core::{BoxedWidget, Point, Size, Styled};
 use creamui_theme::{use_theme, Color};
@@ -15,9 +17,6 @@ use std::rc::Rc;
 pub const DOCK_HEIGHT: u32 = 44;
 pub const DOCK_WIDTH: u32 = 52;
 const BAR_HEIGHT: f32 = 44.0;
-/// Padding reserved at the leading/trailing edge of a dock, outside its
-/// first/last section.
-const EDGE_GAP: f32 = 16.0;
 
 fn dock_background() -> Color {
     use_theme().colors.surface
@@ -53,27 +52,48 @@ fn build_horizontal_dock(
 ) -> BoxedWidget {
     let sections: Vec<&SectionConfig> = dock.sections.iter().filter(|s| s.enabled).collect();
     let section_count = sections.len().max(1);
-    let section_width = viewport.width / section_count as f32;
+    let slot_count = if dock.fill_available_space {
+        section_count
+    } else {
+        section_count.max(3)
+    };
+    let section_gap = dock.section_gap.max(0.0);
+    let section_width = (viewport.width - section_gap * sections.len().saturating_sub(1) as f32)
+        .max(0.0)
+        / slot_count as f32;
 
     let mut row = Flex::row()
-        .size(viewport.width, BAR_HEIGHT)
-        .align(Align::Center);
+        .height(BAR_HEIGHT)
+        .align(Align::Center)
+        .justify(dock_justify(dock.align))
+        .gap(section_gap);
+    if dock.fill_available_space {
+        row = row.width(viewport.width);
+    }
     for (index, section) in sections.iter().enumerate() {
         row = row.child(build_row_section(
             section,
-            section_width,
+            dock.fill_available_space.then_some(section_width),
             index == 0,
             index + 1 == sections.len(),
+            dock.edge_gap.max(0.0),
             dock.position,
+            dock.show_island_background,
+            dock.show_island_border,
             registry,
             shared,
             open_panel,
         ));
     }
 
-    Box::new(Flex::column().size(viewport.width, viewport.height).justify(Justify::End).align(Align::Center).background(Color::rgba(0, 0, 0, 0)).child(Box::new(
-        row.background(dock_background()).border(dock_border(), 1.0),
-    )))
+    Box::new(
+        Flex::column()
+            .size(viewport.width, viewport.height)
+            .justify(edge_justify(dock.position))
+            .align(dock_cross_align(dock.align))
+            .background(Color::rgba(0, 0, 0, 0))
+            .child(Box::new(dock_chrome(row, dock))),
+    )
 }
 
 fn build_vertical_dock(
@@ -85,26 +105,47 @@ fn build_vertical_dock(
 ) -> BoxedWidget {
     let sections: Vec<&SectionConfig> = dock.sections.iter().filter(|s| s.enabled).collect();
     let section_count = sections.len().max(1);
-    let section_height = viewport.height / section_count as f32;
+    let slot_count = if dock.fill_available_space {
+        section_count
+    } else {
+        section_count.max(3)
+    };
+    let section_gap = dock.section_gap.max(0.0);
+    let section_height = (viewport.height - section_gap * sections.len().saturating_sub(1) as f32)
+        .max(0.0)
+        / slot_count as f32;
 
     let mut column = Flex::column()
-        .size(viewport.width, viewport.height)
+        .width(DOCK_WIDTH as f32)
         .align(Align::Center)
-        .background(dock_background())
-        .border(dock_border(), 1.0);
+        .justify(dock_justify(dock.align))
+        .gap(section_gap);
+    if dock.fill_available_space {
+        column = column.height(viewport.height);
+    }
     for (index, section) in sections.iter().enumerate() {
         column = column.child(build_column_section(
             section,
-            section_height,
+            dock.fill_available_space.then_some(section_height),
             index == 0,
             index + 1 == sections.len(),
+            dock.edge_gap.max(0.0),
             dock.position,
+            dock.show_island_background,
+            dock.show_island_border,
             registry,
             shared,
             open_panel,
         ));
     }
-    Box::new(column)
+    Box::new(
+        Flex::row()
+            .size(viewport.width, viewport.height)
+            .align(dock_cross_align(dock.align))
+            .justify(edge_justify(dock.position))
+            .background(Color::rgba(0, 0, 0, 0))
+            .child(Box::new(dock_chrome(column, dock))),
+    )
 }
 
 /// One horizontal-dock section: a row of islands, `width` wide, sitting at
@@ -113,10 +154,13 @@ fn build_vertical_dock(
 #[allow(clippy::too_many_arguments)]
 fn build_row_section(
     section: &SectionConfig,
-    width: f32,
+    width: Option<f32>,
     is_first: bool,
     is_last: bool,
+    edge_gap: f32,
     position: DockPosition,
+    island_background: bool,
+    island_border: bool,
     registry: &PluginRegistry,
     shared: &SharedState,
     open_panel: &Rc<dyn Fn(&'static str, Point)>,
@@ -124,16 +168,21 @@ fn build_row_section(
     let justify = section_justify(is_first, is_last);
     let gap = parse_gap(&section.gap);
     let mut row = Flex::row()
-        .size(width, BAR_HEIGHT)
+        .height(BAR_HEIGHT)
         .align(Align::Center)
         .justify(justify);
-    row = apply_gap(row, gap, width);
+    if let Some(width) = width {
+        row = row.width(width);
+    }
+    row = apply_gap(row, gap, width.unwrap_or(0.0));
     if is_first {
-        row = row.child(Box::new(Flex::row().size(EDGE_GAP, BAR_HEIGHT)));
+        row = row.child(Box::new(Flex::row().size(edge_gap, BAR_HEIGHT)));
     }
     for widget in build_islands(
         section,
         position,
+        island_background,
+        island_border,
         |id| registry.island(id).cloned(),
         shared,
         open_panel,
@@ -141,7 +190,7 @@ fn build_row_section(
         row = row.child(widget);
     }
     if is_last {
-        row = row.child(Box::new(Flex::row().size(EDGE_GAP, BAR_HEIGHT)));
+        row = row.child(Box::new(Flex::row().size(edge_gap, BAR_HEIGHT)));
     }
     Box::new(row)
 }
@@ -150,10 +199,13 @@ fn build_row_section(
 #[allow(clippy::too_many_arguments)]
 fn build_column_section(
     section: &SectionConfig,
-    height: f32,
+    height: Option<f32>,
     is_first: bool,
     is_last: bool,
+    edge_gap: f32,
     position: DockPosition,
+    island_background: bool,
+    island_border: bool,
     registry: &PluginRegistry,
     shared: &SharedState,
     open_panel: &Rc<dyn Fn(&'static str, Point)>,
@@ -161,19 +213,30 @@ fn build_column_section(
     let justify = section_justify(is_first, is_last);
     let gap = parse_gap(&section.gap);
     let mut column = Flex::column()
-        .size(DOCK_WIDTH as f32, height)
+        .width(DOCK_WIDTH as f32)
         .padding(8.0)
         .align(Align::Center)
         .justify(justify);
-    column = apply_gap(column, gap, height);
+    if let Some(height) = height {
+        column = column.height(height);
+    }
+    column = apply_gap(column, gap, height.unwrap_or(0.0));
+    if is_first {
+        column = column.child(Box::new(Flex::column().size(DOCK_WIDTH as f32, edge_gap)));
+    }
     for widget in build_islands(
         section,
         position,
+        island_background,
+        island_border,
         |id| registry.island(id).cloned(),
         shared,
         open_panel,
     ) {
         column = column.child(widget);
+    }
+    if is_last {
+        column = column.child(Box::new(Flex::column().size(DOCK_WIDTH as f32, edge_gap)));
     }
     Box::new(column)
 }
@@ -188,6 +251,39 @@ fn section_justify(is_first: bool, is_last: bool) -> Justify {
         (false, true) => Justify::End,
         (false, false) => Justify::Center,
     }
+}
+
+fn dock_justify(align: DockAlign) -> Justify {
+    match align {
+        DockAlign::Start => Justify::Start,
+        DockAlign::Center => Justify::Center,
+        DockAlign::End => Justify::End,
+    }
+}
+
+fn dock_cross_align(align: DockAlign) -> Align {
+    match align {
+        DockAlign::Start => Align::Start,
+        DockAlign::Center => Align::Center,
+        DockAlign::End => Align::End,
+    }
+}
+
+fn edge_justify(position: DockPosition) -> Justify {
+    match position {
+        DockPosition::Top | DockPosition::Left => Justify::End,
+        DockPosition::Bottom | DockPosition::Right => Justify::Start,
+    }
+}
+
+fn dock_chrome(mut widget: Flex, dock: &DockConfig) -> Flex {
+    if dock.show_background {
+        widget = widget.background(dock_background());
+    }
+    if dock.show_border {
+        widget = widget.border(dock_border(), 1.0);
+    }
+    widget
 }
 
 fn apply_gap(container: Flex, gap: Gap, length: f32) -> Flex {
@@ -214,6 +310,8 @@ fn apply_gap(container: Flex, gap: Gap, length: f32) -> Flex {
 fn build_islands(
     section: &SectionConfig,
     position: DockPosition,
+    island_background: bool,
+    island_border: bool,
     lookup: impl Fn(&str) -> Option<Rc<dyn Island>>,
     shared: &SharedState,
     open_panel: &Rc<dyn Fn(&'static str, Point)>,
@@ -233,7 +331,13 @@ fn build_islands(
         if !island.is_visible(&ctx) {
             continue;
         }
-        widgets.push(island.build(&ctx));
+        widgets.push(with_island_chrome(
+            IslandChrome {
+                background: island_background,
+                border: island_border,
+            },
+            || island.build(&ctx),
+        ));
     }
     widgets
 }
@@ -289,6 +393,8 @@ mod tests {
         let widgets = build_islands(
             &section,
             DockPosition::Bottom,
+            true,
+            true,
             |id| known.get(id).cloned(),
             &shared,
             &open_panel,

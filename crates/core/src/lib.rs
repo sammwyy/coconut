@@ -11,8 +11,7 @@ pub use desktop::{
     ClickAction, DesktopColor, DesktopConfig, DesktopIconsConfig, IconShape, WallpaperMode,
 };
 pub use dock::{
-    ordered_islands, DockAlign, DockConfig, DockDirection, DockPosition, IslandEntry,
-    SectionConfig,
+    ordered_islands, DockAlign, DockConfig, DockDirection, DockPosition, IslandEntry, SectionConfig,
 };
 pub use profile::UserProfile;
 
@@ -60,6 +59,24 @@ sound_theme = "freedesktop"
 # Where this dock sits on screen: "top", "bottom", "left" or "right". You
 # can declare more than one [[dock]] block to have several docks at once.
 position = "bottom"
+# When sections do not fill the whole dock, place their group at the
+# "start", "center", or "end" of the dock.
+align = "start"
+# Insets at each end of the dock and spacing between its sections, in pixels.
+edge_gap = 16.0
+section_gap = 0.0
+# Set false to keep a compact section group and use `align` above.
+fill_available_space = true
+# Optional maximum panel length in pixels; omit for the compositor default.
+# max_length = 600.0
+# Offset the dock away from its anchored screen edge.
+margin = 0.0
+# Dock and island chrome can be independently disabled for a transparent,
+# borderless presentation.
+show_background = true
+show_border = true
+show_island_background = true
+show_island_border = true
 
 [[dock.section]]
 # Spacing between the islands in this section: a fixed length ("10px"), a
