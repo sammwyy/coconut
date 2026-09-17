@@ -51,11 +51,20 @@ impl Default for DockAlign {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct DockConfig {
+    /// Hides this dock (no window is created for it) without deleting its
+    /// configured sections/islands — flip back on to bring it back exactly
+    /// as it was.
+    #[serde(default = "default_true")]
+    pub enabled: bool,
     pub position: DockPosition,
     pub direction: Option<DockDirection>,
     pub align: DockAlign,
     #[serde(rename = "section")]
     pub sections: Vec<SectionConfig>,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 impl DockConfig {
@@ -73,11 +82,13 @@ impl DockConfig {
 impl Default for DockConfig {
     fn default() -> Self {
         Self {
+            enabled: true,
             position: DockPosition::default(),
             direction: None,
             align: DockAlign::default(),
             sections: vec![
                 SectionConfig {
+                    enabled: true,
                     gap: default_gap(),
                     islands: vec![
                         IslandEntry::with_id("logo"),
@@ -86,10 +97,12 @@ impl Default for DockConfig {
                     ],
                 },
                 SectionConfig {
+                    enabled: true,
                     gap: default_gap(),
                     islands: vec![IslandEntry::with_id("app_launcher")],
                 },
                 SectionConfig {
+                    enabled: true,
                     gap: default_gap(),
                     islands: vec![
                         IslandEntry::with_id("control_center"),
@@ -107,6 +120,10 @@ impl Default for DockConfig {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct SectionConfig {
+    /// Hides this section (and every island in it) without deleting its
+    /// islands — flip back on to bring them back exactly as configured.
+    #[serde(default = "default_true")]
+    pub enabled: bool,
     /// Spacing between the islands inside this section: a fixed length
     /// ("10px"), a percentage of the section's length ("30%"), or one of the
     /// keywords "between"/"evenly" (CSS-flexbox-style distribution). Parsed
@@ -119,6 +136,7 @@ pub struct SectionConfig {
 impl Default for SectionConfig {
     fn default() -> Self {
         Self {
+            enabled: true,
             gap: default_gap(),
             islands: Vec::new(),
         }

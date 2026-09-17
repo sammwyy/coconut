@@ -200,8 +200,8 @@ mod tests {
     fn dock_with(ids: &[&str]) -> DockConfig {
         DockConfig {
             sections: vec![SectionConfig {
-                gap: "10px".to_owned(),
                 islands: ids.iter().map(|id| IslandEntry::with_id(id)).collect(),
+                ..Default::default()
             }],
             ..Default::default()
         }

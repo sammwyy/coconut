@@ -51,18 +51,19 @@ fn build_horizontal_dock(
     shared: &SharedState,
     open_panel: &Rc<dyn Fn(&'static str, Point)>,
 ) -> BoxedWidget {
-    let section_count = dock.sections.len().max(1);
+    let sections: Vec<&SectionConfig> = dock.sections.iter().filter(|s| s.enabled).collect();
+    let section_count = sections.len().max(1);
     let section_width = viewport.width / section_count as f32;
 
     let mut row = Flex::row()
         .size(viewport.width, BAR_HEIGHT)
         .align(Align::Center);
-    for (index, section) in dock.sections.iter().enumerate() {
+    for (index, section) in sections.iter().enumerate() {
         row = row.child(build_row_section(
             section,
             section_width,
             index == 0,
-            index + 1 == dock.sections.len(),
+            index + 1 == sections.len(),
             dock.position,
             registry,
             shared,
@@ -82,7 +83,8 @@ fn build_vertical_dock(
     shared: &SharedState,
     open_panel: &Rc<dyn Fn(&'static str, Point)>,
 ) -> BoxedWidget {
-    let section_count = dock.sections.len().max(1);
+    let sections: Vec<&SectionConfig> = dock.sections.iter().filter(|s| s.enabled).collect();
+    let section_count = sections.len().max(1);
     let section_height = viewport.height / section_count as f32;
 
     let mut column = Flex::column()
@@ -90,12 +92,12 @@ fn build_vertical_dock(
         .align(Align::Center)
         .background(dock_background())
         .border(dock_border(), 1.0);
-    for (index, section) in dock.sections.iter().enumerate() {
+    for (index, section) in sections.iter().enumerate() {
         column = column.child(build_column_section(
             section,
             section_height,
             index == 0,
-            index + 1 == dock.sections.len(),
+            index + 1 == sections.len(),
             dock.position,
             registry,
             shared,
@@ -277,12 +279,12 @@ mod tests {
         let shared = SharedState::default();
         let open_panel: Rc<dyn Fn(&'static str, Point)> = Rc::new(|_, _| {});
         let section = SectionConfig {
-            gap: "10px".into(),
             islands: vec![
                 IslandEntry::with_id("a"),
                 IslandEntry::with_id("unknown"),
                 IslandEntry::with_id("a"),
             ],
+            ..Default::default()
         };
         let widgets = build_islands(
             &section,

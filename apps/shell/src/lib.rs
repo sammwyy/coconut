@@ -286,12 +286,16 @@ pub fn run() {
         .run();
 }
 
-/// Whether `id` is placed in any section of any configured dock — the
-/// dynamic-dock analog of the old `config.widgets.<id>.enabled` check.
+/// Whether `id` is placed in any *enabled* section of any *enabled*
+/// configured dock — the dynamic-dock analog of the old
+/// `config.widgets.<id>.enabled` check. A disabled dock/section's islands
+/// don't count as present since nothing actually renders them.
 fn island_present(docks: &[DockConfig], id: &str) -> bool {
     docks
         .iter()
+        .filter(|dock| dock.enabled)
         .flat_map(|dock| &dock.sections)
+        .filter(|section| section.enabled)
         .flat_map(|section| &section.islands)
         .any(|entry| entry.id == id)
 }
@@ -321,7 +325,8 @@ fn append_docks(
     for window in dock_windows.borrow_mut().drain(..) {
         window.close();
     }
-    for (index, dock) in docks.iter().enumerate() {
+    let enabled_docks: Vec<&DockConfig> = docks.iter().filter(|dock| dock.enabled).collect();
+    for (index, dock) in enabled_docks.into_iter().enumerate() {
         let position = dock.position;
         let role = match position {
             DockPosition::Top => creamui_render::platform::WindowRole::TopPanel,

@@ -4,7 +4,7 @@ use creamui_core::{BoxedWidget, Size, StateStyle, Style};
 use creamui_reactive::Signal;
 use creamui_theme::use_theme;
 use creamui_widgets::layout::{Align, Flex, Justify};
-use creamui_widgets::{RawButton, SegmentedControl, Text, TextSize};
+use creamui_widgets::{RawButton, SegmentedControl, Switch, Text, TextSize};
 
 const POSITIONS: [DockPosition; 4] = [
     DockPosition::Top,
@@ -86,7 +86,20 @@ fn dock_group(
         .option("Right"),
     );
 
-    let mut rows = vec![row(&format!("Dock {} position", dock_index + 1), position_control)];
+    let enabled_switch: BoxedWidget = Box::new(Switch::new(dock.enabled, {
+        let config = config.clone();
+        move || {
+            update_config(&config, |c| {
+                if let Some(d) = c.docks.get_mut(dock_index) {
+                    d.enabled = !d.enabled;
+                }
+            });
+        }
+    }));
+    let mut rows = vec![
+        row(&format!("Dock {} enabled", dock_index + 1), enabled_switch),
+        row(&format!("Dock {} position", dock_index + 1), position_control),
+    ];
     for (section_index, dock_section) in dock.sections.iter().enumerate() {
         rows.push(section_row(config, dock_index, section_index, dock_section));
     }
@@ -128,6 +141,18 @@ fn section_row(
     dock_section: &SectionConfig,
 ) -> BoxedWidget {
     let mut chips = Flex::row().gap(6.0).align(Align::Center).justify(Justify::End);
+    chips = chips.child(Box::new(Switch::new(dock_section.enabled, {
+        let config = config.clone();
+        move || {
+            update_config(&config, |c| {
+                if let Some(d) = c.docks.get_mut(dock_index) {
+                    if let Some(s) = d.sections.get_mut(section_index) {
+                        s.enabled = !s.enabled;
+                    }
+                }
+            });
+        }
+    })));
     for entry in &dock_section.islands {
         let id = entry.id.clone();
         chips = chips.child(text_button(&format!("{id} \u{2715}"), {
