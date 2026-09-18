@@ -753,7 +753,12 @@ fn reload_system_theme() -> Theme {
 
 fn load_system_theme() -> Theme {
     match creamui_theme_loader::SystemThemeLoader::new().load() {
-        Ok(appearance) => appearance.theme,
+        Ok(appearance) => {
+            if let Some(font_family) = &appearance.font_family {
+                creamui_fonts::use_system_font(font_family);
+            }
+            appearance.theme
+        }
         Err(error) => {
             eprintln!("shell: failed to load CreamUI system appearance: {error}");
             Theme::default()

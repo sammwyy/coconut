@@ -20,3 +20,8 @@
   to DDC/CI, not fixable without polling.
 - The Windows integrations have no native hook for anything yet and fall
   back to polling throughout.
+- CreamUI's system theme now carries a preferred `font_family` (loaded from
+  the system's installed fonts), but the settings app has no UI to pick or
+  clear one; it can currently only be set by hand-editing
+  `~/.config/cream/appearance.toml` or the `CREAMUI_FONT` environment
+  variable.

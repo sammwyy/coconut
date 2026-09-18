@@ -32,6 +32,7 @@ chrono = "0.4"
 toml = "0.9"
 creamui-core = { path = "../../../creamui/crates/core" }
 creamui-devtools = { path = "../../../creamui/crates/devtools", optional = true }
+creamui-fonts = { path = "../../../creamui/crates/fonts" }
 creamui-image = { path = "../../../creamui/crates/image", features = ["webp", "jpeg", "svg"] }
 creamui-jsx = { path = "../../../creamui/crates/jsx" }
 creamui-macros = { path = "../../../creamui/crates/macros" }

@@ -265,7 +265,12 @@ pub fn run() {
 
 fn load_system_appearance() -> creamui_theme::ResolvedAppearance {
     match creamui_theme_loader::SystemThemeLoader::new().load() {
-        Ok(appearance) => appearance,
+        Ok(appearance) => {
+            if let Some(font_family) = &appearance.font_family {
+                creamui_fonts::use_system_font(font_family);
+            }
+            appearance
+        }
         Err(error) => {
             eprintln!("settings: failed to load CreamUI system appearance: {error}");
             let theme = creamui_theme_loader::builtin_theme();
@@ -276,6 +281,7 @@ fn load_system_appearance() -> creamui_theme::ResolvedAppearance {
                 variant_id,
                 accent: resolved.colors.accent,
                 theme: resolved,
+                font_family: None,
             }
         }
     }

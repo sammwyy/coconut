@@ -133,6 +133,7 @@ fn theme_card(
     let set_custom = custom.clone();
     let id = theme.id.clone();
     let variant = theme.default_variant.clone();
+    let font_family = current.font_family.clone();
     Box::new(jsx! {
         <RawButton
             style={Style { layout: creamui_core::layout::Style { size: fixed(THEME_CARD.0, THEME_CARD.1), ..Default::default() }, ..Default::default() }}
@@ -141,7 +142,7 @@ fn theme_card(
             corner_radius={preview.card_radius}
             on_click={move || {
                 set_custom.set(false);
-                apply(AppearanceSelection { theme: Some(id.clone()), variant: Some(variant.clone()), accent: None }, &set_appearance, &set_window);
+                apply(AppearanceSelection { theme: Some(id.clone()), variant: Some(variant.clone()), accent: None, font_family: font_family.clone() }, &set_appearance, &set_window);
             }}
         >
             <Flex direction={FlexDirection::Column} size={THEME_CARD} gap={8.0} padding={8.0}>
@@ -171,6 +172,7 @@ fn variant_card(
     let theme_id = current.theme_id.clone();
     let variant_id = id.to_owned();
     let accent = current.accent;
+    let font_family = current.font_family.clone();
     let label = title_case(id);
     Box::new(jsx! {
         <RawButton
@@ -178,7 +180,7 @@ fn variant_card(
             background={creamui_theme::use_theme().colors.surface_elevated}
             border={(if active { selected_border } else { creamui_theme::use_theme().colors.border }, if active { 2.0 } else { 1.0 })}
             corner_radius={variant.card_radius}
-            on_click={move || apply(AppearanceSelection { theme: Some(theme_id.clone()), variant: Some(variant_id.clone()), accent: Some(accent) }, &set_appearance, &set_window)}
+            on_click={move || apply(AppearanceSelection { theme: Some(theme_id.clone()), variant: Some(variant_id.clone()), accent: Some(accent), font_family: font_family.clone() }, &set_appearance, &set_window)}
         >
             <Flex direction={FlexDirection::Column} size={VARIANT_CARD} padding={8.0} gap={8.0}>
                 <Flex grow={1.0} background={variant.colors.surface} border={(variant.colors.border, 1.0)} corner_radius={variant.radius_medium}>
@@ -204,6 +206,7 @@ fn accent_dot(
     let set_custom = custom.clone();
     let theme_id = current.theme_id.clone();
     let variant_id = current.variant_id.clone();
+    let font_family = current.font_family.clone();
     Box::new(jsx! {
         <RawButton
             style={Style { layout: creamui_core::layout::Style { size: fixed(DOT, DOT), ..Default::default() }, ..Default::default() }}
@@ -212,7 +215,7 @@ fn accent_dot(
             corner_radius={DOT / 2.0}
             on_click={move || {
                 set_custom.set(false);
-                apply(AppearanceSelection { theme: Some(theme_id.clone()), variant: Some(variant_id.clone()), accent: Some(color) }, &set_appearance, &set_window);
+                apply(AppearanceSelection { theme: Some(theme_id.clone()), variant: Some(variant_id.clone()), accent: Some(color), font_family: font_family.clone() }, &set_appearance, &set_window);
             }}
         >
             <Flex size={(DOT, DOT)} align={Align::Center} justify={Justify::Center} />
@@ -258,6 +261,7 @@ fn custom_accent_picker(
     let set_window = window.clone();
     let theme_id = current.theme_id.clone();
     let variant_id = current.variant_id.clone();
+    let font_family = current.font_family.clone();
     Box::new(ColorPicker::controlled(
         current.accent,
         picker,
@@ -267,6 +271,7 @@ fn custom_accent_picker(
                     theme: Some(theme_id.clone()),
                     variant: Some(variant_id.clone()),
                     accent: Some(accent),
+                    font_family: font_family.clone(),
                 },
                 &set_appearance,
                 &set_window,
@@ -286,6 +291,9 @@ fn apply(
     }
     match creamui_theme_loader::SystemThemeLoader::new().load() {
         Ok(next) => {
+            if let Some(font_family) = &next.font_family {
+                creamui_fonts::use_system_font(font_family);
+            }
             if let Some(handle) = window.borrow().as_ref() {
                 handle.set_theme(next.theme);
             }
