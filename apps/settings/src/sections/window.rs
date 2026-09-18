@@ -7,9 +7,10 @@ use creamui_core::layout::{FlexDirection, Style};
 use creamui_core::{BoxedWidget, Key, KeyInput, Size, Styled, Widget};
 use creamui_macros::jsx;
 use creamui_reactive::Signal;
+use creamui_theme::Color;
 use creamui_widgets::{
-    Button, ButtonSize, ButtonState, ButtonVariant, RawButton, SegmentedControl, Select,
-    SelectController, Switch, Text, TextInput, TextSize,
+    Button, ButtonSize, ButtonState, ButtonVariant, ColorPicker, ColorPickerController, RawButton,
+    SegmentedControl, Select, SelectController, Switch, Text, TextInput, TextSize,
 };
 use std::rc::Rc;
 
@@ -48,9 +49,9 @@ work_area_padding = 16
 [decorations]
 mode = "auto"
 titlebar_height = 32
-border_width = 4
-corner_radius = 12
-follow_system_theme = true
+titlebar_color = "blend"
+border = "theme"
+border_size = "normal"
 title_centered = false
 show_icon = true
 drag_margin = 0
@@ -61,6 +62,9 @@ side = "right"
 
 pub struct WindowState {
     config: Signal<toml::Value>,
+    titlebar_picker: ColorPickerController,
+    active_border_picker: ColorPickerController,
+    inactive_border_picker: ColorPickerController,
 }
 
 /// Editable persistent shortcuts. Blair remains the authority: this state is
@@ -169,6 +173,9 @@ impl WindowState {
             .unwrap_or_else(|| toml::from_str(DEFAULT).expect("valid built-in Blair TOML"));
         Self {
             config: Signal::new(config),
+            titlebar_picker: ColorPickerController::new(),
+            active_border_picker: ColorPickerController::new(),
+            inactive_border_picker: ColorPickerController::new(),
         }
     }
     fn writer(&self) -> Writer {
@@ -325,17 +332,6 @@ pub fn build_layout(_: Size, state: &WindowState) -> BoxedWidget {
 
 pub fn build_titlebar(_: Size, state: &WindowState) -> BoxedWidget {
     let c = state.config.get();
-    let follow_theme = bool_at(&c, &["decorations", "follow_system_theme"], true);
-    let writer = state.writer();
-    let follow_theme_control: BoxedWidget = Box::new(Switch::new(follow_theme, move || {
-        writer.update(|c| {
-            put(
-                c,
-                &["decorations", "follow_system_theme"],
-                toml::Value::Boolean(!follow_theme),
-            )
-        })
-    }));
 
     let side = str_at(&c, &["decorations", "buttons", "side"], "right");
     let side_selected = usize::from(side == "left");
@@ -399,24 +395,133 @@ pub fn build_titlebar(_: Size, state: &WindowState) -> BoxedWidget {
         .option("Client")
         .option("None"),
     );
+
+    let titlebar_color = choice_at(&c, &["decorations", "titlebar_color"], TITLEBAR_COLORS, "blend");
+    let mut appearance_rows = vec![row(
+        "Titlebar color",
+        choice_control(state, &["decorations", "titlebar_color"], TITLEBAR_COLORS, titlebar_color),
+    )];
+    if TITLEBAR_COLORS[titlebar_color].0 == "color" {
+        appearance_rows.push(row(
+            "Custom color",
+            color_control(
+                state,
+                &["decorations", "custom_titlebar_color"],
+                "#1e1e2e",
+                &state.titlebar_picker,
+            ),
+        ));
+    }
+
+    let border = choice_at(&c, &["decorations", "border"], BORDER_COLORS, "theme");
+    appearance_rows.push(row(
+        "Border",
+        choice_control(state, &["decorations", "border"], BORDER_COLORS, border),
+    ));
+    match BORDER_COLORS[border].0 {
+        "none" => {}
+        border => {
+            if border == "custom" {
+                appearance_rows.push(row(
+                    "Focused window",
+                    color_control(
+                        state,
+                        &["decorations", "active_border"],
+                        "#89b4fa",
+                        &state.active_border_picker,
+                    ),
+                ));
+                appearance_rows.push(row(
+                    "Other windows",
+                    color_control(
+                        state,
+                        &["decorations", "inactive_border"],
+                        "#313244",
+                        &state.inactive_border_picker,
+                    ),
+                ));
+            }
+            let size = choice_at(&c, &["decorations", "border_size"], BORDER_SIZES, "normal");
+            appearance_rows.push(row(
+                "Border size",
+                choice_control(state, &["decorations", "border_size"], BORDER_SIZES, size),
+            ));
+        }
+    }
+
     finish(
         state,
         "Titlebar",
         "Choose whether apps or the system draw titlebars. App titlebars can look different from one app to another.",
         vec![
             setting_group("Titlebar source", "Auto chooses the best option for each app.", vec![row("Use titlebar", mode_control)]),
+            setting_group(
+                "Look",
+                "Blend matches each app's own header color. Title text and buttons adjust their color automatically for contrast. Window corners follow Appearance.",
+                appearance_rows,
+            ),
             setting_group("System titlebar", "These options apply when the system draws the titlebar.", vec![
-                row("Match system theme colors", follow_theme_control),
                 row("Buttons on", side_control),
                 row("Center title", centered_control),
                 row("Show app icon", show_icon_control),
-                integer_field(state, "Border width", &["decorations", "border_width"], 0, Some(16)),
-                integer_field(state, "Corner radius", &["decorations", "corner_radius"], 0, Some(64)),
                 integer_field(state, "Titlebar height", &["decorations", "titlebar_height"], 0, Some(96)),
                 integer_field(state, "Non-draggable edge", &["decorations", "drag_margin"], 0, Some(256)),
             ]),
         ],
     )
+}
+
+/// `(config value, label)` pairs for single-choice settings stored as
+/// strings. Blair reads these case-insensitively.
+const TITLEBAR_COLORS: &[(&str, &str)] = &[("blend", "Blend"), ("theme", "Theme"), ("color", "Color")];
+const BORDER_COLORS: &[(&str, &str)] = &[("none", "None"), ("theme", "Theme"), ("custom", "Custom")];
+const BORDER_SIZES: &[(&str, &str)] = &[("thin", "Thin"), ("normal", "Normal"), ("bold", "Bold")];
+
+/// Index of the stored choice, or of Blair's `default` when unset.
+fn choice_at(config: &toml::Value, path: &[&str], choices: &[(&str, &str)], default: &str) -> usize {
+    let default = choices.iter().position(|(id, _)| *id == default).unwrap_or(0);
+    at(config, path)
+        .and_then(toml::Value::as_str)
+        .and_then(|value| {
+            choices
+                .iter()
+                .position(|(id, _)| id.eq_ignore_ascii_case(value.trim()))
+        })
+        .unwrap_or(default)
+}
+
+fn choice_control(
+    state: &WindowState,
+    path: &'static [&'static str],
+    choices: &'static [(&'static str, &'static str)],
+    selected: usize,
+) -> BoxedWidget {
+    let writer = state.writer();
+    let control = SegmentedControl::new(selected, move |index| {
+        writer.update(|c| put(c, path, toml::Value::String(choices[index].0.into())))
+    });
+    Box::new(
+        choices
+            .iter()
+            .fold(control, |control, (_, label)| control.option(*label)),
+    )
+}
+
+fn color_control(
+    state: &WindowState,
+    path: &'static [&'static str],
+    fallback: &str,
+    picker: &ColorPickerController,
+) -> BoxedWidget {
+    let current = str_at(&state.config.get(), path, fallback)
+        .parse::<Color>()
+        .or_else(|_| fallback.parse())
+        .unwrap_or(Color::rgb(0, 0, 0));
+    let writer = state.writer();
+    Box::new(ColorPicker::controlled(current, picker, move |color| {
+        let hex = format!("#{:02x}{:02x}{:02x}", color.r, color.g, color.b);
+        writer.update(|c| put(c, path, toml::Value::String(hex)))
+    }))
 }
 
 pub fn build_working_area(_: Size, state: &WindowState) -> BoxedWidget {
@@ -853,14 +958,13 @@ fn finish(
     }
     section(title, subtitle, body)
 }
-/// A small heading and explanation above each related set of controls.  The
-/// compositor has several interacting concepts, so one long unlabelled list
-/// makes it too easy to change the wrong thing.
-fn setting_group(title: &str, description: &str, rows: Vec<BoxedWidget>) -> BoxedWidget {
+/// A quiet label above a related group of controls. The surrounding page
+/// header already supplies context, so settings stay scannable rather than
+/// reading like documentation.
+fn setting_group(title: &str, _: &str, rows: Vec<BoxedWidget>) -> BoxedWidget {
     Box::new(jsx! {
-        <Flex direction={FlexDirection::Column} gap={8.0}>
+        <Flex direction={FlexDirection::Column} gap={6.0}>
             {Box::new(Text::new(title.to_owned()).size(TextSize::Sm)) as BoxedWidget}
-            {Box::new(Text::secondary(description.to_owned()).size(TextSize::Sm)) as BoxedWidget}
             {group(rows)}
         </Flex>
     })

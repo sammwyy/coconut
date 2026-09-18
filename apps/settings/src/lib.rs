@@ -11,8 +11,8 @@ use creamui_macros::jsx;
 use creamui_reactive::Signal;
 use creamui_render::{platform::WindowRole, AppBuilder, WindowHandle, WindowOptions};
 use creamui_widgets::{
-    nested_sidebar, ColorPickerController, IconSource, ScrollController, SidebarNavController,
-    SidebarNode, Surface, SurfaceRole, Symbol,
+    nested_sidebar, ColorPickerController, Heading, IconSource, RawView, ScrollController,
+    SidebarNavController, SidebarNode, Symbol,
 };
 use icons::SettingsIcons;
 use std::cell::RefCell;
@@ -64,6 +64,42 @@ fn category_default(section: Section) -> Section {
         Section::System => Section::Effects,
         Section::Users => Section::Profile,
         leaf => leaf,
+    }
+}
+
+fn page_title(section: &Section, docks: &[coconut_core::DockConfig]) -> String {
+    match section {
+        Section::Theme => "Appearance".into(),
+        Section::IconPack => "Icons".into(),
+        Section::Sound => "Sound".into(),
+        Section::Wallpaper => "Wallpaper".into(),
+        Section::DesktopIcons => "Desktop icons".into(),
+        Section::Dock(index) => docks
+            .get(*index)
+            .map(|dock| sections::general::dock_label(*index, dock))
+            .unwrap_or_else(|| "Panel".into()),
+        Section::AddDock => "New panel".into(),
+        Section::Tray => "Status icons".into(),
+        Section::Widgets => "Widgets".into(),
+        Section::Layout => "Window layout".into(),
+        Section::Titlebar => "Titlebar".into(),
+        Section::Compositor => "Advanced".into(),
+        Section::WorkingArea => "Workspaces".into(),
+        Section::Effects => "Motion".into(),
+        Section::Input => "Keyboard & mouse".into(),
+        Section::Focus => "Window focus".into(),
+        Section::Shortcuts => "Shortcuts".into(),
+        Section::Profile => "My profile".into(),
+        Section::User(username) => username.clone(),
+        Section::CreateUser => "Create user".into(),
+        Section::Appearance
+        | Section::Desktop
+        | Section::Panels
+        | Section::Status
+        | Section::Windows
+        | Section::InputDevices
+        | Section::System
+        | Section::Users => "Settings".into(),
     }
 }
 
@@ -309,6 +345,7 @@ fn load_system_appearance() -> creamui_theme::ResolvedAppearance {
                 accent: resolved.colors.accent,
                 theme: resolved,
                 font_family: None,
+                corners: Default::default(),
             }
         }
     }
@@ -340,15 +377,15 @@ fn build(
     let sidebar_style = Style {
         flex_direction: FlexDirection::Column,
         size: creamui_core::layout::Size {
-            width: Dimension::Length(232.0),
+            width: Dimension::Percent(1.0),
             height: Dimension::Percent(1.0),
         },
         flex_shrink: 0.0,
         padding: creamui_core::layout::Rect {
-            left: LengthPercentage::Length(18.0),
-            right: LengthPercentage::Length(14.0),
-            top: LengthPercentage::Length(24.0),
-            bottom: LengthPercentage::Length(24.0),
+            left: LengthPercentage::Length(16.0),
+            right: LengthPercentage::Length(12.0),
+            top: LengthPercentage::Length(20.0),
+            bottom: LengthPercentage::Length(20.0),
         },
         gap: creamui_core::layout::Size {
             width: LengthPercentage::Length(2.0),
@@ -359,6 +396,7 @@ fn build(
     let current = view.get();
     let account_list = users.get();
     let docks = config.get().docks;
+    let title = page_title(&current, &docks);
     let navigation = tree(&account_list, icons, &docks);
     let select = view.clone();
     let scroll_to_top = content_scroll.clone();
@@ -444,18 +482,26 @@ fn build(
         }
     };
 
-    let panel_style = Style {
+    let sidebar_shell_style = Style {
         flex_direction: FlexDirection::Column,
-        flex_grow: 1.0,
         size: creamui_core::layout::Size {
-            width: Dimension::Auto,
+            width: Dimension::Length(232.0),
             height: Dimension::Percent(1.0),
         },
+        flex_shrink: 0.0,
+        ..Default::default()
+    };
+    let header_style = Style {
+        flex_direction: FlexDirection::Row,
+        size: creamui_core::layout::Size {
+            width: Dimension::Percent(1.0),
+            height: Dimension::Length(48.0),
+        },
         padding: creamui_core::layout::Rect {
-            left: LengthPercentage::Length(36.0),
-            right: LengthPercentage::Length(30.0),
-            top: LengthPercentage::Length(32.0),
-            bottom: LengthPercentage::Length(28.0),
+            left: LengthPercentage::Length(28.0),
+            right: LengthPercentage::Length(28.0),
+            top: LengthPercentage::Length(0.0),
+            bottom: LengthPercentage::Length(0.0),
         },
         ..Default::default()
     };
@@ -479,32 +525,51 @@ fn build(
         Box::new(
             creamui_widgets::RawScrollView::controlled(content_style, content_scroll.clone())
                 .scrollbar_gap(12.0)
-                .child(content),
+                .child(Box::new(
+                    RawView::new(Style {
+                        flex_direction: FlexDirection::Column,
+                        flex_shrink: 0.0,
+                        padding: creamui_core::layout::Rect {
+                            left: LengthPercentage::Length(28.0),
+                            right: LengthPercentage::Length(36.0),
+                            top: LengthPercentage::Length(24.0),
+                            bottom: LengthPercentage::Length(32.0),
+                        },
+                        ..Default::default()
+                    })
+                    .child(content),
+                )),
         )
     };
-    let panel: BoxedWidget =
-        Box::new(Surface::new(SurfaceRole::Panel, panel_style).child(panel_content));
-    let panel_outer_style = Style {
+    let main_style = Style {
         flex_direction: FlexDirection::Column,
         flex_grow: 1.0,
         size: creamui_core::layout::Size {
             width: Dimension::Auto,
             height: Dimension::Percent(1.0),
         },
-        padding: creamui_core::layout::Rect {
-            left: LengthPercentage::Length(0.0),
-            right: LengthPercentage::Length(20.0),
-            top: LengthPercentage::Length(20.0),
-            bottom: LengthPercentage::Length(20.0),
+        ..Default::default()
+    };
+    let divider_style = Style {
+        size: creamui_core::layout::Size {
+            width: Dimension::Percent(1.0),
+            height: Dimension::Length(1.0),
         },
+        flex_shrink: 0.0,
         ..Default::default()
     };
 
     Box::new(jsx! {
-        <Flex direction={FlexDirection::Row} size={(size.width, size.height)} background={theme.surface}>
-            {sidebar}
-            <RawView style={panel_outer_style}>
-                {panel}
+        <Flex direction={FlexDirection::Row} size={(size.width, size.height)} background={theme.colors.surface_elevated}>
+            <RawView style={sidebar_shell_style} background={theme.colors.surface}>
+                {sidebar}
+            </RawView>
+            <RawView style={main_style} background={theme.colors.surface_elevated}>
+                <Flex direction={FlexDirection::Row} style={header_style} align={creamui_widgets::layout::Align::Center} justify={creamui_widgets::layout::Justify::Center}>
+                    {Box::new(Heading::sm(title)) as BoxedWidget}
+                </Flex>
+                <RawView style={divider_style} background={theme.colors.border} />
+                {panel_content}
             </RawView>
         </Flex>
     })

@@ -1,19 +1,18 @@
-use creamui_core::layout::{Dimension, FlexDirection, LengthPercentage, Style as LayoutStyle};
+use crate::common::{group, row};
+use creamui_core::layout::FlexDirection;
 use creamui_core::{BoxedWidget, Size, Style};
 use creamui_macros::jsx;
 use creamui_reactive::Signal;
 use creamui_render::WindowHandle;
-use creamui_theme::{AppearanceSelection, Color, ResolvedAppearance};
+use creamui_theme::{AppearanceSelection, Color, CornerStyle, ResolvedAppearance};
 use creamui_widgets::layout::{fixed, Align, Justify, Wrap};
-use creamui_widgets::{
-    ColorPicker, ColorPickerController, Heading, Surface, SurfaceRole, Text, TextSize,
-};
+use creamui_widgets::{ColorPicker, ColorPickerController, SegmentedControl, Text, TextSize};
 use std::cell::RefCell;
 use std::rc::Rc;
 
-const THEME_CARD: (f32, f32) = (156.0, 116.0);
-const VARIANT_CARD: (f32, f32) = (142.0, 100.0);
-const DOT: f32 = 30.0;
+const THEME_CARD: (f32, f32) = (116.0, 82.0);
+const VARIANT_CARD: (f32, f32) = (104.0, 70.0);
+const DOT: f32 = 26.0;
 const CUSTOM_W: f32 = 92.0;
 
 pub fn build(
@@ -75,47 +74,55 @@ pub fn build(
     accent_dots.push(custom_dot);
     accent_dots.push(custom_picker);
 
-    Box::new(jsx! {
-        <Flex direction={FlexDirection::Column} gap={ui.spacing_large}>
-            {Box::new(Heading::xl("Theme")) as BoxedWidget}
-            {selection_group("Theme", theme_cards)}
-            {selection_group("Color scheme", variant_cards)}
-            {selection_group("Accent color", accent_dots)}
-        </Flex>
-    })
+    group(vec![
+        row("Theme", selection_control(theme_cards)),
+        row("Color scheme", selection_control(variant_cards)),
+        row("Accent color", selection_control(accent_dots)),
+        row("Corners", corners_control(&current, appearance, window)),
+    ])
 }
 
-fn selection_group(label: &str, children: Vec<BoxedWidget>) -> BoxedWidget {
-    let ui = creamui_theme::use_theme();
-    Box::new(
-        Surface::new(
-            SurfaceRole::Inset,
-            LayoutStyle {
-                flex_direction: FlexDirection::Column,
-                size: creamui_core::layout::Size {
-                    width: Dimension::Percent(1.0),
-                    height: Dimension::Auto,
-                },
-                gap: creamui_core::layout::Size {
-                    width: LengthPercentage::Length(ui.spacing_medium),
-                    height: LengthPercentage::Length(ui.spacing_medium),
-                },
-                padding: creamui_core::layout::Rect {
-                    left: LengthPercentage::Length(ui.spacing_medium),
-                    right: LengthPercentage::Length(ui.spacing_medium),
-                    top: LengthPercentage::Length(ui.spacing_medium),
-                    bottom: LengthPercentage::Length(ui.spacing_medium),
-                },
-                ..Default::default()
+/// Shared by CreamUI widgets and the compositor's window frames.
+fn corners_control(
+    current: &ResolvedAppearance,
+    appearance: &Signal<ResolvedAppearance>,
+    window: &Rc<RefCell<Option<WindowHandle>>>,
+) -> BoxedWidget {
+    let selected = CornerStyle::ALL
+        .iter()
+        .position(|style| *style == current.corners)
+        .unwrap_or(0);
+    let set_appearance = appearance.clone();
+    let set_window = window.clone();
+    let selection = AppearanceSelection {
+        theme: Some(current.theme_id.clone()),
+        variant: Some(current.variant_id.clone()),
+        accent: Some(current.accent),
+        font_family: current.font_family.clone(),
+        corners: None,
+    };
+    let control = SegmentedControl::new(selected, move |index| {
+        apply(
+            AppearanceSelection {
+                corners: Some(CornerStyle::ALL[index]),
+                ..selection.clone()
             },
-        )
-        .with_children(vec![
-            Box::new(Text::new(label.to_owned()).size(TextSize::Sm)),
-            Box::new(jsx! {
-                <Flex direction={FlexDirection::Row} align={Align::Center} wrap={Wrap::Wrap} gap={ui.spacing_medium} children={children} />
-            }),
-        ]),
+            &set_appearance,
+            &set_window,
+        );
+    });
+    Box::new(
+        CornerStyle::ALL
+            .iter()
+            .fold(control, |control, style| control.option(title_case(style.id()))),
     )
+}
+
+fn selection_control(children: Vec<BoxedWidget>) -> BoxedWidget {
+    let ui = creamui_theme::use_theme();
+    Box::new(jsx! {
+        <Flex direction={FlexDirection::Row} align={Align::Center} wrap={Wrap::Wrap} gap={ui.spacing_small} children={children} />
+    })
 }
 
 fn theme_card(
@@ -134,6 +141,7 @@ fn theme_card(
     let id = theme.id.clone();
     let variant = theme.default_variant.clone();
     let font_family = current.font_family.clone();
+    let corners = Some(current.corners);
     Box::new(jsx! {
         <RawButton
             style={Style { layout: creamui_core::layout::Style { size: fixed(THEME_CARD.0, THEME_CARD.1), ..Default::default() }, ..Default::default() }}
@@ -142,17 +150,17 @@ fn theme_card(
             corner_radius={creamui_theme::use_theme().card_radius}
             on_click={move || {
                 set_custom.set(false);
-                apply(AppearanceSelection { theme: Some(id.clone()), variant: Some(variant.clone()), accent: None, font_family: font_family.clone() }, &set_appearance, &set_window);
+                apply(AppearanceSelection { theme: Some(id.clone()), variant: Some(variant.clone()), accent: None, font_family: font_family.clone(), corners }, &set_appearance, &set_window);
             }}
         >
-            <Flex direction={FlexDirection::Column} size={THEME_CARD} gap={8.0} padding={8.0}>
-                <Flex direction={FlexDirection::Column} grow={1.0} padding={8.0} gap={7.0} background={preview.colors.surface} corner_radius={preview.radius_medium}>
-                    <Flex size={(62.0, 7.0)} background={preview.colors.text_primary} corner_radius={4.0} />
-                    <Flex size={(88.0, 5.0)} background={preview.colors.text_secondary} corner_radius={3.0} />
+            <Flex direction={FlexDirection::Column} size={THEME_CARD} gap={5.0} padding={6.0}>
+                <Flex direction={FlexDirection::Column} grow={1.0} padding={6.0} gap={5.0} background={preview.colors.surface} corner_radius={preview.radius_medium}>
+                    <Flex size={(48.0, 5.0)} background={preview.colors.text_primary} corner_radius={3.0} />
+                    <Flex size={(70.0, 4.0)} background={preview.colors.text_secondary} corner_radius={3.0} />
                     <Flex grow={1.0} />
-                    <Flex size={(46.0, 16.0)} background={preview.colors.accent} corner_radius={8.0} />
+                    <Flex size={(38.0, 12.0)} background={preview.colors.accent} corner_radius={6.0} />
                 </Flex>
-                <RawText color={creamui_theme::use_theme().colors.text_primary} font_size={13.0}>{theme.name}</RawText>
+                <RawText color={creamui_theme::use_theme().colors.text_primary} font_size={12.0}>{theme.name}</RawText>
             </Flex>
         </RawButton>
     })
@@ -173,6 +181,7 @@ fn variant_card(
     let variant_id = id.to_owned();
     let accent = current.accent;
     let font_family = current.font_family.clone();
+    let corners = Some(current.corners);
     let label = title_case(id);
     Box::new(jsx! {
         <RawButton
@@ -180,13 +189,13 @@ fn variant_card(
             background={creamui_theme::use_theme().colors.surface_elevated}
             border={(if active { selected_border } else { creamui_theme::use_theme().colors.border }, if active { 2.0 } else { 1.0 })}
             corner_radius={creamui_theme::use_theme().card_radius}
-            on_click={move || apply(AppearanceSelection { theme: Some(theme_id.clone()), variant: Some(variant_id.clone()), accent: Some(accent), font_family: font_family.clone() }, &set_appearance, &set_window)}
+            on_click={move || apply(AppearanceSelection { theme: Some(theme_id.clone()), variant: Some(variant_id.clone()), accent: Some(accent), font_family: font_family.clone(), corners }, &set_appearance, &set_window)}
         >
-            <Flex direction={FlexDirection::Column} size={VARIANT_CARD} padding={8.0} gap={8.0}>
+            <Flex direction={FlexDirection::Column} size={VARIANT_CARD} padding={6.0} gap={5.0}>
                 <Flex grow={1.0} background={variant.colors.surface} border={(variant.colors.border, 1.0)} corner_radius={variant.radius_medium}>
                     <Flex size={(32.0, 1.0)} background={variant.colors.accent} corner_radius={variant.radius_medium} />
                 </Flex>
-                <RawText color={creamui_theme::use_theme().colors.text_primary} font_size={13.0}>{label}</RawText>
+                <RawText color={creamui_theme::use_theme().colors.text_primary} font_size={12.0}>{label}</RawText>
             </Flex>
         </RawButton>
     })
@@ -207,6 +216,7 @@ fn accent_dot(
     let theme_id = current.theme_id.clone();
     let variant_id = current.variant_id.clone();
     let font_family = current.font_family.clone();
+    let corners = Some(current.corners);
     Box::new(jsx! {
         <RawButton
             style={Style { layout: creamui_core::layout::Style { size: fixed(DOT, DOT), ..Default::default() }, ..Default::default() }}
@@ -215,7 +225,7 @@ fn accent_dot(
             corner_radius={DOT / 2.0}
             on_click={move || {
                 set_custom.set(false);
-                apply(AppearanceSelection { theme: Some(theme_id.clone()), variant: Some(variant_id.clone()), accent: Some(color), font_family: font_family.clone() }, &set_appearance, &set_window);
+                apply(AppearanceSelection { theme: Some(theme_id.clone()), variant: Some(variant_id.clone()), accent: Some(color), font_family: font_family.clone(), corners }, &set_appearance, &set_window);
             }}
         >
             <Flex size={(DOT, DOT)} align={Align::Center} justify={Justify::Center} />
@@ -262,6 +272,7 @@ fn custom_accent_picker(
     let theme_id = current.theme_id.clone();
     let variant_id = current.variant_id.clone();
     let font_family = current.font_family.clone();
+    let corners = Some(current.corners);
     Box::new(ColorPicker::controlled(
         current.accent,
         picker,
@@ -272,6 +283,7 @@ fn custom_accent_picker(
                     variant: Some(variant_id.clone()),
                     accent: Some(accent),
                     font_family: font_family.clone(),
+                    corners,
                 },
                 &set_appearance,
                 &set_window,

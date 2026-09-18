@@ -1,4 +1,4 @@
-use crate::common::{fixed_section, group, row, section, update_config};
+use crate::common::{fixed_body, group, row, section, update_config};
 use coconut_core::{DockAlign, DockConfig, DockPosition, IslandEntry, SectionConfig, ShellConfig};
 use creamui_core::layout::{Dimension, FlexDirection, LengthPercentage, Style as LayoutStyle};
 use creamui_core::{BoxedWidget, Size, StateStyle, Style, Styled};
@@ -114,13 +114,7 @@ pub fn build_dock_page(
     }
 
     let content: BoxedWidget = Box::new(Flex::column().gap(10.0).with_children(body));
-    fixed_section(
-        &dock_label(dock_index, dock),
-        "Choose where this panel appears, how it looks, and what it contains.",
-        dock_tabs(tab, selected_tab),
-        content,
-        scroll.clone(),
-    )
+    fixed_body(dock_tabs(tab, selected_tab), content, scroll.clone())
 }
 
 fn dock_tabs(tab: &Signal<DockTab>, active: DockTab) -> BoxedWidget {
