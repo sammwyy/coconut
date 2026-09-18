@@ -1,77 +1,63 @@
 # Coconut
 
-> [!WARNING]
-> Coconut is a work in progress. It is still being shaped, polished, and
-> tested for everyday desktop use.
+> A focused, modern desktop shell for Wayland.
 
-Coconut is a small, modern desktop shell built around a clean bottom bar and
-lightweight pop-up panels. It aims to make everyday desktop actions feel
-immediate: launch an app, switch windows, check what is playing, or adjust your
-system without leaving your flow.
+> [!WARNING]
+> Coconut is under active development and is not yet intended for daily use or
+> distribution packaging.
+
+Coconut puts common desktop actions within immediate reach: launch an
+application, move between running windows, control media, or adjust your system
+without losing focus. Its centered dock and lightweight panels are designed to
+stay calm, responsive, and consistent.
+
+## What it includes
+
+- A centered running-app dock with active-window feedback
+- Application browsing, category navigation, and search
+- Now-playing information with playback controls
+- Clock and weather widgets
+- A control center for network, brightness, volume, Bluetooth, battery, and
+  power profiles
+- Dedicated panels for the same system controls when you need more detail
+- Native desktop integrations for Blair and KDE Wayland, plus Windows 10
 
 ## Applications
 
-- `coconut` runs the shell.
-- `coconut settings` opens the settings application.
-- `coconut-settings` opens the settings application directly.
+| Command | Purpose |
+| --- | --- |
+| `coconut` | Start the shell. |
+| `coconut settings` | Open Coconut Settings. |
+| `coconut-settings` | Open Coconut Settings directly. |
 
-For local development, run `cargo run -p coconut-shell` or
-`cargo run -p coconut-settings`.
+## Platform notes
 
-When the Weather widget is enabled, Coconut resolves the configured city,
-country and region directly on first use, stores the resulting coordinates in
-the user profile, and fetches the forecast directly from MET Norway. Disabling
-the widget prevents new weather requests.
+On Linux, Coconut integrates with Blair through its
+`org.blair.Compositor1` D-Bus API for window management and layer-shell
+surfaces. KDE Wayland services are supported where available.
 
-## Highlights
+On Windows 10, Coconut uses native APIs and PowerShell for window discovery,
+application launching, media sessions, volume, power, display brightness,
+network, and Bluetooth. Unavailable hardware features fall back gracefully.
 
-- A centered dock with running applications and active-window feedback
-- An application launcher with search, categories, icons, and scrolling
-- A compact media area with playback controls and now-playing text
-- Live clock and weather entry points
-- Quick access to network, brightness, volume, Bluetooth, and battery status
-- Purpose-built pop-up panels that stay visually consistent with the dock
-- Native integrations for Blair, KDE/Wayland, and Windows 10 when available
+When Weather is enabled, Coconut resolves the configured location on first use,
+stores its coordinates in the user profile, and retrieves forecasts directly
+from MET Norway. Disabling the widget prevents new weather requests.
 
-## Platforms
+## Development
 
-Windows 10 is supported through the built-in Windows APIs and PowerShell:
-window discovery and activation, Start menu applications, system media
-sessions, master volume, battery, brightness, network, and Bluetooth. Hardware
-features that are not present, such as a laptop battery or an internal display,
-fall back gracefully.
+See [DEVELOPMENT.md](DEVELOPMENT.md) for the required checkout layout, Linux
+dependencies for Arch, Debian/Ubuntu, Fedora/RHEL, and openSUSE, build commands,
+and troubleshooting guidance.
 
-Linux integrates natively with Blair through its org.blair.Compositor1 D-Bus
-API (window lifecycle, focus/minimize, work areas, and layer-shell surfaces).
-KDE Wayland remains supported with its relevant desktop services.
+For a local development session:
 
-## Widgets
+```bash
+cargo run -p coconut-shell
+```
 
-- App launcher button
-- Running-app dock
-- Media controls and scrolling track title
-- Weather summary
-- Live clock
-- Network indicator
-- Brightness indicator
-- Volume indicator
-- Bluetooth indicator
-- Battery indicator
+Launch the settings application separately with:
 
-## Panels
-
-- **Applications** — browse, search, and launch installed apps
-- **Now Playing** — view current media and control playback
-- **Control Center** — quick system controls and status, with links into
-  the dedicated panels below
-- **Network**, **Bluetooth**, **Energy**, **Brightness**, **Volume** —
-  dedicated panels for each device, reachable from the control center or,
-  per `shell.toml`, directly from their own tray icon
-- **Clock** — a focused time panel
-- **Weather** — at-a-glance conditions
-
-## Status
-
-Coconut is not ready for installation or daily use yet. There is no
-installation guide at this stage; the project is evolving quickly and its
-packaging story will arrive once the shell is ready for it.
+```bash
+cargo run -p coconut-settings
+```
