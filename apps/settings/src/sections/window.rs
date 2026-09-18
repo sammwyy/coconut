@@ -457,7 +457,7 @@ pub fn build_titlebar(_: Size, state: &WindowState) -> BoxedWidget {
             setting_group("Titlebar source", "Auto chooses the best option for each app.", vec![row("Use titlebar", mode_control)]),
             setting_group(
                 "Look",
-                "Blend matches each app's own header color. Title text and buttons adjust their color automatically for contrast. Window corners follow Appearance.",
+                "Blend matches each app's own header color. Title text and buttons adjust their color automatically for contrast. Window and popup corners follow Appearance.",
                 appearance_rows,
             ),
             setting_group("System titlebar", "These options apply when the system draws the titlebar.", vec![

@@ -81,7 +81,6 @@ pub fn shell_fill() -> Color {
     use_theme().colors.accent
 }
 
-pub const CARD_RADIUS: f32 = 16.0;
 pub const ISLAND_RADIUS: f32 = 12.0;
 
 /// The content width shared by every scrollable device/network list — the

@@ -1,5 +1,5 @@
 use crate::state::{condition_label, format_temperature, icon_for, HourlyForecast, WeatherState};
-use coconut_plugin_kit::chrome::{shell_border, shell_muted, shell_panel, shell_text, CARD_RADIUS};
+use coconut_plugin_kit::chrome::{shell_border, shell_muted, shell_panel, shell_text};
 use coconut_plugin_kit::{pixel_icon, Panel, PanelRenderContext};
 use creamui_core::layout::FlexDirection;
 use creamui_core::{BoxedWidget, Size};
@@ -79,7 +79,7 @@ impl Panel for WeatherPanel {
         }
 
         Box::new(jsx! {
-            <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={18.0} gap={14.0} background={shell_panel()} border={(shell_border(), 1.0)} corner_radius={CARD_RADIUS}>
+            <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={18.0} gap={14.0} background={shell_panel()} border={(shell_border(), 1.0)}>
                 <Flex direction={FlexDirection::Row} gap={10.0} align={Align::Center}>
                     {pixel_icon(icon, 52.0, shell_text())}
                     <Flex direction={FlexDirection::Column} gap={3.0} shrink={0.0}>

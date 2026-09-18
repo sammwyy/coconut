@@ -1,7 +1,7 @@
 use crate::shared::VolumeLevel;
 use coconut_api::volume::{Fallback as VolumeFallback, VolumeIntegration};
 use coconut_plugin_kit::chrome::{
-    fat_slider, hero_card, panel_header, shell_border, shell_card, CARD_RADIUS,
+    fat_slider, hero_card, panel_header, shell_border, shell_card,
 };
 use coconut_plugin_kit::{Panel, PanelRenderContext, SharedState};
 use creamui_core::layout::FlexDirection;
@@ -78,7 +78,7 @@ pub fn build_content(shared: &SharedState, on_back: Option<Rc<dyn Fn()>>) -> Box
     let set_volume = volume_level.clone();
 
     Box::new(jsx! {
-        <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={16.0} gap={12.0} background={shell_card()} border={(shell_border(), 1.0)} corner_radius={CARD_RADIUS}>
+        <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={16.0} gap={12.0} background={shell_card()} border={(shell_border(), 1.0)}>
             {panel_header("VOLUME", on_back)}
             {hero_card(icon, value_text.clone(), caption.to_owned())}
             {fat_slider(icon, "Volume", value, value_text, SLIDER_W, None, move |level| {

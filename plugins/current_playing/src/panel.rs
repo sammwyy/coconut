@@ -2,7 +2,6 @@ use crate::shared::{CurrentPlayback, NextPlayback, PreviousPlayback, SeekPlaybac
 use coconut_api::audio::Playback;
 use coconut_plugin_kit::chrome::{
     shell_accent, shell_border, shell_fill, shell_muted, shell_panel, shell_text, shell_track,
-    CARD_RADIUS,
 };
 use coconut_plugin_kit::{pixel_icon, Panel, PanelRenderContext};
 use creamui_core::layout::{FlexDirection, Style as LayoutStyle};
@@ -111,7 +110,7 @@ impl Panel for CurrentPlayingPanel {
             "player_play"
         };
         Box::new(jsx! {
-            <Flex direction={FlexDirection::Row} size={(WIDTH as f32, HEIGHT as f32)} padding={14.0} gap={12.0} align={Align::Center} background={shell_panel()} border={(shell_border(), 1.0)} corner_radius={CARD_RADIUS}>
+            <Flex direction={FlexDirection::Row} size={(WIDTH as f32, HEIGHT as f32)} padding={14.0} gap={12.0} align={Align::Center} background={shell_panel()} border={(shell_border(), 1.0)}>
                     {cover}
                     <Flex direction={FlexDirection::Column} gap={5.0} grow={1.0} justify={Justify::Center}>
                         {Box::new(creamui_widgets::RawMarquee::expanding(playback.as_ref().map(|item| item.title.as_str()).unwrap_or_default(), shell_text(), 15.0)) as BoxedWidget}

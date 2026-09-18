@@ -31,7 +31,7 @@
 
 use coconut_plugin_kit::chrome::{
     shell_accent, shell_border, shell_card, shell_control, shell_control_hover, shell_muted,
-    shell_panel, shell_selected, shell_text, CARD_RADIUS, ISLAND_RADIUS,
+    shell_panel, shell_selected, shell_text, ISLAND_RADIUS,
 };
 use coconut_plugin_kit::{build_icon_index, load_icon, resolve_icon, xdg_data_directories};
 use coconut_plugin_kit::{Panel, PanelRenderContext};
@@ -222,7 +222,7 @@ fn build_drawer(catalog: AppCatalog, state: DrawerState, on_launch: Rc<dyn Fn()>
     let title = user_name();
 
     Box::new(jsx! {
-        <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={14.0} gap={10.0} background={shell_card()} border={(shell_border(), 1.0)} corner_radius={CARD_RADIUS}>
+        <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={14.0} gap={10.0} background={shell_card()} border={(shell_border(), 1.0)}>
             <Flex direction={FlexDirection::Row} align={Align::Center}>
                 <RawText color={shell_text()} font_size={18.0}>{title}</RawText>
                 <Flex grow={1.0} />

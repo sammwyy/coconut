@@ -22,7 +22,7 @@ use coconut_plugin_tray::{
     NetworkRevision, PowerProfileRevision, ToggleKeepAwake, VolumeLevel, WifiEnabled,
 };
 use coconut_plugin_weather::WeatherState;
-use creamui_core::{BoxedWidget, Point, Size};
+use creamui_core::{BoxedWidget, Size};
 use creamui_reactive::Signal;
 use creamui_render::{AppBuilder, AppHandle, WindowHandle, WindowOptions};
 use creamui_theme::{Color, Theme};
@@ -184,7 +184,6 @@ pub fn run() {
 
             let panel_host = PanelHost::new(app.clone(), registry.clone(), shared.clone());
             panel_host.set_theme(system_theme());
-            let open_panel = panel_host.dispatcher();
 
             if island_present(&initial_config.docks, "weather") {
                 refresh_weather(app.clone(), weather_state.clone());
@@ -268,7 +267,6 @@ pub fn run() {
                 &initial_config.docks,
                 &registry,
                 &shared,
-                &open_panel,
                 &panel_host,
                 &ready_backend,
                 &themed_windows,
@@ -283,7 +281,6 @@ pub fn run() {
                 registry,
                 shared.clone(),
                 panel_host,
-                open_panel,
                 ready_backend.clone(),
                 dock_windows.clone(),
                 desktop_work_area,
@@ -316,16 +313,14 @@ fn island_present(docks: &[DockConfig], id: &str) -> bool {
 /// way the old single-bar `append_bar` closure recreated its one window on
 /// a position change.
 ///
-/// Only the first dock feeds [`PanelHost`]'s popup anchor geometry — popups
-/// opened from a second/third dock's islands still anchor against the
-/// primary dock until multi-dock popup anchoring gets its own design pass.
+/// Each dock registers its own popup-anchor geometry with `panel_host`
+/// ([`PanelHost::set_dock`]), so its popups anchor against it, not dock 0.
 #[allow(clippy::too_many_arguments)]
 fn append_docks(
     app: &AppHandle,
     docks: &[DockConfig],
     registry: &Rc<PluginRegistry>,
     shared: &SharedState,
-    open_panel: &Rc<dyn Fn(&'static str, Point)>,
     panel_host: &Rc<PanelHost>,
     ready_backend: &Rc<dyn DesktopIntegration>,
     themed_windows: &Rc<RefCell<Vec<WindowHandle>>>,
@@ -334,6 +329,7 @@ fn append_docks(
     for window in dock_windows.borrow_mut().drain(..) {
         window.close();
     }
+    panel_host.clear_docks();
     let enabled_docks: Vec<&DockConfig> = docks.iter().filter(|dock| dock.enabled).collect();
     for (index, dock) in enabled_docks.into_iter().enumerate() {
         let position = dock.position;
@@ -350,11 +346,10 @@ fn append_docks(
         } else {
             (length, DOCK_HEIGHT + margin)
         };
-        let is_primary = index == 0;
         let dock = dock.clone();
         let registry = registry.clone();
         let shared = shared.clone();
-        let open_panel = open_panel.clone();
+        let open_panel = panel_host.dispatcher_for(index);
         let panel_host = panel_host.clone();
         let ready_backend = ready_backend.clone();
         let themed_windows = themed_windows.clone();
@@ -376,15 +371,12 @@ fn append_docks(
                 ready_backend.prepare_window(&window);
                 themed_windows.borrow_mut().push(window.clone());
                 dock_windows.borrow_mut().push(window.clone());
-                if is_primary {
-                    panel_host.set_dock_window(Some(window));
-                    let thickness = if position.is_vertical() {
-                        DOCK_WIDTH as f32
-                    } else {
-                        DOCK_HEIGHT as f32
-                    };
-                    panel_host.set_dock_geometry(position, thickness);
-                }
+                let thickness = if position.is_vertical() {
+                    DOCK_WIDTH as f32
+                } else {
+                    DOCK_HEIGHT as f32
+                };
+                panel_host.set_dock(index, window, position, thickness);
             },
             move |viewport: Size| -> BoxedWidget {
                 build_dock(viewport, &dock, &registry, &shared, &open_panel)
@@ -402,7 +394,6 @@ fn schedule_runtime_events(
     registry: Rc<PluginRegistry>,
     shared: SharedState,
     panel_host: Rc<PanelHost>,
-    open_panel: Rc<dyn Fn(&'static str, Point)>,
     ready_backend: Rc<dyn DesktopIntegration>,
     dock_windows: Rc<RefCell<Vec<WindowHandle>>>,
     work_area: Signal<Option<DesktopWorkArea>>,
@@ -416,7 +407,6 @@ fn schedule_runtime_events(
     let next_registry = registry.clone();
     let next_shared = shared.clone();
     let next_panel_host = panel_host.clone();
-    let next_open_panel = open_panel.clone();
     let next_ready_backend = ready_backend.clone();
     let next_dock_windows = dock_windows.clone();
     let next_work_area = work_area.clone();
@@ -464,7 +454,6 @@ fn schedule_runtime_events(
                                 &config.peek().docks,
                                 &registry,
                                 &shared,
-                                &open_panel,
                                 &panel_host,
                                 &ready_backend,
                                 &themed_windows,
@@ -487,7 +476,6 @@ fn schedule_runtime_events(
                 next_registry,
                 next_shared,
                 next_panel_host,
-                next_open_panel,
                 next_ready_backend,
                 next_dock_windows,
                 next_work_area,

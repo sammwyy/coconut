@@ -5,7 +5,7 @@ use coconut_api::power_profile::{
 };
 use coconut_plugin_kit::chrome::{
     compact_hero_card, list_row, panel_header, section_label, shell_border, shell_card, shell_text,
-    toggle_row, CARD_RADIUS,
+    toggle_row,
 };
 use coconut_plugin_kit::{pixel_icon, Panel, PanelRenderContext, SharedState};
 use creamui_core::layout::FlexDirection;
@@ -124,7 +124,7 @@ pub fn build_content(shared: &SharedState, on_back: Option<Rc<dyn Fn()>>) -> Box
     }
 
     Box::new(jsx! {
-        <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={16.0} gap={12.0} background={shell_card()} border={(shell_border(), 1.0)} corner_radius={CARD_RADIUS}>
+        <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={16.0} gap={12.0} background={shell_card()} border={(shell_border(), 1.0)}>
             {panel_header("ENERGY", on_back)}
             {compact_hero_card(hero_icon, hero_title, hero_caption)}
             {toggle_row("Keep awake", awake, toggle_awake)}

@@ -2,7 +2,7 @@ use crate::shared::{BluetoothDetailView, BluetoothPowered, BluetoothRevision, Bl
 use coconut_api::bluetooth::{BluetoothDevice, BluetoothIntegration, Fallback as BluetoothFallback};
 use coconut_plugin_kit::chrome::{
     action_button, compact_switch, detail_row, icon_button, list_row, panel_header, section_label,
-    shell_border, shell_card, shell_muted, shell_panel, shell_text, CARD_RADIUS, ISLAND_RADIUS,
+    shell_border, shell_card, shell_muted, shell_panel, shell_text, ISLAND_RADIUS,
     LIST_WIDTH,
 };
 use coconut_plugin_kit::{pixel_icon, Panel, PanelRenderContext, SharedState};
@@ -165,7 +165,7 @@ pub fn build_content(
     ) as BoxedWidget;
 
     Box::new(jsx! {
-        <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={16.0} gap={12.0} background={shell_card()} border={(shell_border(), 1.0)} corner_radius={CARD_RADIUS}>
+        <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={16.0} gap={12.0} background={shell_card()} border={(shell_border(), 1.0)}>
             {panel_header("BLUETOOTH", on_back)}
             {scroll_view}
         </Flex>
@@ -327,7 +327,7 @@ fn build_detail(
         .child(action_button("trash", "Forget", forget_action));
 
     Box::new(jsx! {
-        <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={16.0} gap={12.0} background={shell_card()} border={(shell_border(), 1.0)} corner_radius={CARD_RADIUS}>
+        <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={16.0} gap={12.0} background={shell_card()} border={(shell_border(), 1.0)}>
             {panel_header(&device.name, Some(on_back))}
             {Box::new(rows) as BoxedWidget}
             {Box::new(actions) as BoxedWidget}

@@ -1,4 +1,4 @@
-use crate::{PanelRenderContext, PluginRegistry, SharedState};
+use crate::{Panel, PanelRenderContext, PluginRegistry, SharedState};
 use coconut_core::DockPosition;
 use creamui_core::{Point, Rect};
 use creamui_render::platform::PopupPlacement;
@@ -16,27 +16,16 @@ use std::rc::Rc;
 /// generic implementation shared by every panel.
 ///
 /// Must be constructed behind an `Rc` (via [`PanelHost::new`]) since
-/// [`PanelHost::dispatcher`] and [`PanelHost::open`] need to hand out and
+/// [`PanelHost::dispatcher_for`] and [`PanelHost::open`] need to hand out and
 /// recursively re-invoke a handle to themselves from popup callbacks that
 /// outlive the call to `open`.
 pub struct PanelHost {
     app: AppHandle,
     registry: Rc<PluginRegistry>,
     shared: SharedState,
-    /// The dock window panels are anchored against. A `Cell`/`RefCell` pair
-    /// (rather than requiring it up front in `new`) because the dock window
-    /// is itself recreated whenever its `DockPosition` changes (a
-    /// layer-shell role can't be changed in place) — set with
-    /// [`PanelHost::set_dock_window`] whenever that happens.
-    dock_window: Rc<RefCell<Option<WindowHandle>>>,
-    /// The current dock's position and physical thickness in logical
-    /// pixels (`DOCK_HEIGHT`/`DOCK_WIDTH` in the shell engine), needed by
-    /// [`popup_for`]'s anchor computation. Unlike the old `lib.rs`, which
-    /// hardcoded `DOCK_HEIGHT`/`DOCK_WIDTH` constants owned by the bar
-    /// module, this is a parameter set via [`PanelHost::set_dock_window`]
-    /// so a future multi-dock setup isn't locked into one fixed thickness.
-    position: Cell<DockPosition>,
-    dock_thickness: Cell<f32>,
+    /// Per-dock anchor geometry, keyed by dock index (see `append_docks`),
+    /// so each dock's popups anchor against that dock, not always the first.
+    docks: RefCell<HashMap<usize, DockAnchor>>,
     /// Applied to every popup's `WindowOptions`, kept current via
     /// [`PanelHost::set_theme`] the same way `apps/shell`'s
     /// `RuntimeEvent::ReloadTheme` handler pushes a new theme to every
@@ -45,31 +34,43 @@ pub struct PanelHost {
     open_panels: RefCell<HashMap<&'static str, WindowHandle>>,
 }
 
+/// A dock's popup-anchor window plus the position/thickness [`popup_for`]
+/// needs for gravity and edge-spanning math.
+#[derive(Clone)]
+struct DockAnchor {
+    window: WindowHandle,
+    position: DockPosition,
+    thickness: f32,
+}
+
 impl PanelHost {
     pub fn new(app: AppHandle, registry: Rc<PluginRegistry>, shared: SharedState) -> Rc<Self> {
         Rc::new(Self {
             app,
             registry,
             shared,
-            dock_window: Rc::new(RefCell::new(None)),
-            position: Cell::new(DockPosition::default()),
-            dock_thickness: Cell::new(44.0),
+            docks: RefCell::new(HashMap::new()),
             theme: Cell::new(Theme::default()),
             open_panels: RefCell::new(HashMap::new()),
         })
     }
 
-    /// Updates the dock window panels anchor against. Call whenever the
-    /// dock's own window is (re)created, e.g. after a `DockPosition` change
-    /// forces the layer-shell surface to be recreated.
-    pub fn set_dock_window(&self, window: Option<WindowHandle>) {
-        *self.dock_window.borrow_mut() = window;
+    /// Registers/refreshes `dock_index`'s anchor window and geometry. Call
+    /// whenever that dock's window is (re)created.
+    pub fn set_dock(&self, dock_index: usize, window: WindowHandle, position: DockPosition, thickness: f32) {
+        self.docks.borrow_mut().insert(
+            dock_index,
+            DockAnchor {
+                window,
+                position,
+                thickness,
+            },
+        );
     }
 
-    /// Updates the dock geometry used to compute popup anchors/placement.
-    pub fn set_dock_geometry(&self, position: DockPosition, dock_thickness: f32) {
-        self.position.set(position);
-        self.dock_thickness.set(dock_thickness);
+    /// Drops every registered dock anchor, before a dock list rebuild.
+    pub fn clear_docks(&self) {
+        self.docks.borrow_mut().clear();
     }
 
     /// Updates the theme applied to newly opened popups.
@@ -77,22 +78,15 @@ impl PanelHost {
         self.theme.set(theme);
     }
 
-    /// Returns the generic `open_panel(id, at)` closure every
-    /// [`crate::IslandRenderContext`]/[`PanelRenderContext`] is handed,
-    /// replacing `BarActions`'s 16 named `open_*: Rc<dyn Fn(Point)>` fields
-    /// with one dispatcher shared by every island and panel.
-    pub fn dispatcher(self: &Rc<Self>) -> Rc<dyn Fn(&'static str, Point)> {
+    /// Returns the `open_panel(id, at)` closure bound to `dock_index`.
+    pub fn dispatcher_for(self: &Rc<Self>, dock_index: usize) -> Rc<dyn Fn(&'static str, Point)> {
         let host = Rc::clone(self);
-        Rc::new(move |id, at| host.open(id, at))
+        Rc::new(move |id, at| host.open(dock_index, id, at))
     }
 
-    /// Opens the panel registered under `id`, anchored at `at`. Looks the
-    /// panel up in the registry (warns and no-ops if `id` is unknown),
-    /// toggles it closed if it's already open, then computes the popup's
-    /// placement and appends it via the real
-    /// [`creamui_render::AppHandle::append_popup`] — the same call every
-    /// `open_X` block in the old `apps/shell/src/lib.rs` made by hand.
-    pub fn open(self: &Rc<Self>, id: &'static str, at: Point) {
+    /// Opens the panel `id`, anchored at `at` against `dock_index`'s dock.
+    /// Toggles closed if already open.
+    pub fn open(self: &Rc<Self>, dock_index: usize, id: &'static str, at: Point) {
         let Some(panel) = self.registry.panel(id).cloned() else {
             eprintln!("plugin-kit: unknown panel id '{id}'; ignoring open request");
             return;
@@ -103,20 +97,45 @@ impl PanelHost {
                 return;
             }
         }
-        let Some(popup) = popup_for(
-            &self.dock_window,
-            at,
-            self.position.get(),
-            self.dock_thickness.get(),
-        ) else {
+        // A new xdg_popup must be the topmost popup; give a just-closed
+        // one time to actually reach the compositor before opening another.
+        let others: Vec<WindowHandle> = self
+            .open_panels
+            .borrow_mut()
+            .drain()
+            .map(|(_, window)| window)
+            .filter(|window| window.is_open())
+            .collect();
+        if others.is_empty() {
+            self.do_open(dock_index, id, at, panel);
+            return;
+        }
+        for window in others {
+            window.close();
+        }
+        let host = Rc::clone(self);
+        self.app.spawn_background(
+            || std::thread::sleep(std::time::Duration::from_millis(100)),
+            move |()| host.do_open(dock_index, id, at, panel),
+        );
+    }
+
+    /// Builds and appends the popup for `panel`, once any previously open
+    /// panel is confirmed closed. See [`Self::open`].
+    fn do_open(self: &Rc<Self>, dock_index: usize, id: &'static str, at: Point, panel: Rc<dyn Panel>) {
+        let Some(anchor) = self.docks.borrow().get(&dock_index).cloned() else {
+            eprintln!(
+                "plugin-kit: no dock registered at index {dock_index}; ignoring open request"
+            );
             return;
         };
+        let popup = popup_for(&anchor.window, at, anchor.position, anchor.thickness);
         let size = panel.size();
         let host_for_ready = Rc::clone(self);
         let host_for_close = Rc::clone(self);
         let scratch = SharedState::default();
         let shared = self.shared.clone();
-        let dispatcher = self.dispatcher();
+        let dispatcher = self.dispatcher_for(dock_index);
         self.app.append_popup(
             popup_options(
                 panel.title(),
@@ -159,66 +178,63 @@ fn close_on_focus_lost(window: &WindowHandle) {
 }
 
 /// Computes the anchored, gravity-aware [`PopupOptions`] for a panel opened
-/// at `anchor` against a dock at `position`, `dock_thickness` logical
-/// pixels thick. Adapted from `apps/shell/src/lib.rs::popup_for`
-/// (`BarPosition` -> `DockPosition`; the dock's physical thickness — a
-/// hardcoded `DOCK_HEIGHT`/`DOCK_WIDTH` constant owned by the bar module in
-/// the original — is now an explicit parameter via
-/// [`PanelHost::set_dock_geometry`], since `PanelHost` itself has no
+/// at `anchor` against `dock` (that dock's own window) at `position`,
+/// `dock_thickness` logical pixels thick. Adapted from
+/// `apps/shell/src/lib.rs::popup_for` (`BarPosition` -> `DockPosition`; the
+/// dock's physical thickness — a hardcoded `DOCK_HEIGHT`/`DOCK_WIDTH`
+/// constant owned by the bar module in the original — is now an explicit
+/// parameter via [`PanelHost::set_dock`], since `PanelHost` itself has no
 /// dependency on the shell engine that defines those constants).
 fn popup_for(
-    dock_window: &Rc<RefCell<Option<WindowHandle>>>,
+    dock: &WindowHandle,
     anchor: Point,
     position: DockPosition,
     dock_thickness: f32,
-) -> Option<PopupOptions> {
-    let dock_ref = dock_window.borrow();
-    dock_ref.as_ref().map(|dock| {
-        let anchor_rect = match position {
-            // Horizontal panels keep the old edge-spanning anchor, which
-            // places their popup outside the dock.
-            DockPosition::Top => Rect {
-                x: anchor.x,
-                y: anchor.y,
-                width: 1.0,
-                height: (dock_thickness - anchor.y).max(1.0),
-            },
-            DockPosition::Bottom => Rect {
-                x: anchor.x,
-                y: 0.0,
-                width: 1.0,
-                height: (anchor.y + 1.0).max(1.0),
-            },
-            // For a side dock, Top/Center/Bottom gravity must be relative
-            // to the button itself, never the whole section above it.
-            DockPosition::Left | DockPosition::Right => Rect {
-                x: anchor.x,
-                y: anchor.y,
-                width: 1.0,
-                height: 1.0,
-            },
-        };
-        let vertical = dock
-            .monitor_size()
-            .map(|(_, height)| height as f32)
-            .unwrap_or(800.0);
-        // The center section of a side dock is deliberately generous. It
-        // covers the middle half of the dock; only controls clearly near an
-        // edge choose an edge-aligned popup.
-        let top_region = vertical * 0.25;
-        let bottom_region = vertical * 0.75;
-        let placement = match position {
-            DockPosition::Top => PopupPlacement::Below,
-            DockPosition::Bottom => PopupPlacement::Above,
-            DockPosition::Left if anchor.y < top_region => PopupPlacement::RightTop,
-            DockPosition::Left if anchor.y > bottom_region => PopupPlacement::RightBottom,
-            DockPosition::Left => PopupPlacement::RightCenter,
-            DockPosition::Right if anchor.y < top_region => PopupPlacement::LeftTop,
-            DockPosition::Right if anchor.y > bottom_region => PopupPlacement::LeftBottom,
-            DockPosition::Right => PopupPlacement::LeftCenter,
-        };
-        PopupOptions::new(dock.clone(), anchor_rect).placed(placement)
-    })
+) -> PopupOptions {
+    let anchor_rect = match position {
+        // Horizontal panels keep the old edge-spanning anchor, which
+        // places their popup outside the dock.
+        DockPosition::Top => Rect {
+            x: anchor.x,
+            y: anchor.y,
+            width: 1.0,
+            height: (dock_thickness - anchor.y).max(1.0),
+        },
+        DockPosition::Bottom => Rect {
+            x: anchor.x,
+            y: 0.0,
+            width: 1.0,
+            height: (anchor.y + 1.0).max(1.0),
+        },
+        // For a side dock, Top/Center/Bottom gravity must be relative
+        // to the button itself, never the whole section above it.
+        DockPosition::Left | DockPosition::Right => Rect {
+            x: anchor.x,
+            y: anchor.y,
+            width: 1.0,
+            height: 1.0,
+        },
+    };
+    let vertical = dock
+        .monitor_size()
+        .map(|(_, height)| height as f32)
+        .unwrap_or(800.0);
+    // The center section of a side dock is deliberately generous. It
+    // covers the middle half of the dock; only controls clearly near an
+    // edge choose an edge-aligned popup.
+    let top_region = vertical * 0.25;
+    let bottom_region = vertical * 0.75;
+    let placement = match position {
+        DockPosition::Top => PopupPlacement::Below,
+        DockPosition::Bottom => PopupPlacement::Above,
+        DockPosition::Left if anchor.y < top_region => PopupPlacement::RightTop,
+        DockPosition::Left if anchor.y > bottom_region => PopupPlacement::RightBottom,
+        DockPosition::Left => PopupPlacement::RightCenter,
+        DockPosition::Right if anchor.y < top_region => PopupPlacement::LeftTop,
+        DockPosition::Right if anchor.y > bottom_region => PopupPlacement::LeftBottom,
+        DockPosition::Right => PopupPlacement::LeftCenter,
+    };
+    PopupOptions::new(dock.clone(), anchor_rect).placed(placement)
 }
 
 /// Builds the `WindowOptions` shared by every panel popup. Moved verbatim

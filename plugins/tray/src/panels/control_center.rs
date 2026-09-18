@@ -11,7 +11,7 @@ use coconut_api::network::{Fallback as NetworkFallback, NetworkIntegration};
 use coconut_api::volume::{Fallback as VolumeFallback, VolumeIntegration};
 use coconut_plugin_kit::chrome::{
     compact_switch, fat_slider, shell_border, shell_card, shell_control_hover, shell_muted,
-    shell_panel, shell_selected, shell_text, wifi_strength_icon, CARD_RADIUS, ISLAND_RADIUS,
+    shell_panel, shell_selected, shell_text, wifi_strength_icon, ISLAND_RADIUS,
 };
 use coconut_plugin_kit::{Panel, PanelRenderContext};
 use creamui_core::layout::{FlexDirection, Style as LayoutStyle};
@@ -416,7 +416,7 @@ impl Panel for ControlCenterPanel {
         };
 
         Box::new(jsx! {
-            <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={16.0} gap={12.0} background={shell_card()} border={(shell_border(), 1.0)} corner_radius={CARD_RADIUS}>
+            <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={16.0} gap={12.0} background={shell_card()} border={(shell_border(), 1.0)}>
                 <RawText color={shell_muted()} font_size={14.0}>"CONTROL"</RawText>
                 {Box::new(device_row) as BoxedWidget}
                 {Box::new(status_row) as BoxedWidget}

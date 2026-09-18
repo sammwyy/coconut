@@ -39,5 +39,7 @@ pub trait Panel {
     /// `WIDTH`/`HEIGHT` consts.
     fn size(&self) -> Size;
 
+    /// The outer root should stay square — the compositor clips popup
+    /// corners itself (`blair`'s `decorations.popup_corner_radius`).
     fn build(&self, ctx: &PanelRenderContext) -> BoxedWidget;
 }
