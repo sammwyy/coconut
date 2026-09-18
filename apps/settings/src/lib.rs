@@ -34,6 +34,7 @@ enum Section {
     Widgets,
     WindowBehaviour,
     Layout,
+    Titlebar,
     Compositor,
     WorkingArea,
     Effects,
@@ -132,6 +133,11 @@ fn tree(
                     "Compositor",
                 ),
                 SidebarNode::leaf(Section::Layout, IconSource::Symbol(Symbol::Grid), "Layout"),
+                SidebarNode::leaf(
+                    Section::Titlebar,
+                    IconSource::Symbol(Symbol::Grid),
+                    "Titlebar",
+                ),
                 SidebarNode::leaf(
                     Section::WorkingArea,
                     IconSource::Symbol(Symbol::Grid),
@@ -377,6 +383,7 @@ fn build(
         Section::Tray => sections::tray::build(size, config),
         Section::Widgets => sections::widgets::build(size, config),
         Section::Layout => sections::window::build_layout(size, window_settings),
+        Section::Titlebar => sections::window::build_titlebar(size, window_settings),
         Section::Compositor => sections::window::build_general(size, window_settings),
         Section::WorkingArea => sections::window::build_working_area(size, window_settings),
         Section::Effects => sections::window::build_effects(size, window_settings),

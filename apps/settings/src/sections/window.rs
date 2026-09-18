@@ -49,6 +49,13 @@ mode = "auto"
 titlebar_height = 32
 border_width = 4
 corner_radius = 12
+follow_system_theme = true
+title_centered = false
+show_icon = true
+drag_margin = 0
+[decorations.buttons]
+layout = ["minimize", "maximize", "close"]
+side = "right"
 "#;
 
 pub struct WindowState {
@@ -292,6 +299,75 @@ pub fn build_layout(_: Size, state: &WindowState) -> BoxedWidget {
                 &["decorations", "titlebar_height"],
                 96,
             ),
+        ])],
+    )
+}
+
+pub fn build_titlebar(_: Size, state: &WindowState) -> BoxedWidget {
+    let c = state.config.get();
+    let follow_theme = bool_at(&c, &["decorations", "follow_system_theme"], true);
+    let writer = state.writer();
+    let follow_theme_control: BoxedWidget = Box::new(Switch::new(follow_theme, move || {
+        writer.update(|c| {
+            put(
+                c,
+                &["decorations", "follow_system_theme"],
+                toml::Value::Boolean(!follow_theme),
+            )
+        })
+    }));
+
+    let side = str_at(&c, &["decorations", "buttons", "side"], "right");
+    let side_selected = usize::from(side == "left");
+    let writer = state.writer();
+    let side_control: BoxedWidget = Box::new(
+        SegmentedControl::new(side_selected, move |i| {
+            writer.update(|c| {
+                put(
+                    c,
+                    &["decorations", "buttons", "side"],
+                    toml::Value::String(["right", "left"][i].into()),
+                )
+            })
+        })
+        .option("Right")
+        .option("Left"),
+    );
+
+    let centered = bool_at(&c, &["decorations", "title_centered"], false);
+    let writer = state.writer();
+    let centered_control: BoxedWidget = Box::new(Switch::new(centered, move || {
+        writer.update(|c| {
+            put(
+                c,
+                &["decorations", "title_centered"],
+                toml::Value::Boolean(!centered),
+            )
+        })
+    }));
+
+    let show_icon = bool_at(&c, &["decorations", "show_icon"], true);
+    let writer = state.writer();
+    let show_icon_control: BoxedWidget = Box::new(Switch::new(show_icon, move || {
+        writer.update(|c| {
+            put(
+                c,
+                &["decorations", "show_icon"],
+                toml::Value::Boolean(!show_icon),
+            )
+        })
+    }));
+
+    finish(
+        state,
+        "Titlebar",
+        "How Blair draws the server-side window titlebar.",
+        vec![group(vec![
+            row("Match system theme colors", follow_theme_control),
+            row("Buttons", side_control),
+            row("Center title", centered_control),
+            row("Show app icon", show_icon_control),
+            slider(state, "Drag margin", &["decorations", "drag_margin"], 128),
         ])],
     )
 }
