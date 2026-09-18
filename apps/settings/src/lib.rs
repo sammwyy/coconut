@@ -41,7 +41,10 @@ enum Section {
     Compositor,
     WorkingArea,
     Effects,
-    Input,
+    Keyboard,
+    Mouse,
+    CursorTheme,
+    Touchpad,
     Focus,
     Shortcuts,
     Users,
@@ -60,7 +63,7 @@ fn category_default(section: Section) -> Section {
         Section::Panels => Section::Dock(0),
         Section::Status => Section::Tray,
         Section::Windows => Section::Layout,
-        Section::InputDevices => Section::Input,
+        Section::InputDevices => Section::Keyboard,
         Section::System => Section::Effects,
         Section::Users => Section::Profile,
         leaf => leaf,
@@ -86,7 +89,10 @@ fn page_title(section: &Section, docks: &[coconut_core::DockConfig]) -> String {
         Section::Compositor => "Advanced".into(),
         Section::WorkingArea => "Workspaces".into(),
         Section::Effects => "Motion".into(),
-        Section::Input => "Keyboard & mouse".into(),
+        Section::Keyboard => "Keyboard".into(),
+        Section::Mouse => "Mouse".into(),
+        Section::CursorTheme => "Cursor".into(),
+        Section::Touchpad => "Touchpad".into(),
         Section::Focus => "Window focus".into(),
         Section::Shortcuts => "Shortcuts".into(),
         Section::Profile => "My profile".into(),
@@ -113,6 +119,7 @@ fn tree(
         .and_then(|username| accounts.iter().find(|account| account.username == username))
         .map(users::account_icon)
         .unwrap_or(IconSource::Symbol(Symbol::Controls));
+    let theme = creamui_theme::use_theme();
     vec![
         SidebarNode::parent(
             Section::Appearance,
@@ -121,7 +128,8 @@ fn tree(
             vec![
                 SidebarNode::leaf(Section::Theme, icons.paintbrush.clone(), "Theme"),
                 SidebarNode::leaf(Section::IconPack, IconSource::Symbol(Symbol::Grid), "Icons"),
-                SidebarNode::leaf(Section::Sound, IconSource::Symbol(Symbol::Sliders), "Sound"),
+                SidebarNode::leaf(Section::Sound, icons.music_note.clone(), "Sound"),
+                SidebarNode::leaf(Section::CursorTheme, icons.cursor.clone(), "Cursor"),
             ],
         ),
         SidebarNode::parent(
@@ -150,14 +158,14 @@ fn tree(
                         .map(|(index, dock)| {
                             SidebarNode::leaf(
                                 Section::Dock(index),
-                                icons.position.clone(),
+                                icons::blank(),
                                 sections::general::dock_label(index, dock),
                             )
                         })
                         .chain(std::iter::once(SidebarNode::leaf(
                             Section::AddDock,
-                            icons.position.clone(),
-                            "+ Add panel",
+                            icons::plus(&theme),
+                            "Add panel",
                         )))
                         .collect(),
                 ),
@@ -173,18 +181,14 @@ fn tree(
         ),
         SidebarNode::parent(
             Section::Windows,
-            IconSource::Symbol(Symbol::Controls),
+            icons.windows.clone(),
             "Windows",
             vec![
                 SidebarNode::leaf(Section::Layout, IconSource::Symbol(Symbol::Grid), "Layout"),
-                SidebarNode::leaf(
-                    Section::Titlebar,
-                    IconSource::Symbol(Symbol::Grid),
-                    "Titlebar",
-                ),
+                SidebarNode::leaf(Section::Titlebar, icons.titlebar.clone(), "Titlebar"),
                 SidebarNode::leaf(
                     Section::WorkingArea,
-                    IconSource::Symbol(Symbol::Grid),
+                    icons.workspaces.clone(),
                     "Workspaces",
                 ),
                 SidebarNode::leaf(
@@ -192,38 +196,30 @@ fn tree(
                     IconSource::Symbol(Symbol::Controls),
                     "Window focus",
                 ),
-                SidebarNode::leaf(
-                    Section::Shortcuts,
-                    IconSource::Symbol(Symbol::Keyboard),
-                    "Shortcuts",
-                ),
+                SidebarNode::leaf(Section::Shortcuts, icons.shortcuts.clone(), "Shortcuts"),
             ],
         ),
         SidebarNode::parent(
             Section::InputDevices,
-            IconSource::Symbol(Symbol::Controls),
-            "Keyboard & mouse",
-            vec![SidebarNode::leaf(
-                Section::Input,
-                IconSource::Symbol(Symbol::Keyboard),
-                "Keyboard, mouse & touchpad",
-            )],
+            icons.devices.clone(),
+            "Devices",
+            vec![
+                SidebarNode::leaf(Section::Keyboard, icons.keyboard.clone(), "Keyboard"),
+                SidebarNode::leaf(Section::Mouse, icons.mouse.clone(), "Mouse"),
+                SidebarNode::leaf(
+                    Section::Touchpad,
+                    IconSource::Symbol(Symbol::Grid),
+                    "Touchpad",
+                ),
+            ],
         ),
         SidebarNode::parent(
             Section::System,
-            IconSource::Symbol(Symbol::Controls),
+            icons.system.clone(),
             "System",
             vec![
-                SidebarNode::leaf(
-                    Section::Effects,
-                    IconSource::Symbol(Symbol::Controls),
-                    "Motion",
-                ),
-                SidebarNode::leaf(
-                    Section::Compositor,
-                    IconSource::Symbol(Symbol::Controls),
-                    "Advanced",
-                ),
+                SidebarNode::leaf(Section::Effects, icons.eye.clone(), "Motion"),
+                SidebarNode::leaf(Section::Compositor, icons.exclamation.clone(), "Advanced"),
             ],
         ),
         SidebarNode::parent(
@@ -464,7 +460,10 @@ fn build(
         Section::Compositor => sections::window::build_general(size, window_settings),
         Section::WorkingArea => sections::window::build_working_area(size, window_settings),
         Section::Effects => sections::window::build_effects(size, window_settings),
-        Section::Input => sections::window::build_input(size, window_settings),
+        Section::Keyboard => sections::window::build_keyboard(size, window_settings),
+        Section::Mouse => sections::window::build_mouse(size, window_settings),
+        Section::CursorTheme => sections::asset_packs::cursor_themes(size, config),
+        Section::Touchpad => sections::window::build_touchpad(size, window_settings),
         Section::Focus => sections::window::build_focus(size, window_settings),
         Section::Shortcuts => sections::window::build_shortcuts(size, shortcut_settings),
         Section::Profile => users::build(size, profile),

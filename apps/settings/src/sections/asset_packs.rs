@@ -38,6 +38,18 @@ pub fn sound_themes(_: Size, config: &Signal<ShellConfig>) -> BoxedWidget {
     )
 }
 
+pub fn cursor_themes(_: Size, config: &Signal<ShellConfig>) -> BoxedWidget {
+    let selected = config.get().appearance.cursor_theme;
+    packs(
+        "Cursor",
+        "Choose the mouse pointer theme.",
+        list_cursor_packs(),
+        &selected,
+        config,
+        |shell| &mut shell.appearance.cursor_theme,
+    )
+}
+
 fn packs(
     title: &str,
     subtitle: &str,
@@ -94,6 +106,29 @@ fn list_packs(kind: &str) -> Vec<String> {
         };
         for entry in entries.flatten() {
             if entry.path().is_dir() {
+                if let Some(name) = entry.file_name().to_str() {
+                    packs.insert(name.to_owned());
+                }
+            }
+        }
+    }
+    packs.into_iter().collect()
+}
+
+/// Cursor themes share the same `icons/<name>/` directories as regular icon
+/// themes (there's no dedicated `cursors/` top-level folder in the
+/// freedesktop layout), so a theme only counts here if it also ships a
+/// `cursors` subfolder — otherwise `list_packs("icons")` would list every
+/// icon theme as if it were a cursor theme too.
+fn list_cursor_packs() -> Vec<String> {
+    let mut packs = BTreeSet::new();
+    for directory in xdg_data_directories() {
+        let Ok(entries) = fs::read_dir(directory.join("icons")) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() && path.join("cursors").is_dir() {
                 if let Some(name) = entry.file_name().to_str() {
                     packs.insert(name.to_owned());
                 }

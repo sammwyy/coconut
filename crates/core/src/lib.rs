@@ -54,6 +54,8 @@ const DEFAULT_SHELL_TOML: &str = r#"# Coconut configuration.
 # Freedesktop application icon and desktop sound themes used by Coconut.
 icon_theme = "hicolor"
 sound_theme = "freedesktop"
+# Mouse cursor theme, picked from installed themes with a "cursors" folder.
+cursor_theme = "Adwaita"
 
 [[dock]]
 # Where this dock sits on screen: "top", "bottom", "left" or "right". You

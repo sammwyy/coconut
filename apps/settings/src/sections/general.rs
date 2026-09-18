@@ -1,4 +1,4 @@
-use crate::common::{fixed_body, group, row, section, update_config};
+use crate::common::{fixed_body, group, row, section, tab_colors, update_config};
 use coconut_core::{DockAlign, DockConfig, DockPosition, IslandEntry, SectionConfig, ShellConfig};
 use creamui_core::layout::{Dimension, FlexDirection, LengthPercentage, Style as LayoutStyle};
 use creamui_core::{BoxedWidget, Size, StateStyle, Style, Styled};
@@ -9,8 +9,9 @@ use creamui_widgets::layout::{Align, Flex, Justify};
 use creamui_widgets::{
     tab_styles, Button, ButtonSize, ButtonState, ButtonVariant, Icon, IconImage, IconSource,
     RawButton, RawText, RawView, ScrollController, SegmentedControl, Select, SelectController,
-    Surface, SurfaceRole, Switch, Symbol, Tab, TabColors, TabSizing, Tabs, Text, TextSize,
+    Surface, SurfaceRole, Switch, Symbol, Tab, TabSizing, Tabs, Text, TextSize,
 };
+use std::rc::Rc;
 
 const POSITIONS: [DockPosition; 4] = [
     DockPosition::Top,
@@ -120,7 +121,7 @@ pub fn build_dock_page(
 fn dock_tabs(tab: &Signal<DockTab>, active: DockTab) -> BoxedWidget {
     let labels = ["Position", "Appearance", "Contents"];
     let styles = tab_styles(&labels, TabSizing::Fill, 38.0, 12.0);
-    let colors = TabColors::dark();
+    let colors = tab_colors();
     let mut tabs = Tabs::new(
         colors,
         LayoutStyle {
@@ -131,7 +132,7 @@ fn dock_tabs(tab: &Signal<DockTab>, active: DockTab) -> BoxedWidget {
             ..Default::default()
         },
     )
-    .gap(4.0);
+    .gap(8.0);
     for (index, label) in labels.into_iter().enumerate() {
         let tab = tab.clone();
         let value = match index {
@@ -165,41 +166,83 @@ fn top_card(config: &Signal<ShellConfig>, dock_index: usize, dock: &DockConfig) 
         .iter()
         .position(|candidate| *candidate == dock.position)
         .unwrap_or(0);
-    let position_control: BoxedWidget = Box::new(
-        SegmentedControl::new(selected, {
-            let config = config.clone();
-            move |index: usize| {
-                update_config(&config, |c| {
-                    if let Some(d) = c.docks.get_mut(dock_index) {
-                        d.position = POSITIONS[index];
-                    }
-                });
-            }
-        })
-        .option("Top")
-        .option("Bottom")
-        .option("Left")
-        .option("Right"),
-    );
+    let position_options: [(&[u8], &str); 4] = [
+        (
+            include_bytes!("../../../../assets/icons/bar-top.svg"),
+            "Top",
+        ),
+        (
+            include_bytes!("../../../../assets/icons/bar-bottom.svg"),
+            "Bottom",
+        ),
+        (
+            include_bytes!("../../../../assets/icons/bar-left.svg"),
+            "Left",
+        ),
+        (
+            include_bytes!("../../../../assets/icons/bar-right.svg"),
+            "Right",
+        ),
+    ];
+    let position_control = icon_choice_row(&position_options, selected, {
+        let config = config.clone();
+        move |index: usize| {
+            update_config(&config, |c| {
+                if let Some(d) = c.docks.get_mut(dock_index) {
+                    d.position = POSITIONS[index];
+                }
+            });
+        }
+    });
     let align_selected = ALIGNS
         .iter()
         .position(|candidate| *candidate == dock.align)
         .unwrap_or(0);
-    let align_control: BoxedWidget = Box::new(
-        SegmentedControl::new(align_selected, {
-            let config = config.clone();
-            move |index: usize| {
-                update_config(&config, |c| {
-                    if let Some(dock) = c.docks.get_mut(dock_index) {
-                        dock.align = ALIGNS[index];
-                    }
-                });
-            }
-        })
-        .option("Left")
-        .option("Center")
-        .option("Right"),
-    );
+    // A dock laid along the top/bottom edge is a horizontal bar, so its
+    // "Alignment" setting slides content left/center/right; a left/right
+    // dock is vertical, so the same setting slides it up/center/down.
+    let vertical_axis = matches!(dock.position, DockPosition::Left | DockPosition::Right);
+    let align_options: [(&[u8], &str); 3] = if vertical_axis {
+        [
+            (
+                include_bytes!("../../../../assets/icons/align-top.svg"),
+                "Top",
+            ),
+            (
+                include_bytes!("../../../../assets/icons/align-center-vertical.svg"),
+                "Center",
+            ),
+            (
+                include_bytes!("../../../../assets/icons/align-bottom.svg"),
+                "Bottom",
+            ),
+        ]
+    } else {
+        [
+            (
+                include_bytes!("../../../../assets/icons/align-left.svg"),
+                "Left",
+            ),
+            (
+                include_bytes!("../../../../assets/icons/align-center-horizontal.svg"),
+                "Center",
+            ),
+            (
+                include_bytes!("../../../../assets/icons/align-right.svg"),
+                "Right",
+            ),
+        ]
+    };
+    let align_control = icon_choice_row(&align_options, align_selected, {
+        let config = config.clone();
+        move |index: usize| {
+            update_config(&config, |c| {
+                if let Some(dock) = c.docks.get_mut(dock_index) {
+                    dock.align = ALIGNS[index];
+                }
+            });
+        }
+    });
     let edge_selected = EDGE_GAPS
         .iter()
         .position(|candidate| *candidate == dock.edge_gap)
@@ -834,6 +877,91 @@ fn icon_button(
                     .justify(Justify::Center)
                     .child(Box::new(Icon::new(icon, foreground).size(16.0)) as BoxedWidget),
             )),
+    )
+}
+
+/// A row of exclusive icon+label buttons, like [`SegmentedControl`] but with
+/// a bundled SVG glyph alongside each option's text.
+fn icon_choice_row(
+    options: &[(&'static [u8], &'static str)],
+    selected: usize,
+    on_change: impl Fn(usize) + 'static,
+) -> BoxedWidget {
+    let on_change: Rc<dyn Fn(usize)> = Rc::new(on_change);
+    let mut row = Flex::row().gap(8.0);
+    for (index, (source, label)) in options.iter().enumerate() {
+        let on_change = on_change.clone();
+        row = row.child(icon_choice(source, label, index == selected, move || {
+            on_change(index)
+        }));
+    }
+    Box::new(row)
+}
+
+fn icon_choice(
+    source: &[u8],
+    label: &str,
+    selected: bool,
+    on_click: impl Fn() + 'static,
+) -> BoxedWidget {
+    let theme = use_theme();
+    let icon = ImageData::from_svg(source, SvgSize::Max(32))
+        .map(|image| {
+            IconSource::Image(IconImage {
+                image: image.image().clone(),
+                monochrome: true,
+            })
+        })
+        .unwrap_or_else(|error| {
+            eprintln!("settings: failed to decode a dock choice icon: {error}");
+            IconSource::Symbol(Symbol::Grid)
+        });
+    let background = if selected {
+        theme.surface_elevated
+    } else {
+        theme.surface_hover
+    };
+    let foreground = if selected {
+        theme.text_primary
+    } else {
+        theme.text_secondary
+    };
+    let style = Style::new()
+        .layout(LayoutStyle {
+            min_size: creamui_core::layout::Size {
+                width: Dimension::Length(72.0),
+                height: Dimension::Length(30.0),
+            },
+            flex_grow: 1.0,
+            padding: creamui_core::layout::Rect {
+                left: LengthPercentage::Length(8.0),
+                right: LengthPercentage::Length(8.0),
+                top: LengthPercentage::Length(6.0),
+                bottom: LengthPercentage::Length(6.0),
+            },
+            ..Default::default()
+        })
+        .background(background)
+        .corner_radius(theme.tab_radius)
+        .border(
+            if selected {
+                theme.border_strong
+            } else {
+                background
+            },
+            1.0,
+        )
+        .hover(StateStyle::new().background(background.mix(theme.text_primary, 0.04)))
+        .pressed(StateStyle::new().background(background.mix(theme.text_primary, 0.09)));
+    Box::new(
+        RawButton::new(style, on_click).child(Box::new(
+            Flex::row()
+                .gap(6.0)
+                .align(Align::Center)
+                .justify(Justify::Center)
+                .child(Box::new(Icon::new(icon, foreground).size(14.0)) as BoxedWidget)
+                .child(Box::new(RawText::new(label.to_owned(), foreground, 12.0)) as BoxedWidget),
+        )),
     )
 }
 

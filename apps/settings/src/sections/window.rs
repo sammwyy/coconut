@@ -608,25 +608,8 @@ pub fn build_effects(_: Size, state: &WindowState) -> BoxedWidget {
     )
 }
 
-pub fn build_input(_: Size, state: &WindowState) -> BoxedWidget {
+pub fn build_keyboard(_: Size, state: &WindowState) -> BoxedWidget {
     let c = state.config.get();
-    let touchpad_controls = [
-        ("Tap to click", "tap"),
-        ("Natural scrolling", "natural_scroll"),
-        ("Disable while typing", "disable_while_typing"),
-    ]
-    .into_iter()
-    .map(|(label, key)| {
-        let value = bool_at(&c, &["input", "touchpad", key], true);
-        let writer = state.writer();
-        row(
-            label,
-            Box::new(Switch::new(value, move || {
-                writer.update(|c| put(c, &["input", "touchpad", key], toml::Value::Boolean(!value)))
-            })) as BoxedWidget,
-        )
-    })
-    .collect();
     let keyboard_layout = str_at(&c, &["input", "keyboard", "layout"], "us").to_owned();
     let writer = state.writer();
     let layout_control: BoxedWidget = Box::new(
@@ -643,6 +626,32 @@ pub fn build_input(_: Size, state: &WindowState) -> BoxedWidget {
         })
         .placeholder("us"),
     );
+    finish(
+        state,
+        "Keyboard",
+        "Use an XKB layout code, for example us, es or latam.",
+        vec![group(vec![
+            row("Layout", layout_control),
+            integer_field(
+                state,
+                "Repeat delay (ms)",
+                &["input", "keyboard", "repeat_delay"],
+                0,
+                Some(2_000),
+            ),
+            integer_field(
+                state,
+                "Repeat rate",
+                &["input", "keyboard", "repeat_rate"],
+                1,
+                Some(100),
+            ),
+        ])],
+    )
+}
+
+pub fn build_mouse(_: Size, state: &WindowState) -> BoxedWidget {
+    let c = state.config.get();
     let mouse_sensitivity = at(&c, &["input", "mouse", "sensitivity"])
         .and_then(toml::Value::as_float)
         .unwrap_or(0.0);
@@ -665,41 +674,36 @@ pub fn build_input(_: Size, state: &WindowState) -> BoxedWidget {
     );
     finish(
         state,
-        "Input",
-        "Set up the keyboard, mouse and touchpad.",
-        vec![
-            setting_group(
-                "Keyboard",
-                "Use an XKB layout code, for example us, es or latam.",
-                vec![
-                    row("Layout", layout_control),
-                    integer_field(
-                        state,
-                        "Repeat delay (ms)",
-                        &["input", "keyboard", "repeat_delay"],
-                        0,
-                        Some(2_000),
-                    ),
-                    integer_field(
-                        state,
-                        "Repeat rate",
-                        &["input", "keyboard", "repeat_rate"],
-                        1,
-                        Some(100),
-                    ),
-                ],
-            ),
-            setting_group(
-                "Mouse",
-                "Sensitivity is a precise value from -1.0 (slower) to 1.0 (faster).",
-                vec![row("Sensitivity", sensitivity_control)],
-            ),
-            setting_group(
-                "Touchpad",
-                "These only affect touchpad devices.",
-                touchpad_controls,
-            ),
-        ],
+        "Mouse",
+        "Sensitivity is a precise value from -1.0 (slower) to 1.0 (faster).",
+        vec![group(vec![row("Sensitivity", sensitivity_control)])],
+    )
+}
+
+pub fn build_touchpad(_: Size, state: &WindowState) -> BoxedWidget {
+    let c = state.config.get();
+    let touchpad_controls = [
+        ("Tap to click", "tap"),
+        ("Natural scrolling", "natural_scroll"),
+        ("Disable while typing", "disable_while_typing"),
+    ]
+    .into_iter()
+    .map(|(label, key)| {
+        let value = bool_at(&c, &["input", "touchpad", key], true);
+        let writer = state.writer();
+        row(
+            label,
+            Box::new(Switch::new(value, move || {
+                writer.update(|c| put(c, &["input", "touchpad", key], toml::Value::Boolean(!value)))
+            })) as BoxedWidget,
+        )
+    })
+    .collect();
+    finish(
+        state,
+        "Touchpad",
+        "These only affect touchpad devices.",
+        vec![group(touchpad_controls)],
     )
 }
 

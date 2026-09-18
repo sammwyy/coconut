@@ -244,12 +244,13 @@ fn device_row_icon(device: &BluetoothDevice) -> &'static str {
 /// `"audio-headset"`, `"input-mouse"`) to one of our bundled device icons.
 fn device_type_icon(hint: Option<&str>) -> Option<&'static str> {
     match hint? {
-        "audio-headset" | "audio-headphones" => Some("headphones"),
+        "audio-headset" => Some("headphones-with-mic"),
+        "audio-headphones" => Some("headphones"),
         "audio-card" | "multimedia-player" => Some("speaker"),
         "input-mouse" => Some("mouse"),
         "input-keyboard" => Some("keyboard"),
         "input-gaming" => Some("gamepad"),
-        "phone" => Some("phone"),
+        "phone" => Some("mobile"),
         "computer" => Some("laptop"),
         _ => None,
     }

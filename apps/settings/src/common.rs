@@ -5,7 +5,9 @@ use creamui_macros::jsx;
 use creamui_reactive::Signal;
 use creamui_theme::use_theme;
 use creamui_widgets::layout::{Align, Justify};
-use creamui_widgets::{RawScrollView, RawView, ScrollController, Surface, SurfaceRole, Text};
+use creamui_widgets::{
+    RawScrollView, RawView, ScrollController, Surface, SurfaceRole, TabColors, Text,
+};
 
 /// The scrollable body of a settings page. Page chrome is owned by the
 /// Settings window so every view has one consistent title bar.
@@ -18,21 +20,39 @@ pub fn section(_: &str, _: &str, body: Vec<BoxedWidget>) -> BoxedWidget {
 
 /// A settings page with fixed navigation chrome and a scrollable body. The
 /// body owns its bottom breathing room, so scrolling never clips the last
-/// control against the viewport edge.
+/// control against the viewport edge. Left/right padding matches every other
+/// settings page's content inset, so the toolbar's own background (a
+/// [`creamui_widgets::Tabs`] fills its full container) reads as a
+/// deliberately placed card rather than a colored strip flush with the
+/// window edge.
 pub fn fixed_body(
     toolbar: BoxedWidget,
     body: BoxedWidget,
     scroll: ScrollController,
 ) -> BoxedWidget {
+    let toolbar: BoxedWidget = Box::new(
+        RawView::new(creamui_core::layout::Style {
+            flex_direction: FlexDirection::Column,
+            flex_shrink: 0.0,
+            padding: creamui_core::layout::Rect {
+                left: creamui_core::layout::LengthPercentage::Length(28.0),
+                right: creamui_core::layout::LengthPercentage::Length(36.0),
+                top: creamui_core::layout::LengthPercentage::Length(24.0),
+                bottom: creamui_core::layout::LengthPercentage::Length(12.0),
+            },
+            ..Default::default()
+        })
+        .child(toolbar),
+    );
     let body: BoxedWidget = Box::new(
         RawView::new(creamui_core::layout::Style {
             flex_direction: FlexDirection::Column,
             flex_shrink: 0.0,
             padding: creamui_core::layout::Rect {
-                left: creamui_core::layout::LengthPercentage::Length(2.0),
-                right: creamui_core::layout::LengthPercentage::Length(16.0),
-                top: creamui_core::layout::LengthPercentage::Length(20.0),
-                bottom: creamui_core::layout::LengthPercentage::Length(28.0),
+                left: creamui_core::layout::LengthPercentage::Length(28.0),
+                right: creamui_core::layout::LengthPercentage::Length(36.0),
+                top: creamui_core::layout::LengthPercentage::Length(12.0),
+                bottom: creamui_core::layout::LengthPercentage::Length(32.0),
             },
             ..Default::default()
         })
@@ -103,6 +123,19 @@ pub fn row(label: &str, control: BoxedWidget) -> BoxedWidget {
             {control}
         </Flex>
     })
+}
+
+/// [`TabColors::dark`] tints its container with `theme.surface` — the base
+/// app canvas color, used behind the sidebar — but every settings page's
+/// content instead sits on `theme.surface_elevated`. That mismatch is why a
+/// tab bar showed a visibly different-colored rectangle in the gaps between
+/// tabs, reading as a rendering bug rather than an intentional pill group.
+/// This keeps the container blended into the page it's actually placed on.
+pub fn tab_colors() -> TabColors {
+    let theme = use_theme();
+    let mut colors = TabColors::dark();
+    colors.background = theme.surface_elevated;
+    colors
 }
 
 fn divider() -> BoxedWidget {

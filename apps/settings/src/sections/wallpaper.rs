@@ -1,4 +1,4 @@
-use crate::common::{group, row, section, update_config};
+use crate::common::{group, row, section, tab_colors, update_config};
 use coconut_core::{DesktopColor, ShellConfig, WallpaperMode};
 use creamui_core::layout::FlexDirection;
 use creamui_core::{BoxedWidget, Size, Styled};
@@ -9,7 +9,7 @@ use creamui_render::WindowHandle;
 use creamui_theme::{use_theme, Color};
 use creamui_widgets::layout::{fixed, Align, Justify, Wrap};
 use creamui_widgets::{
-    tab_styles, ColorPicker, ColorPickerController, Tab, TabColors, TabSizing, Tabs, Text, TextSize,
+    tab_styles, ColorPicker, ColorPickerController, Tab, TabSizing, Tabs, Text, TextSize,
 };
 use image_rs::codecs::jpeg::JpegEncoder;
 use std::cell::{Cell, RefCell};
@@ -77,7 +77,7 @@ pub fn build(
 
 fn mode_tabs(config: &Signal<ShellConfig>, image_mode: bool) -> BoxedWidget {
     let labels = ["Image", "Solid color"];
-    let colors = TabColors::dark();
+    let colors = tab_colors();
     let styles = tab_styles(&labels, TabSizing::Fill, 36.0, 6.0);
     let mut tabs = Tabs::new(
         colors,
@@ -86,7 +86,7 @@ fn mode_tabs(config: &Signal<ShellConfig>, image_mode: bool) -> BoxedWidget {
             ..Default::default()
         },
     )
-    .gap(4.0);
+    .gap(8.0);
     for (index, label) in labels.into_iter().enumerate() {
         let config = config.clone();
         tabs = tabs.child(Box::new(Tab::new(

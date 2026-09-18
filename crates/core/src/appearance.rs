@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 pub struct AppearanceConfig {
     pub icon_theme: String,
     pub sound_theme: String,
+    pub cursor_theme: String,
 }
 
 impl Default for AppearanceConfig {
@@ -12,6 +13,7 @@ impl Default for AppearanceConfig {
         Self {
             icon_theme: "hicolor".into(),
             sound_theme: "freedesktop".into(),
+            cursor_theme: "Adwaita".into(),
         }
     }
 }
