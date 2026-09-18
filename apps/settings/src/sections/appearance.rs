@@ -139,7 +139,7 @@ fn theme_card(
             style={Style { layout: creamui_core::layout::Style { size: fixed(THEME_CARD.0, THEME_CARD.1), ..Default::default() }, ..Default::default() }}
             background={creamui_theme::use_theme().colors.surface_elevated}
             border={(if active { selected_border } else { creamui_theme::use_theme().colors.border }, if active { 2.0 } else { 1.0 })}
-            corner_radius={preview.card_radius}
+            corner_radius={creamui_theme::use_theme().card_radius}
             on_click={move || {
                 set_custom.set(false);
                 apply(AppearanceSelection { theme: Some(id.clone()), variant: Some(variant.clone()), accent: None, font_family: font_family.clone() }, &set_appearance, &set_window);
@@ -179,7 +179,7 @@ fn variant_card(
             style={Style { layout: creamui_core::layout::Style { size: fixed(VARIANT_CARD.0, VARIANT_CARD.1), ..Default::default() }, ..Default::default() }}
             background={creamui_theme::use_theme().colors.surface_elevated}
             border={(if active { selected_border } else { creamui_theme::use_theme().colors.border }, if active { 2.0 } else { 1.0 })}
-            corner_radius={variant.card_radius}
+            corner_radius={creamui_theme::use_theme().card_radius}
             on_click={move || apply(AppearanceSelection { theme: Some(theme_id.clone()), variant: Some(variant_id.clone()), accent: Some(accent), font_family: font_family.clone() }, &set_appearance, &set_window)}
         >
             <Flex direction={FlexDirection::Column} size={VARIANT_CARD} padding={8.0} gap={8.0}>

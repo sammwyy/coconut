@@ -5,16 +5,80 @@ use creamui_macros::jsx;
 use creamui_reactive::Signal;
 use creamui_theme::use_theme;
 use creamui_widgets::layout::{Align, Justify};
-use creamui_widgets::{Heading, RawView, Surface, SurfaceRole, Text, TextSize};
+use creamui_widgets::{
+    Heading, RawScrollView, RawView, ScrollController, Surface, SurfaceRole, Text, TextSize,
+};
 
 /// A section's title, subtitle, and body — one or more [`group`]s, usually.
 pub fn section(title: &str, subtitle: &str, body: Vec<BoxedWidget>) -> BoxedWidget {
     let theme = use_theme();
     Box::new(jsx! {
-        <Flex direction={FlexDirection::Column} gap={theme.spacing_large}>
+        <Flex direction={FlexDirection::Column} gap={24.0} padding={2.0}>
+            <Flex direction={FlexDirection::Column} gap={8.0}>
+                {Box::new(Heading::xl(title.to_owned())) as BoxedWidget}
+                {Box::new(Text::secondary(subtitle.to_owned()).size(TextSize::Sm).text_align(TextAlign::Start)) as BoxedWidget}
+            </Flex>
+            <Flex direction={FlexDirection::Column} gap={theme.spacing_large} children={body} />
+        </Flex>
+    })
+}
+
+/// A settings page with fixed navigation chrome and a scrollable body. The
+/// body owns its bottom breathing room, so scrolling never clips the last
+/// control against the viewport edge.
+pub fn fixed_section(
+    title: &str,
+    subtitle: &str,
+    toolbar: BoxedWidget,
+    body: BoxedWidget,
+    scroll: ScrollController,
+) -> BoxedWidget {
+    let header: BoxedWidget = Box::new(jsx! {
+        <Flex direction={FlexDirection::Column} gap={12.0} padding={2.0}>
             {Box::new(Heading::xl(title.to_owned())) as BoxedWidget}
             {Box::new(Text::secondary(subtitle.to_owned()).size(TextSize::Sm).text_align(TextAlign::Start)) as BoxedWidget}
-            <Flex direction={FlexDirection::Column} gap={theme.spacing_large} children={body} />
+            {toolbar}
+        </Flex>
+    });
+    let body: BoxedWidget = Box::new(
+        RawView::new(creamui_core::layout::Style {
+            flex_direction: FlexDirection::Column,
+            flex_shrink: 0.0,
+            padding: creamui_core::layout::Rect {
+                left: creamui_core::layout::LengthPercentage::Length(2.0),
+                right: creamui_core::layout::LengthPercentage::Length(16.0),
+                top: creamui_core::layout::LengthPercentage::Length(20.0),
+                bottom: creamui_core::layout::LengthPercentage::Length(28.0),
+            },
+            ..Default::default()
+        })
+        .child(body),
+    );
+    let scroll: BoxedWidget = Box::new(
+        RawScrollView::controlled(
+            creamui_core::layout::Style {
+                flex_direction: FlexDirection::Column,
+                flex_grow: 1.0,
+                flex_shrink: 1.0,
+                size: creamui_core::layout::Size {
+                    width: Dimension::Percent(1.0),
+                    height: Dimension::Auto,
+                },
+                min_size: creamui_core::layout::Size {
+                    width: Dimension::Length(0.0),
+                    height: Dimension::Length(0.0),
+                },
+                ..Default::default()
+            },
+            scroll,
+        )
+        .scrollbar_gap(12.0)
+        .child(body),
+    );
+    Box::new(jsx! {
+        <Flex direction={FlexDirection::Column} grow={1.0} gap={0.0}>
+            {header}
+            {scroll}
         </Flex>
     })
 }
@@ -50,7 +114,7 @@ pub fn group(rows: Vec<BoxedWidget>) -> BoxedWidget {
 pub fn row(label: &str, control: BoxedWidget) -> BoxedWidget {
     let theme = use_theme();
     Box::new(jsx! {
-        <Flex direction={FlexDirection::Row} align={Align::Center} justify={Justify::Between} gap={theme.spacing_medium} padding={14.0}>
+        <Flex direction={FlexDirection::Row} align={Align::Center} justify={Justify::Between} gap={theme.spacing_large} padding={18.0}>
             {Box::new(Text::new(label.to_owned())) as BoxedWidget}
             {control}
         </Flex>

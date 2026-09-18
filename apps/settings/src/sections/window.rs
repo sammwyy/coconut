@@ -75,7 +75,10 @@ impl ShortcutState {
     pub fn load() -> Self {
         let (bindings, status) = match load_shortcuts() {
             Ok(bindings) => (bindings, String::new()),
-            Err(error) => (Vec::new(), format!("Blair is unavailable: {error}")),
+            Err(error) => (
+                Vec::new(),
+                format!("Window settings are unavailable: {error}"),
+            ),
         };
         Self {
             bindings: Signal::new(bindings),
@@ -87,8 +90,10 @@ impl ShortcutState {
     fn save(&self) {
         let bindings = self.bindings.get();
         match save_shortcuts(&bindings) {
-            Ok(true) => self.status.set("Saved to Blair".to_owned()),
-            Ok(false) => self.status.set("Blair rejected these shortcuts".to_owned()),
+            Ok(true) => self.status.set("Shortcuts saved".to_owned()),
+            Ok(false) => self
+                .status
+                .set("These shortcuts could not be saved".to_owned()),
             Err(error) => self.status.set(format!("Could not save: {error}")),
         }
     }
@@ -227,24 +232,24 @@ pub fn build_general(_: Size, state: &WindowState) -> BoxedWidget {
                 )
             })
         })
-        .option("Auto")
-        .option("DRM")
-        .option("Nested"),
+        .option("Automatic")
+        .option("Direct display")
+        .option("Test session"),
     );
     finish(
         state,
-        "Blair compositor",
-        "Blair manages windows, workspaces and input. Settings are saved to ~/.config/blair/config.toml; most changes take effect immediately.",
+        "Advanced",
+        "These options control how the desktop starts and applies changes. Most settings take effect immediately.",
         vec![
             setting_group(
                 "Applying changes",
-                "Turn this off only while making several coordinated changes. Use Apply to send them to Blair.",
+                "Turn this off only while making several coordinated changes. Use Apply when you are ready.",
                 vec![row("Apply changes automatically", hot_control)],
             ),
             setting_group(
                 "Advanced startup",
-                "Auto is recommended. DRM runs Blair on your display; Nested runs it inside another Wayland session for testing and normally requires a restart.",
-                vec![row("Backend", backend_control)],
+                "Automatic is recommended. Direct display is for regular desktop use; Test session is for trying changes inside another session and normally requires a restart.",
+                vec![row("Startup mode", backend_control)],
             ),
         ],
     )
@@ -397,10 +402,10 @@ pub fn build_titlebar(_: Size, state: &WindowState) -> BoxedWidget {
     finish(
         state,
         "Titlebar",
-        "How Blair handles and draws window decorations. Client means each app draws its own titlebar.",
+        "Choose whether apps or the system draw titlebars. App titlebars can look different from one app to another.",
         vec![
-            setting_group("Decoration source", "Auto lets Blair and the app negotiate the best option.", vec![row("Use titlebar", mode_control)]),
-            setting_group("Server titlebar", "These options apply when Blair is drawing the titlebar.", vec![
+            setting_group("Titlebar source", "Auto chooses the best option for each app.", vec![row("Use titlebar", mode_control)]),
+            setting_group("System titlebar", "These options apply when the system draws the titlebar.", vec![
                 row("Match system theme colors", follow_theme_control),
                 row("Buttons on", side_control),
                 row("Center title", centered_control),
@@ -435,7 +440,7 @@ pub fn build_working_area(_: Size, state: &WindowState) -> BoxedWidget {
     finish(
         state,
         "Workspaces",
-        "Decide how many workspaces Blair provides and how moving between their ends behaves.",
+        "Decide how many workspaces are available and how moving between their ends behaves.",
         vec![setting_group("Workspace navigation", "Dynamic workspaces are created as needed; wrapping goes from the last workspace back to the first.", vec![
             integer_field(state, "Workspace count", &["workspaces", "count"], 1, Some(100)),
             row("Dynamic workspaces", dynamic_control),
@@ -556,7 +561,7 @@ pub fn build_input(_: Size, state: &WindowState) -> BoxedWidget {
     finish(
         state,
         "Input",
-        "Keyboard, mouse and touchpad settings used by Blair.",
+        "Set up the keyboard, mouse and touchpad.",
         vec![
             setting_group(
                 "Keyboard",
@@ -616,7 +621,7 @@ pub fn build_focus(_: Size, state: &WindowState) -> BoxedWidget {
     finish(
         state,
         "Focus",
-        "How Blair selects and raises windows.",
+        "Choose how windows receive focus and come to the front.",
         vec![group(controls)],
     )
 }
@@ -659,7 +664,7 @@ pub fn build_shortcuts(_: Size, state: &ShortcutState) -> BoxedWidget {
     }
     section(
         "Shortcuts",
-        "Shortcuts are recorded here and saved through Blair's live compositor API.",
+        "Record shortcuts and choose what they do.",
         body,
     )
 }

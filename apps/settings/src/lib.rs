@@ -27,13 +27,15 @@ enum Section {
     Desktop,
     Wallpaper,
     DesktopIcons,
-    Elements,
-    Bars,
+    Panels,
+    Status,
     Dock(usize),
     AddDock,
     Tray,
     Widgets,
-    WindowBehaviour,
+    Windows,
+    InputDevices,
+    System,
     Layout,
     Titlebar,
     Compositor,
@@ -55,9 +57,11 @@ fn category_default(section: Section) -> Section {
     match section {
         Section::Appearance => Section::Theme,
         Section::Desktop => Section::Wallpaper,
-        Section::Bars => Section::Dock(0),
-        Section::Elements => Section::Tray,
-        Section::WindowBehaviour => Section::Compositor,
+        Section::Panels => Section::Dock(0),
+        Section::Status => Section::Tray,
+        Section::Windows => Section::Layout,
+        Section::InputDevices => Section::Input,
+        Section::System => Section::Effects,
         Section::Users => Section::Profile,
         leaf => leaf,
     }
@@ -80,15 +84,18 @@ fn tree(
             "Appearance",
             vec![
                 SidebarNode::leaf(Section::Theme, icons.paintbrush.clone(), "Theme"),
-                SidebarNode::leaf(
-                    Section::IconPack,
-                    IconSource::Symbol(Symbol::Grid),
-                    "Icon Pack",
-                ),
+                SidebarNode::leaf(Section::IconPack, IconSource::Symbol(Symbol::Grid), "Icons"),
                 SidebarNode::leaf(Section::Sound, IconSource::Symbol(Symbol::Sliders), "Sound"),
+            ],
+        ),
+        SidebarNode::parent(
+            Section::Desktop,
+            icons.wallpaper.clone(),
+            "Desktop",
+            vec![
                 SidebarNode::group(
                     Section::Desktop,
-                    "Desktop (Coconut)",
+                    "Desktop appearance",
                     vec![
                         SidebarNode::leaf(Section::Wallpaper, icons.wallpaper.clone(), "Wallpaper"),
                         SidebarNode::leaf(
@@ -99,16 +106,8 @@ fn tree(
                     ],
                 ),
                 SidebarNode::group(
-                    Section::Elements,
-                    "Elements (Coconut)",
-                    vec![
-                        SidebarNode::leaf(Section::Tray, icons.status.clone(), "Status area"),
-                        SidebarNode::leaf(Section::Widgets, icons.widgets.clone(), "Widgets"),
-                    ],
-                ),
-                SidebarNode::group(
-                    Section::Bars,
-                    "Islands & bars (Coconut)",
+                    Section::Panels,
+                    "Panels",
                     docks
                         .iter()
                         .enumerate()
@@ -122,22 +121,25 @@ fn tree(
                         .chain(std::iter::once(SidebarNode::leaf(
                             Section::AddDock,
                             icons.position.clone(),
-                            "+ Add dock",
+                            "+ Add panel",
                         )))
                         .collect(),
+                ),
+                SidebarNode::group(
+                    Section::Status,
+                    "Status & widgets",
+                    vec![
+                        SidebarNode::leaf(Section::Tray, icons.status.clone(), "Status icons"),
+                        SidebarNode::leaf(Section::Widgets, icons.widgets.clone(), "Widgets"),
+                    ],
                 ),
             ],
         ),
         SidebarNode::parent(
-            Section::WindowBehaviour,
+            Section::Windows,
             IconSource::Symbol(Symbol::Controls),
-            "Windows & compositor",
+            "Windows",
             vec![
-                SidebarNode::leaf(
-                    Section::Compositor,
-                    IconSource::Symbol(Symbol::Controls),
-                    "Compositor",
-                ),
                 SidebarNode::leaf(Section::Layout, IconSource::Symbol(Symbol::Grid), "Layout"),
                 SidebarNode::leaf(
                     Section::Titlebar,
@@ -150,24 +152,41 @@ fn tree(
                     "Workspaces",
                 ),
                 SidebarNode::leaf(
-                    Section::Effects,
-                    IconSource::Symbol(Symbol::Controls),
-                    "Effects",
-                ),
-                SidebarNode::leaf(
-                    Section::Input,
-                    IconSource::Symbol(Symbol::Controls),
-                    "Input",
-                ),
-                SidebarNode::leaf(
                     Section::Focus,
                     IconSource::Symbol(Symbol::Controls),
-                    "Focus",
+                    "Window focus",
                 ),
                 SidebarNode::leaf(
                     Section::Shortcuts,
                     IconSource::Symbol(Symbol::Keyboard),
                     "Shortcuts",
+                ),
+            ],
+        ),
+        SidebarNode::parent(
+            Section::InputDevices,
+            IconSource::Symbol(Symbol::Controls),
+            "Keyboard & mouse",
+            vec![SidebarNode::leaf(
+                Section::Input,
+                IconSource::Symbol(Symbol::Keyboard),
+                "Keyboard, mouse & touchpad",
+            )],
+        ),
+        SidebarNode::parent(
+            Section::System,
+            IconSource::Symbol(Symbol::Controls),
+            "System",
+            vec![
+                SidebarNode::leaf(
+                    Section::Effects,
+                    IconSource::Symbol(Symbol::Controls),
+                    "Motion",
+                ),
+                SidebarNode::leaf(
+                    Section::Compositor,
+                    IconSource::Symbol(Symbol::Controls),
+                    "Advanced",
                 ),
             ],
         ),
@@ -217,6 +236,7 @@ pub fn run() {
     let wallpaper_gallery = sections::wallpaper::GalleryState::new();
     let window_settings = sections::window::WindowState::load();
     let shortcut_settings = sections::window::ShortcutState::load();
+    let content_scroll = ScrollController::new(0.0);
     let dock_scroll = ScrollController::new(0.0);
     let dock_tab = Signal::new(sections::general::DockTab::Display);
     polkit::ensure_kde_agent();
@@ -228,8 +248,8 @@ pub fn run() {
             app.append_window(
                 WindowOptions {
                     title: "Settings".into(),
-                    width: 960,
-                    height: 640,
+                    width: 1080,
+                    height: 720,
                     decorations: true,
                     resizable: true,
                     transparent: false,
@@ -260,6 +280,7 @@ pub fn run() {
                         &wallpaper_gallery,
                         &window_settings,
                         &shortcut_settings,
+                        &content_scroll,
                         &dock_scroll,
                         &dock_tab,
                     )
@@ -310,6 +331,7 @@ fn build(
     wallpaper_gallery: &sections::wallpaper::GalleryState,
     window_settings: &sections::window::WindowState,
     shortcut_settings: &sections::window::ShortcutState,
+    content_scroll: &ScrollController,
     dock_scroll: &ScrollController,
     dock_tab: &Signal<sections::general::DockTab>,
 ) -> BoxedWidget {
@@ -318,15 +340,15 @@ fn build(
     let sidebar_style = Style {
         flex_direction: FlexDirection::Column,
         size: creamui_core::layout::Size {
-            width: Dimension::Length(196.0),
+            width: Dimension::Length(232.0),
             height: Dimension::Percent(1.0),
         },
         flex_shrink: 0.0,
         padding: creamui_core::layout::Rect {
-            left: LengthPercentage::Length(14.0),
-            right: LengthPercentage::Length(10.0),
-            top: LengthPercentage::Length(20.0),
-            bottom: LengthPercentage::Length(20.0),
+            left: LengthPercentage::Length(18.0),
+            right: LengthPercentage::Length(14.0),
+            top: LengthPercentage::Length(24.0),
+            bottom: LengthPercentage::Length(24.0),
         },
         gap: creamui_core::layout::Size {
             width: LengthPercentage::Length(2.0),
@@ -339,6 +361,8 @@ fn build(
     let docks = config.get().docks;
     let navigation = tree(&account_list, icons, &docks);
     let select = view.clone();
+    let scroll_to_top = content_scroll.clone();
+    let dock_scroll_to_top = dock_scroll.clone();
     let enter_category = view.clone();
     let add_dock_config = config.clone();
     let sidebar = nested_sidebar(
@@ -347,6 +371,8 @@ fn build(
         nav,
         Some(&current),
         move |section| {
+            scroll_to_top.set(0.0);
+            dock_scroll_to_top.set(0.0);
             if section == Section::AddDock {
                 let mut new_index = 0;
                 common::update_config(&add_dock_config, |c| {
@@ -366,6 +392,7 @@ fn build(
         },
     );
 
+    let content_has_own_scroll = matches!(current, Section::Dock(_) | Section::AddDock);
     let content = match current {
         Section::Theme => sections::appearance::build(
             size,
@@ -387,10 +414,10 @@ fn build(
             sections::desktop_icons::build(size, config, desktop_icons_color_picker)
         }
         Section::Dock(index) => {
-            sections::general::build_dock_page(size, config, &dock_scroll, dock_tab, index)
+            sections::general::build_dock_page(size, config, dock_scroll, dock_tab, index)
         }
         Section::AddDock => {
-            sections::general::build_dock_page(size, config, &dock_scroll, dock_tab, 0)
+            sections::general::build_dock_page(size, config, dock_scroll, dock_tab, 0)
         }
         Section::Tray => sections::tray::build(size, config),
         Section::Widgets => sections::widgets::build(size, config),
@@ -407,9 +434,11 @@ fn build(
         Section::CreateUser => users::create_user_view(size),
         Section::Appearance
         | Section::Desktop
-        | Section::Elements
-        | Section::Bars
-        | Section::WindowBehaviour
+        | Section::Panels
+        | Section::Status
+        | Section::Windows
+        | Section::InputDevices
+        | Section::System
         | Section::Users => {
             unreachable!("sidebar parents are not selectable")
         }
@@ -423,14 +452,38 @@ fn build(
             height: Dimension::Percent(1.0),
         },
         padding: creamui_core::layout::Rect {
-            left: LengthPercentage::Length(28.0),
-            right: LengthPercentage::Length(28.0),
-            top: LengthPercentage::Length(24.0),
-            bottom: LengthPercentage::Length(24.0),
+            left: LengthPercentage::Length(36.0),
+            right: LengthPercentage::Length(30.0),
+            top: LengthPercentage::Length(32.0),
+            bottom: LengthPercentage::Length(28.0),
         },
         ..Default::default()
     };
-    let panel: BoxedWidget = Box::new(Surface::new(SurfaceRole::Panel, panel_style).child(content));
+    let content_style = Style {
+        flex_direction: FlexDirection::Column,
+        flex_grow: 1.0,
+        flex_shrink: 1.0,
+        size: creamui_core::layout::Size {
+            width: Dimension::Percent(1.0),
+            height: Dimension::Auto,
+        },
+        min_size: creamui_core::layout::Size {
+            width: Dimension::Length(0.0),
+            height: Dimension::Length(0.0),
+        },
+        ..Default::default()
+    };
+    let panel_content: BoxedWidget = if content_has_own_scroll {
+        content
+    } else {
+        Box::new(
+            creamui_widgets::RawScrollView::controlled(content_style, content_scroll.clone())
+                .scrollbar_gap(12.0)
+                .child(content),
+        )
+    };
+    let panel: BoxedWidget =
+        Box::new(Surface::new(SurfaceRole::Panel, panel_style).child(panel_content));
     let panel_outer_style = Style {
         flex_direction: FlexDirection::Column,
         flex_grow: 1.0,

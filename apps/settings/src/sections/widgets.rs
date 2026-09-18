@@ -51,8 +51,8 @@ pub fn build(_: Size, config: &Signal<ShellConfig>) -> BoxedWidget {
     let format = group(vec![clock_format_row()]);
 
     section(
-        "Islands",
-        "Which islands appear in the dock, and the clock's time format.",
+        "Widgets",
+        "Choose which widgets appear on your panels and set the clock format.",
         vec![toggles, format],
     )
 }
@@ -74,5 +74,5 @@ fn clock_format_row() -> BoxedWidget {
             eprintln!("settings: failed to save modules/clock.toml: {error}");
         }
     }));
-    row("Clock format (strftime)", input)
+    row("Clock format", input)
 }

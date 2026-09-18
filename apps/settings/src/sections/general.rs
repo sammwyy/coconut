@@ -1,4 +1,4 @@
-use crate::common::{group, row, section, update_config};
+use crate::common::{fixed_section, group, row, section, update_config};
 use coconut_core::{DockAlign, DockConfig, DockPosition, IslandEntry, SectionConfig, ShellConfig};
 use creamui_core::layout::{Dimension, FlexDirection, LengthPercentage, Style as LayoutStyle};
 use creamui_core::{BoxedWidget, Size, StateStyle, Style, Styled};
@@ -8,9 +8,8 @@ use creamui_theme::use_theme;
 use creamui_widgets::layout::{Align, Flex, Justify};
 use creamui_widgets::{
     tab_styles, Button, ButtonSize, ButtonState, ButtonVariant, Icon, IconImage, IconSource,
-    RawButton, RawScrollView, RawText, RawView, ScrollController, SegmentedControl, Select,
-    SelectController, Surface, SurfaceRole, Switch, Symbol, Tab, TabColors, TabSizing, Tabs, Text,
-    TextSize,
+    RawButton, RawText, RawView, ScrollController, SegmentedControl, Select, SelectController,
+    Surface, SurfaceRole, Switch, Symbol, Tab, TabColors, TabSizing, Tabs, Text, TextSize,
 };
 
 const POSITIONS: [DockPosition; 4] = [
@@ -37,14 +36,21 @@ pub enum DockTab {
 /// ("tray.wifi", ...) are intentionally left out here — those only exist
 /// under `TrayMode::Individual` and are managed by `modules/tray.toml`, not
 /// by picking a fixed id like the rest of these.
-const KNOWN_ISLAND_IDS: &[&str] = &[
-    "logo",
-    "weather",
-    "current_playing",
-    "app_launcher",
-    "control_center",
-    "clock",
+const KNOWN_WIDGETS: &[(&str, &str)] = &[
+    ("logo", "Logo"),
+    ("weather", "Weather"),
+    ("current_playing", "Now playing"),
+    ("app_launcher", "App launcher"),
+    ("control_center", "Control center"),
+    ("clock", "Clock"),
 ];
+
+fn widget_label(id: &str) -> &str {
+    KNOWN_WIDGETS
+        .iter()
+        .find_map(|(known_id, label)| (*known_id == id).then_some(*label))
+        .unwrap_or(id)
+}
 
 /// The sidebar label for a dock: its own name if it has one, otherwise a
 /// positional fallback. Used both by `apps/settings/src/lib.rs`'s sidebar
@@ -53,7 +59,7 @@ const KNOWN_ISLAND_IDS: &[&str] = &[
 pub fn dock_label(index: usize, dock: &DockConfig) -> String {
     dock.name
         .clone()
-        .unwrap_or_else(|| format!("Dock {}", index + 1))
+        .unwrap_or_else(|| format!("Panel {}", index + 1))
 }
 
 pub fn build_dock_page(
@@ -66,7 +72,7 @@ pub fn build_dock_page(
     let docks = config.get().docks;
     let dock_count = docks.len();
     let Some(dock) = docks.get(dock_index) else {
-        return section("Dock", "This dock no longer exists.", Vec::new());
+        return section("Panel", "This panel no longer exists.", Vec::new());
     };
 
     let selected_tab = tab.get();
@@ -76,8 +82,8 @@ pub fn build_dock_page(
             body.push(top_card(config, dock_index, dock));
             if dock_count > 1 {
                 body.push(group(vec![row(
-                    "Dock",
-                    button(ButtonVariant::Destructive, "Remove dock", {
+                    "Panel",
+                    button(ButtonVariant::Destructive, "Remove panel", {
                         let config = config.clone();
                         move || {
                             update_config(&config, |c| {
@@ -108,30 +114,17 @@ pub fn build_dock_page(
     }
 
     let content: BoxedWidget = Box::new(Flex::column().gap(10.0).with_children(body));
-    let scroll_style = LayoutStyle {
-        flex_direction: FlexDirection::Column,
-        flex_grow: 1.0,
-        size: creamui_core::layout::Size {
-            width: Dimension::Percent(1.0),
-            height: Dimension::Percent(1.0),
-        },
-        ..Default::default()
-    };
-    let scroll_view: BoxedWidget = Box::new(
-        RawScrollView::controlled(Style::new().layout(scroll_style), scroll.clone())
-            .scrollbar_gap(14.0)
-            .child(content),
-    );
-
-    section(
+    fixed_section(
         &dock_label(dock_index, dock),
-        "Choose the dock appearance or organize the sections and items it contains.",
-        vec![dock_tabs(tab, selected_tab), scroll_view],
+        "Choose where this panel appears, how it looks, and what it contains.",
+        dock_tabs(tab, selected_tab),
+        content,
+        scroll.clone(),
     )
 }
 
 fn dock_tabs(tab: &Signal<DockTab>, active: DockTab) -> BoxedWidget {
-    let labels = ["Display", "Appearance", "Content"];
+    let labels = ["Position", "Appearance", "Contents"];
     let styles = tab_styles(&labels, TabSizing::Fill, 38.0, 12.0);
     let colors = TabColors::dark();
     let mut tabs = Tabs::new(
@@ -337,18 +330,18 @@ fn appearance_card(
     };
     Box::new(Flex::column().gap(14.0).with_children(vec![
         group(vec![
-            toggle("Dock background", dock.show_background, |dock| {
+            toggle("Panel background", dock.show_background, |dock| {
                 dock.show_background = !dock.show_background
             }),
-            toggle("Dock border", dock.show_border, |dock| {
+            toggle("Panel border", dock.show_border, |dock| {
                 dock.show_border = !dock.show_border
             }),
         ]),
         group(vec![
-            toggle("Island backgrounds", dock.show_island_background, |dock| {
+            toggle("Widget backgrounds", dock.show_island_background, |dock| {
                 dock.show_island_background = !dock.show_island_background
             }),
-            toggle("Island borders", dock.show_island_border, |dock| {
+            toggle("Widget borders", dock.show_island_border, |dock| {
                 dock.show_island_border = !dock.show_island_border
             }),
         ]),
@@ -463,7 +456,7 @@ fn section_card(
     let island_count = dock_section.islands.len();
     for (island_index, entry) in dock_section.islands.iter().enumerate() {
         island_rows.push(row(
-            &format!("{}", entry.id),
+            widget_label(&entry.id),
             island_controls(
                 config,
                 dock_index,
@@ -475,20 +468,21 @@ fn section_card(
         ));
     }
 
-    let missing: Vec<&'static str> = KNOWN_ISLAND_IDS
+    let missing: Vec<(&'static str, &'static str)> = KNOWN_WIDGETS
         .iter()
         .copied()
-        .filter(|id| !dock_section.islands.iter().any(|entry| entry.id == *id))
+        .filter(|(id, _)| !dock_section.islands.iter().any(|entry| entry.id == *id))
         .collect();
     if !missing.is_empty() {
         let controller = SelectController::new(0);
+        let labels: Vec<&str> = missing.iter().map(|(_, label)| *label).collect();
         let picker: BoxedWidget = Box::new(
-            Select::controlled(&missing, controller)
+            Select::controlled(&labels, controller)
                 .searchable()
                 .on_select({
                     let config = config.clone();
                     move |index: usize| {
-                        let Some(&id) = missing.get(index) else {
+                        let Some(&(id, _)) = missing.get(index) else {
                             return;
                         };
                         update_config(&config, |c| {
@@ -501,7 +495,7 @@ fn section_card(
                     }
                 }),
         );
-        island_rows.push(row("Add island", picker));
+        island_rows.push(row("Add widget", picker));
     }
 
     let last_row = island_rows.len().saturating_sub(1);

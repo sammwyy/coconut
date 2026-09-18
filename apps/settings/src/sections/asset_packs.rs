@@ -17,8 +17,8 @@ const CARD_H: f32 = 96.0;
 pub fn icon_packs(_: Size, config: &Signal<ShellConfig>) -> BoxedWidget {
     let selected = config.get().appearance.icon_theme;
     packs(
-        "Icon Pack",
-        "Choose the Freedesktop application icon theme used by Coconut.",
+        "Icons",
+        "Choose the icon style used by your apps and desktop.",
         list_packs("icons"),
         &selected,
         config,
@@ -30,7 +30,7 @@ pub fn sound_themes(_: Size, config: &Signal<ShellConfig>) -> BoxedWidget {
     let selected = config.get().appearance.sound_theme;
     packs(
         "Sound",
-        "Choose the desktop sound theme used by Coconut.",
+        "Choose the sound style used for desktop feedback.",
         list_packs("sounds"),
         &selected,
         config,

@@ -40,13 +40,13 @@ pub fn build(_: Size, _config: &Signal<ShellConfig>) -> BoxedWidget {
             set_mode.update(|t| t.mode = MODES[index]);
             persist(&set_mode.peek());
         })
-        .option("Grouped")
-        .option("Individual"),
+        .option("One group")
+        .option("Separate"),
     );
 
     section(
-        "Tray",
-        "How status icons open their controls, and which ones show in the dock. Takes effect the next time the shell starts.",
+        "Status icons",
+        "Choose which quick status controls are shown and how they are arranged. Changes appear after signing out and back in.",
         vec![
             group(vec![row("Mode", mode_control)]),
             group(vec![
