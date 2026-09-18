@@ -3,12 +3,13 @@
 use crate::common::{group, row, section};
 use blair_client::BlairClient;
 use blair_protocol::{ShortcutArgument, ShortcutBinding, ShortcutCommand};
-use creamui_core::layout::Style;
+use creamui_core::layout::{FlexDirection, Style};
 use creamui_core::{BoxedWidget, Key, KeyInput, Size, Styled, Widget};
+use creamui_macros::jsx;
 use creamui_reactive::Signal;
 use creamui_widgets::{
     Button, ButtonSize, ButtonState, ButtonVariant, RawButton, SegmentedControl, Select,
-    SelectController, Slider, Switch, Text, TextInput, TextSize,
+    SelectController, Switch, Text, TextInput, TextSize,
 };
 use std::rc::Rc;
 
@@ -232,12 +233,20 @@ pub fn build_general(_: Size, state: &WindowState) -> BoxedWidget {
     );
     finish(
         state,
-        "Compositor",
-        "Changes go directly to ~/.config/blair/config.toml.",
-        vec![group(vec![
-            row("Hot reload", hot_control),
-            row("Backend", backend_control),
-        ])],
+        "Blair compositor",
+        "Blair manages windows, workspaces and input. Settings are saved to ~/.config/blair/config.toml; most changes take effect immediately.",
+        vec![
+            setting_group(
+                "Applying changes",
+                "Turn this off only while making several coordinated changes. Use Apply to send them to Blair.",
+                vec![row("Apply changes automatically", hot_control)],
+            ),
+            setting_group(
+                "Advanced startup",
+                "Auto is recommended. DRM runs Blair on your display; Nested runs it inside another Wayland session for testing and normally requires a restart.",
+                vec![row("Backend", backend_control)],
+            ),
+        ],
     )
 }
 
@@ -258,48 +267,54 @@ pub fn build_layout(_: Size, state: &WindowState) -> BoxedWidget {
         .option("Floating")
         .option("Tiling"),
     );
-    let mode = str_at(&c, &["decorations", "mode"], "auto");
-    let selected = ["auto", "server", "client", "none"]
-        .iter()
-        .position(|v| *v == mode)
-        .unwrap_or(0);
-    let writer = state.writer();
-    let mode_control: BoxedWidget = Box::new(
-        SegmentedControl::new(selected, move |i| {
-            writer.update(|c| {
-                put(
-                    c,
-                    &["decorations", "mode"],
-                    toml::Value::String(["auto", "server", "client", "none"][i].into()),
-                )
-            })
-        })
-        .option("Auto")
-        .option("Server")
-        .option("Client")
-        .option("None"),
-    );
     finish(
         state,
-        "Layout",
-        "Placement and decorations.",
-        vec![group(vec![
-            row("Window mode", layout_control),
-            row("Decorations", mode_control),
-            slider(state, "Border", &["decorations", "border_width"], 16),
-            slider(
-                state,
-                "Corner radius",
-                &["decorations", "corner_radius"],
-                64,
+        "Window layout",
+        "Choose how new windows are arranged. Tiling settings matter only when Tiling is selected.",
+        vec![
+            setting_group(
+                "New windows",
+                "Floating leaves placement to you. Tiling places windows automatically.",
+                vec![
+                    row("Arrangement", layout_control),
+                    integer_field(
+                        state,
+                        "Default width",
+                        &["window", "default_width"],
+                        1,
+                        None,
+                    ),
+                    integer_field(
+                        state,
+                        "Default height",
+                        &["window", "default_height"],
+                        1,
+                        None,
+                    ),
+                ],
             ),
-            slider(
-                state,
-                "Titlebar height",
-                &["decorations", "titlebar_height"],
-                96,
+            setting_group(
+                "Tiling",
+                "Spacing and master width are exact values, not presets.",
+                vec![
+                    integer_field(
+                        state,
+                        "Outer padding",
+                        &["window", "work_area_padding"],
+                        0,
+                        Some(512),
+                    ),
+                    integer_field(
+                        state,
+                        "Gap between windows",
+                        &["window", "gap"],
+                        0,
+                        Some(512),
+                    ),
+                    ratio_field(state, "Master width", &["window", "master_ratio"]),
+                ],
             ),
-        ])],
+        ],
     )
 }
 
@@ -358,17 +373,44 @@ pub fn build_titlebar(_: Size, state: &WindowState) -> BoxedWidget {
         })
     }));
 
+    let mode = str_at(&c, &["decorations", "mode"], "auto");
+    let selected = ["auto", "server", "client", "none"]
+        .iter()
+        .position(|value| *value == mode)
+        .unwrap_or(0);
+    let writer = state.writer();
+    let mode_control: BoxedWidget = Box::new(
+        SegmentedControl::new(selected, move |i| {
+            writer.update(|c| {
+                put(
+                    c,
+                    &["decorations", "mode"],
+                    toml::Value::String(["auto", "server", "client", "none"][i].into()),
+                )
+            })
+        })
+        .option("Auto")
+        .option("Server")
+        .option("Client")
+        .option("None"),
+    );
     finish(
         state,
         "Titlebar",
-        "How Blair draws the server-side window titlebar.",
-        vec![group(vec![
-            row("Match system theme colors", follow_theme_control),
-            row("Buttons", side_control),
-            row("Center title", centered_control),
-            row("Show app icon", show_icon_control),
-            slider(state, "Drag margin", &["decorations", "drag_margin"], 128),
-        ])],
+        "How Blair handles and draws window decorations. Client means each app draws its own titlebar.",
+        vec![
+            setting_group("Decoration source", "Auto lets Blair and the app negotiate the best option.", vec![row("Use titlebar", mode_control)]),
+            setting_group("Server titlebar", "These options apply when Blair is drawing the titlebar.", vec![
+                row("Match system theme colors", follow_theme_control),
+                row("Buttons on", side_control),
+                row("Center title", centered_control),
+                row("Show app icon", show_icon_control),
+                integer_field(state, "Border width", &["decorations", "border_width"], 0, Some(16)),
+                integer_field(state, "Corner radius", &["decorations", "corner_radius"], 0, Some(64)),
+                integer_field(state, "Titlebar height", &["decorations", "titlebar_height"], 0, Some(96)),
+                integer_field(state, "Non-draggable edge", &["decorations", "drag_margin"], 0, Some(256)),
+            ]),
+        ],
     )
 }
 
@@ -393,17 +435,11 @@ pub fn build_working_area(_: Size, state: &WindowState) -> BoxedWidget {
     finish(
         state,
         "Workspaces",
-        "Workspace defaults and tiled-window margins.",
-        vec![group(vec![
-            slider(state, "Workspace count", &["workspaces", "count"], 100),
+        "Decide how many workspaces Blair provides and how moving between their ends behaves.",
+        vec![setting_group("Workspace navigation", "Dynamic workspaces are created as needed; wrapping goes from the last workspace back to the first.", vec![
+            integer_field(state, "Workspace count", &["workspaces", "count"], 1, Some(100)),
             row("Dynamic workspaces", dynamic_control),
             row("Wrap around", wrap_control),
-            slider(
-                state,
-                "Work area padding",
-                &["window", "work_area_padding"],
-                128,
-            ),
         ])],
     )
 }
@@ -422,41 +458,49 @@ pub fn build_effects(_: Size, state: &WindowState) -> BoxedWidget {
     }));
     finish(
         state,
-        "Effects",
-        "Animations are reloaded by Blair from this file.",
-        vec![group(vec![
-            row("Enable animations", control),
-            slider(
-                state,
-                "Window open (ms)",
-                &["animations", "window_open", "duration"],
-                1000,
-            ),
-            slider(
-                state,
-                "Window close (ms)",
-                &["animations", "window_close", "duration"],
-                1000,
-            ),
-            slider(
-                state,
-                "Workspace (ms)",
-                &["animations", "workspace", "duration"],
-                1000,
-            ),
-            slider(
-                state,
-                "Minimize (ms)",
-                &["animations", "minimize", "duration"],
-                1000,
-            ),
-        ])],
+        "Animations",
+        "Durations are in milliseconds. Set a duration to 0 for an instant transition.",
+        vec![setting_group(
+            "Motion",
+            "These transitions are used when animations are enabled.",
+            vec![
+                row("Enable animations", control),
+                integer_field(
+                    state,
+                    "Opening",
+                    &["animations", "window_open", "duration"],
+                    0,
+                    Some(10_000),
+                ),
+                integer_field(
+                    state,
+                    "Closing",
+                    &["animations", "window_close", "duration"],
+                    0,
+                    Some(10_000),
+                ),
+                integer_field(
+                    state,
+                    "Workspace switch",
+                    &["animations", "workspace", "duration"],
+                    0,
+                    Some(10_000),
+                ),
+                integer_field(
+                    state,
+                    "Minimize",
+                    &["animations", "minimize", "duration"],
+                    0,
+                    Some(10_000),
+                ),
+            ],
+        )],
     )
 }
 
 pub fn build_input(_: Size, state: &WindowState) -> BoxedWidget {
     let c = state.config.get();
-    let controls = [
+    let touchpad_controls = [
         ("Tap to click", "tap"),
         ("Natural scrolling", "natural_scroll"),
         ("Disable while typing", "disable_while_typing"),
@@ -473,11 +517,79 @@ pub fn build_input(_: Size, state: &WindowState) -> BoxedWidget {
         )
     })
     .collect();
+    let keyboard_layout = str_at(&c, &["input", "keyboard", "layout"], "us").to_owned();
+    let writer = state.writer();
+    let layout_control: BoxedWidget = Box::new(
+        TextInput::new(keyboard_layout, move |value| {
+            if !value.trim().is_empty() {
+                writer.update(|c| {
+                    put(
+                        c,
+                        &["input", "keyboard", "layout"],
+                        toml::Value::String(value),
+                    )
+                });
+            }
+        })
+        .placeholder("us"),
+    );
+    let mouse_sensitivity = at(&c, &["input", "mouse", "sensitivity"])
+        .and_then(toml::Value::as_float)
+        .unwrap_or(0.0);
+    let writer = state.writer();
+    let sensitivity_control: BoxedWidget = Box::new(
+        TextInput::new(mouse_sensitivity.to_string(), move |value| {
+            if let Ok(value) = value.parse::<f64>() {
+                if value.is_finite() && (-1.0..=1.0).contains(&value) {
+                    writer.update(|c| {
+                        put(
+                            c,
+                            &["input", "mouse", "sensitivity"],
+                            toml::Value::Float(value),
+                        )
+                    });
+                }
+            }
+        })
+        .placeholder("0.0"),
+    );
     finish(
         state,
         "Input",
-        "Touchpad and pointer configuration.",
-        vec![group(controls)],
+        "Keyboard, mouse and touchpad settings used by Blair.",
+        vec![
+            setting_group(
+                "Keyboard",
+                "Use an XKB layout code, for example us, es or latam.",
+                vec![
+                    row("Layout", layout_control),
+                    integer_field(
+                        state,
+                        "Repeat delay (ms)",
+                        &["input", "keyboard", "repeat_delay"],
+                        0,
+                        Some(2_000),
+                    ),
+                    integer_field(
+                        state,
+                        "Repeat rate",
+                        &["input", "keyboard", "repeat_rate"],
+                        1,
+                        Some(100),
+                    ),
+                ],
+            ),
+            setting_group(
+                "Mouse",
+                "Sensitivity is a precise value from -1.0 (slower) to 1.0 (faster).",
+                vec![row("Sensitivity", sensitivity_control)],
+            ),
+            setting_group(
+                "Touchpad",
+                "These only affect touchpad devices.",
+                touchpad_controls,
+            ),
+        ],
     )
 }
 
@@ -736,25 +848,65 @@ fn finish(
     }
     section(title, subtitle, body)
 }
-fn slider(
+/// A small heading and explanation above each related set of controls.  The
+/// compositor has several interacting concepts, so one long unlabelled list
+/// makes it too easy to change the wrong thing.
+fn setting_group(title: &str, description: &str, rows: Vec<BoxedWidget>) -> BoxedWidget {
+    Box::new(jsx! {
+        <Flex direction={FlexDirection::Column} gap={8.0}>
+            {Box::new(Text::new(title.to_owned()).size(TextSize::Sm)) as BoxedWidget}
+            {Box::new(Text::secondary(description.to_owned()).size(TextSize::Sm)) as BoxedWidget}
+            {group(rows)}
+        </Flex>
+    })
+}
+
+fn integer_field(
     state: &WindowState,
     label: &str,
     path: &'static [&'static str],
-    max: i64,
+    min: i64,
+    max: Option<i64>,
 ) -> BoxedWidget {
-    let value = int_at(&state.config.get(), path, 0).clamp(0, max);
+    let value = int_at(&state.config.get(), path, min);
     let writer = state.writer();
     row(
-        &format!("{label} ({value})"),
-        Box::new(Slider::new(value as f32 / max as f32, move |v| {
-            writer.update(|c| {
-                put(
-                    c,
-                    path,
-                    toml::Value::Integer((v * max as f32).round() as i64),
-                )
+        label,
+        Box::new(
+            TextInput::new(value.to_string(), move |input| {
+                let Ok(value) = input.parse::<i64>() else {
+                    return;
+                };
+                if value >= min && max.is_none_or(|max| value <= max) {
+                    writer.update(|c| put(c, path, toml::Value::Integer(value)));
+                }
             })
-        })) as BoxedWidget,
+            .placeholder(&match max {
+                Some(max) => format!("{min}–{max}"),
+                None => format!("At least {min}"),
+            }),
+        ) as BoxedWidget,
+    )
+}
+
+fn ratio_field(state: &WindowState, label: &str, path: &'static [&'static str]) -> BoxedWidget {
+    let value = at(&state.config.get(), path)
+        .and_then(toml::Value::as_float)
+        .unwrap_or(0.5);
+    let writer = state.writer();
+    row(
+        label,
+        Box::new(
+            TextInput::new(value.to_string(), move |input| {
+                let Ok(value) = input.parse::<f64>() else {
+                    return;
+                };
+                if value.is_finite() && (0.1..=0.9).contains(&value) {
+                    writer.update(|c| put(c, path, toml::Value::Float(value)));
+                }
+            })
+            .placeholder("0.1–0.9"),
+        ) as BoxedWidget,
     )
 }
 fn at<'a>(v: &'a toml::Value, path: &[&str]) -> Option<&'a toml::Value> {

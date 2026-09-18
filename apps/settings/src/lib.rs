@@ -27,7 +27,8 @@ enum Section {
     Desktop,
     Wallpaper,
     DesktopIcons,
-    Taskbar,
+    Elements,
+    Bars,
     Dock(usize),
     AddDock,
     Tray,
@@ -54,7 +55,8 @@ fn category_default(section: Section) -> Section {
     match section {
         Section::Appearance => Section::Theme,
         Section::Desktop => Section::Wallpaper,
-        Section::Taskbar => Section::Dock(0),
+        Section::Bars => Section::Dock(0),
+        Section::Elements => Section::Tray,
         Section::WindowBehaviour => Section::Compositor,
         Section::Users => Section::Profile,
         leaf => leaf,
@@ -97,8 +99,16 @@ fn tree(
                     ],
                 ),
                 SidebarNode::group(
-                    Section::Taskbar,
-                    "Docks (Coconut)",
+                    Section::Elements,
+                    "Elements (Coconut)",
+                    vec![
+                        SidebarNode::leaf(Section::Tray, icons.status.clone(), "Status area"),
+                        SidebarNode::leaf(Section::Widgets, icons.widgets.clone(), "Widgets"),
+                    ],
+                ),
+                SidebarNode::group(
+                    Section::Bars,
+                    "Islands & bars (Coconut)",
                     docks
                         .iter()
                         .enumerate()
@@ -114,10 +124,6 @@ fn tree(
                             icons.position.clone(),
                             "+ Add dock",
                         )))
-                        .chain([
-                            SidebarNode::leaf(Section::Tray, icons.status.clone(), "Status area"),
-                            SidebarNode::leaf(Section::Widgets, icons.widgets.clone(), "Widgets"),
-                        ])
                         .collect(),
                 ),
             ],
@@ -125,7 +131,7 @@ fn tree(
         SidebarNode::parent(
             Section::WindowBehaviour,
             IconSource::Symbol(Symbol::Controls),
-            "Window behaviour",
+            "Windows & compositor",
             vec![
                 SidebarNode::leaf(
                     Section::Compositor,
@@ -401,7 +407,8 @@ fn build(
         Section::CreateUser => users::create_user_view(size),
         Section::Appearance
         | Section::Desktop
-        | Section::Taskbar
+        | Section::Elements
+        | Section::Bars
         | Section::WindowBehaviour
         | Section::Users => {
             unreachable!("sidebar parents are not selectable")
