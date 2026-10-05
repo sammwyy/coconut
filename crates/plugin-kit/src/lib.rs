@@ -20,9 +20,10 @@ mod panel;
 mod panel_host;
 mod plugin;
 mod registry;
+mod schema;
 mod state;
 
-pub use chrome::{with_island_chrome, IslandChrome};
+pub use chrome::{apply_opacity, with_island_chrome, IslandChrome};
 pub use config::{ConfigValue, IslandConfig};
 pub use gap::{parse_gap, Gap};
 pub use icon_theme::{build_icon_index, load_icon, resolve_icon, xdg_data_directories};
@@ -32,4 +33,5 @@ pub use panel::{Panel, PanelRenderContext};
 pub use panel_host::PanelHost;
 pub use plugin::{Plugin, PluginInitContext};
 pub use registry::{warn_unknown_islands, PluginRegistry};
+pub use schema::{ConfigField, FieldKind, NumberPresentation, NumberRange};
 pub use state::SharedState;

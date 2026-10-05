@@ -1,25 +1,61 @@
 use coconut_core::{
-    ordered_islands, DockAlign, DockConfig, DockPosition, IslandEntry, SectionConfig,
+    ordered_islands, BackgroundSource, DesktopColor, DockAlign, DockConfig, DockPosition,
+    IslandEntry, SectionConfig,
 };
+use coconut_plugin_kit::chrome::ISLAND_RADIUS;
 use coconut_plugin_kit::{
-    parse_gap, with_island_chrome, ConfigValue, Gap, Island, IslandChrome, IslandConfig,
-    IslandRenderContext, PluginRegistry, SharedState,
+    apply_opacity, parse_gap, with_island_chrome, ConfigValue, Gap, Island, IslandChrome,
+    IslandConfig, IslandRenderContext, PluginRegistry, SharedState,
 };
 use creamui_core::{BoxedWidget, Point, Size, Styled};
+use creamui_reactive::Signal;
 use creamui_theme::{use_theme, Color};
 use creamui_widgets::layout::{Align, Flex, Justify};
 use std::collections::HashMap;
 use std::rc::Rc;
 
-/// Thickness of a horizontal dock (its height) and of a vertical dock (its
-/// width). Also read by `apps/shell/src/desktop/mod.rs` to reserve desktop
-/// grid space, and by `popup_for`'s anchor-rect math in `lib.rs`.
-pub const DOCK_HEIGHT: u32 = 44;
-pub const DOCK_WIDTH: u32 = 52;
-const BAR_HEIGHT: f32 = 44.0;
+/// Bumped whenever a `modules/<id>.toml` changes on disk.
+#[derive(Clone)]
+pub struct ModuleConfigRevision(pub Signal<u64>);
 
-fn dock_background() -> Color {
-    use_theme().colors.surface
+/// A dock's configured [`DockConfig::thickness`], floored so an accidental
+/// zero/negative value never collapses the dock to nothing.
+fn bar_thickness(dock: &DockConfig) -> f32 {
+    dock.thickness.max(1.0)
+}
+
+/// How much bigger or smaller than the default thickness this dock is —
+/// islands multiply their own fixed pixel sizes by this to fill it.
+fn island_scale(dock: &DockConfig) -> f32 {
+    bar_thickness(dock) / coconut_core::DEFAULT_THICKNESS
+}
+
+fn dock_background(dock: &DockConfig) -> Color {
+    let base = resolve_background_color(
+        dock.background_source,
+        dock.background_color,
+        use_theme().colors.surface,
+    );
+    apply_opacity(base, dock.background_opacity)
+}
+
+fn island_background_color(dock: &DockConfig) -> Option<Color> {
+    Some(resolve_background_color(
+        dock.island_background_source,
+        dock.island_background_color,
+        use_theme().colors.surface_elevated,
+    ))
+}
+
+fn resolve_background_color(
+    source: BackgroundSource,
+    custom: DesktopColor,
+    theme_default: Color,
+) -> Color {
+    match source {
+        BackgroundSource::Theme => theme_default,
+        BackgroundSource::Custom => Color::rgb(custom.r, custom.g, custom.b),
+    }
 }
 
 fn dock_border() -> Color {
@@ -62,8 +98,11 @@ fn build_horizontal_dock(
         .max(0.0)
         / slot_count as f32;
 
+    let thickness = bar_thickness(dock);
+    let scale = island_scale(dock);
+    let island_color = island_background_color(dock);
     let mut row = Flex::row()
-        .height(BAR_HEIGHT)
+        .height(thickness)
         .align(Align::Center)
         .justify(dock_justify(dock.align))
         .gap(section_gap);
@@ -77,9 +116,14 @@ fn build_horizontal_dock(
             index == 0,
             index + 1 == sections.len(),
             dock.edge_gap.max(0.0),
+            thickness,
+            scale,
             dock.position,
             dock.show_island_background,
             dock.show_island_border,
+            dock.unify_island_background,
+            island_color,
+            dock.island_background_opacity,
             registry,
             shared,
             open_panel,
@@ -115,8 +159,11 @@ fn build_vertical_dock(
         .max(0.0)
         / slot_count as f32;
 
+    let thickness = bar_thickness(dock);
+    let scale = island_scale(dock);
+    let island_color = island_background_color(dock);
     let mut column = Flex::column()
-        .width(DOCK_WIDTH as f32)
+        .width(thickness)
         .align(Align::Center)
         .justify(dock_justify(dock.align))
         .gap(section_gap);
@@ -130,9 +177,14 @@ fn build_vertical_dock(
             index == 0,
             index + 1 == sections.len(),
             dock.edge_gap.max(0.0),
+            thickness,
+            scale,
             dock.position,
             dock.show_island_background,
             dock.show_island_border,
+            dock.unify_island_background,
+            island_color,
+            dock.island_background_opacity,
             registry,
             shared,
             open_panel,
@@ -158,9 +210,14 @@ fn build_row_section(
     is_first: bool,
     is_last: bool,
     edge_gap: f32,
+    thickness: f32,
+    scale: f32,
     position: DockPosition,
     island_background: bool,
     island_border: bool,
+    unify_background: bool,
+    island_background_color: Option<Color>,
+    island_background_opacity: f32,
     registry: &PluginRegistry,
     shared: &SharedState,
     open_panel: &Rc<dyn Fn(&'static str, Point)>,
@@ -168,29 +225,51 @@ fn build_row_section(
     let justify = section_justify(is_first, is_last);
     let gap = parse_gap(&section.gap);
     let mut row = Flex::row()
-        .height(BAR_HEIGHT)
+        .height(thickness)
         .align(Align::Center)
         .justify(justify);
     if let Some(width) = width {
         row = row.width(width);
     }
-    row = apply_gap(row, gap, width.unwrap_or(0.0));
     if is_first {
-        row = row.child(Box::new(Flex::row().size(edge_gap, BAR_HEIGHT)));
+        row = row.child(Box::new(Flex::row().size(edge_gap, thickness)));
     }
-    for widget in build_islands(
+
+    let islands = build_islands(
         section,
         position,
-        island_background,
-        island_border,
+        scale,
+        island_background && !unify_background,
+        island_border && !unify_background,
+        if unify_background { None } else { island_background_color },
+        island_background_opacity,
         |id| registry.island(id).cloned(),
         shared,
         open_panel,
-    ) {
-        row = row.child(widget);
+    );
+    if unify_background {
+        let mut inner = Flex::row().align(Align::Center).padding(4.0 * scale);
+        inner = apply_gap(inner, gap, width.unwrap_or(0.0));
+        for widget in islands {
+            inner = inner.child(widget);
+        }
+        row = row.child(Box::new(section_chrome(
+            inner,
+            island_background,
+            island_border,
+            island_background_color,
+            island_background_opacity,
+            scale,
+        )));
+    } else {
+        row = apply_gap(row, gap, width.unwrap_or(0.0));
+        for widget in islands {
+            row = row.child(widget);
+        }
     }
+
     if is_last {
-        row = row.child(Box::new(Flex::row().size(edge_gap, BAR_HEIGHT)));
+        row = row.child(Box::new(Flex::row().size(edge_gap, thickness)));
     }
     Box::new(row)
 }
@@ -203,9 +282,14 @@ fn build_column_section(
     is_first: bool,
     is_last: bool,
     edge_gap: f32,
+    thickness: f32,
+    scale: f32,
     position: DockPosition,
     island_background: bool,
     island_border: bool,
+    unify_background: bool,
+    island_background_color: Option<Color>,
+    island_background_opacity: f32,
     registry: &PluginRegistry,
     shared: &SharedState,
     open_panel: &Rc<dyn Fn(&'static str, Point)>,
@@ -213,32 +297,72 @@ fn build_column_section(
     let justify = section_justify(is_first, is_last);
     let gap = parse_gap(&section.gap);
     let mut column = Flex::column()
-        .width(DOCK_WIDTH as f32)
-        .padding(8.0)
+        .width(thickness)
+        .padding(8.0 * scale)
         .align(Align::Center)
         .justify(justify);
     if let Some(height) = height {
         column = column.height(height);
     }
-    column = apply_gap(column, gap, height.unwrap_or(0.0));
     if is_first {
-        column = column.child(Box::new(Flex::column().size(DOCK_WIDTH as f32, edge_gap)));
+        column = column.child(Box::new(Flex::column().size(thickness, edge_gap)));
     }
-    for widget in build_islands(
+
+    let islands = build_islands(
         section,
         position,
-        island_background,
-        island_border,
+        scale,
+        island_background && !unify_background,
+        island_border && !unify_background,
+        if unify_background { None } else { island_background_color },
+        island_background_opacity,
         |id| registry.island(id).cloned(),
         shared,
         open_panel,
-    ) {
-        column = column.child(widget);
+    );
+    if unify_background {
+        let mut inner = Flex::column().align(Align::Center).padding(4.0 * scale);
+        inner = apply_gap(inner, gap, height.unwrap_or(0.0));
+        for widget in islands {
+            inner = inner.child(widget);
+        }
+        column = column.child(Box::new(section_chrome(
+            inner,
+            island_background,
+            island_border,
+            island_background_color,
+            island_background_opacity,
+            scale,
+        )));
+    } else {
+        column = apply_gap(column, gap, height.unwrap_or(0.0));
+        for widget in islands {
+            column = column.child(widget);
+        }
     }
+
     if is_last {
-        column = column.child(Box::new(Flex::column().size(DOCK_WIDTH as f32, edge_gap)));
+        column = column.child(Box::new(Flex::column().size(thickness, edge_gap)));
     }
     Box::new(column)
+}
+
+fn section_chrome(
+    mut container: Flex,
+    show_background: bool,
+    show_border: bool,
+    background_color: Option<Color>,
+    opacity: f32,
+    scale: f32,
+) -> Flex {
+    if show_background {
+        let color = background_color.unwrap_or(Color::rgba(0, 0, 0, 0));
+        container = container.background(apply_opacity(color, opacity));
+    }
+    if show_border {
+        container = container.border(dock_border(), 1.0);
+    }
+    container.corner_radius(ISLAND_RADIUS * scale)
 }
 
 /// The first section hugs the dock's leading edge, the last hugs its
@@ -278,7 +402,7 @@ fn edge_justify(position: DockPosition) -> Justify {
 
 fn dock_chrome(mut widget: Flex, dock: &DockConfig) -> Flex {
     if dock.show_background {
-        widget = widget.background(dock_background());
+        widget = widget.background(dock_background(dock));
     }
     if dock.show_border {
         widget = widget.border(dock_border(), 1.0);
@@ -307,15 +431,22 @@ fn apply_gap(container: Flex, gap: Gap, length: f32) -> Flex {
 /// — see `section_resolution_skips_unknown_but_allows_repeated_ids` below.
 /// Takes a lookup closure rather than `&PluginRegistry` directly so this
 /// can be unit-tested without a live `PluginInitContext`/`AppHandle`.
+#[allow(clippy::too_many_arguments)]
 fn build_islands(
     section: &SectionConfig,
     position: DockPosition,
+    scale: f32,
     island_background: bool,
     island_border: bool,
+    island_background_color: Option<Color>,
+    island_background_opacity: f32,
     lookup: impl Fn(&str) -> Option<Rc<dyn Island>>,
     shared: &SharedState,
     open_panel: &Rc<dyn Fn(&'static str, Point)>,
 ) -> Vec<BoxedWidget> {
+    if let Some(revision) = shared.get::<ModuleConfigRevision>() {
+        revision.0.get();
+    }
     let mut widgets = Vec::new();
     for entry in ordered_islands(&section.islands) {
         let Some(island) = lookup(&entry.id) else {
@@ -326,6 +457,7 @@ fn build_islands(
             shared,
             config: &config,
             position,
+            scale,
             open_panel: open_panel.clone(),
         };
         if !island.is_visible(&ctx) {
@@ -335,6 +467,8 @@ fn build_islands(
             IslandChrome {
                 background: island_background,
                 border: island_border,
+                background_color: island_background_color,
+                background_opacity: island_background_opacity,
             },
             || island.build(&ctx),
         ));
@@ -342,22 +476,40 @@ fn build_islands(
     widgets
 }
 
-/// Converts an island entry's inline TOML overrides into the scalar-only
-/// shape islands read at render time. Non-scalar values (arrays, nested
-/// tables, datetimes) aren't representable and are dropped.
+/// Resolves an island's effective config: its `modules/<id>.toml` defaults
+/// (Settings' generic per-island page writes there) with this placement's
+/// inline `[[dock.section.island]].config` overrides layered on top.
+/// Non-scalar values (arrays, nested tables, datetimes) aren't representable
+/// as a [`ConfigValue`] and are dropped.
 fn island_config(entry: &IslandEntry) -> IslandConfig {
-    let mut config: IslandConfig = HashMap::new();
+    let mut config = module_defaults(&entry.id);
     for (key, value) in &entry.config {
-        let value = match value {
-            toml::Value::Boolean(value) => ConfigValue::Bool(*value),
-            toml::Value::Integer(value) => ConfigValue::Int(*value),
-            toml::Value::Float(value) => ConfigValue::Float(*value),
-            toml::Value::String(value) => ConfigValue::String(value.clone()),
-            _ => continue,
+        let Some(value) = toml_scalar(value) else {
+            continue;
         };
         config.insert(key.clone(), value);
     }
     config
+}
+
+fn module_defaults(id: &str) -> IslandConfig {
+    let toml::Value::Table(table) = coconut_core::modules::load_module_value(id) else {
+        return HashMap::new();
+    };
+    table
+        .into_iter()
+        .filter_map(|(key, value)| toml_scalar(&value).map(|value| (key, value)))
+        .collect()
+}
+
+fn toml_scalar(value: &toml::Value) -> Option<ConfigValue> {
+    match value {
+        toml::Value::Boolean(value) => Some(ConfigValue::Bool(*value)),
+        toml::Value::Integer(value) => Some(ConfigValue::Int(*value)),
+        toml::Value::Float(value) => Some(ConfigValue::Float(*value)),
+        toml::Value::String(value) => Some(ConfigValue::String(value.clone())),
+        _ => None,
+    }
 }
 
 #[cfg(test)]
@@ -393,8 +545,11 @@ mod tests {
         let widgets = build_islands(
             &section,
             DockPosition::Bottom,
+            1.0,
             true,
             true,
+            None,
+            1.0,
             |id| known.get(id).cloned(),
             &shared,
             &open_panel,

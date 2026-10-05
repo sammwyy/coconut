@@ -67,14 +67,14 @@ pub(crate) fn bluetooth_icon(connected: bool, powered: bool) -> &'static str {
 /// exact same colors as `coconut_plugin_kit::chrome`'s `shell_panel`/
 /// `shell_control_hover`/`shell_selected`, just renamed during the Phase 3
 /// chrome unification).
-pub(crate) fn island_button_style(width: f32, height: f32) -> Style {
+pub(crate) fn island_button_style(width: f32, height: f32, scale: f32) -> Style {
     Style::new()
         .layout(LayoutStyle {
             size: fixed(width, height),
             ..Default::default()
         })
         .background(shell_panel())
-        .corner_radius(9.0)
+        .corner_radius(9.0 * scale)
         .hover(StateStyle::new().background(shell_control_hover()))
         .pressed(StateStyle::new().background(shell_selected()))
 }

@@ -12,10 +12,29 @@ use std::{cell::Cell, thread_local};
 pub struct IslandChrome {
     pub background: bool,
     pub border: bool,
+    /// `None` uses the theme's elevated surface color; `Some` overrides it
+    /// with a user-picked custom color.
+    pub background_color: Option<Color>,
+    /// Applied to whichever color `background_color` resolves to.
+    pub background_opacity: f32,
 }
 
 thread_local! {
-    static ISLAND_CHROME: Cell<IslandChrome> = const { Cell::new(IslandChrome { background: true, border: true }) };
+    static ISLAND_CHROME: Cell<IslandChrome> = const {
+        Cell::new(IslandChrome {
+            background: true,
+            border: true,
+            background_color: None,
+            background_opacity: 1.0,
+        })
+    };
+}
+
+/// Multiplies a color's alpha channel by `opacity` (clamped to `0.0..=1.0`),
+/// shared by the dock's own background and its islands' backgrounds.
+pub fn apply_opacity(color: Color, opacity: f32) -> Color {
+    let alpha = (color.a as f32 * opacity.clamp(0.0, 1.0)).round() as u8;
+    Color::rgba(color.r, color.g, color.b, alpha)
 }
 
 /// Runs an island builder with the dock-specific chrome policy that its
@@ -38,12 +57,14 @@ pub fn shell_card() -> Color {
     use_theme().colors.surface
 }
 pub fn shell_panel() -> Color {
-    let theme = use_theme();
-    if island_chrome().background {
-        theme.colors.surface_elevated
-    } else {
-        Color::rgba(0, 0, 0, 0)
+    let chrome = island_chrome();
+    if !chrome.background {
+        return Color::rgba(0, 0, 0, 0);
     }
+    let base = chrome
+        .background_color
+        .unwrap_or(use_theme().colors.surface_elevated);
+    apply_opacity(base, chrome.background_opacity)
 }
 pub fn shell_text() -> Color {
     use_theme().colors.text_primary

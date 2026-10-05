@@ -16,6 +16,23 @@ pub enum ConfigValue {
     String(String),
 }
 
+impl ConfigValue {
+    pub fn as_bool(&self) -> Option<bool> {
+        match self {
+            ConfigValue::Bool(value) => Some(*value),
+            _ => None,
+        }
+    }
+
+    pub fn as_f64(&self) -> Option<f64> {
+        match self {
+            ConfigValue::Float(value) => Some(*value),
+            ConfigValue::Int(value) => Some(*value as f64),
+            _ => None,
+        }
+    }
+}
+
 /// A resolved per-island configuration: `modules/<id>.toml` defaults
 /// layered under the inline `[[dock.section.island]].config` overrides from
 /// `shell.toml`, merged before an [`crate::Island`] ever sees it.

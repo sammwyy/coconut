@@ -16,14 +16,15 @@ impl Island for LogoIsland {
         "logo"
     }
 
-    fn build(&self, _ctx: &IslandRenderContext) -> BoxedWidget {
+    fn build(&self, ctx: &IslandRenderContext) -> BoxedWidget {
+        let s = ctx.scale;
         Box::new(jsx! {
-            <Flex direction={FlexDirection::Row} size={(48.0, 32.0)} padding={5.0} gap={2.0} align={Align::Center} background={shell_panel()} border={(shell_border(), 1.0)} corner_radius={9.0}>
-                <Flex size={(5.0, 5.0)} background={shell_text()} corner_radius={2.5} />
-                <Flex size={(3.0, 3.0)} background={shell_muted()} corner_radius={1.5} />
-                <Flex size={(3.0, 3.0)} background={shell_muted()} corner_radius={1.5} />
-                <Flex size={(3.0, 3.0)} background={shell_muted()} corner_radius={1.5} />
-                <Flex size={(3.0, 3.0)} background={shell_muted()} corner_radius={1.5} />
+            <Flex direction={FlexDirection::Row} size={(48.0 * s, 32.0 * s)} padding={5.0 * s} gap={2.0 * s} align={Align::Center} background={shell_panel()} border={(shell_border(), 1.0)} corner_radius={9.0 * s}>
+                <Flex size={(5.0 * s, 5.0 * s)} background={shell_text()} corner_radius={2.5 * s} />
+                <Flex size={(3.0 * s, 3.0 * s)} background={shell_muted()} corner_radius={1.5 * s} />
+                <Flex size={(3.0 * s, 3.0 * s)} background={shell_muted()} corner_radius={1.5 * s} />
+                <Flex size={(3.0 * s, 3.0 * s)} background={shell_muted()} corner_radius={1.5 * s} />
+                <Flex size={(3.0 * s, 3.0 * s)} background={shell_muted()} corner_radius={1.5 * s} />
             </Flex>
         })
     }

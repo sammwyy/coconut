@@ -3,7 +3,7 @@ mod desktop;
 mod plugins;
 mod process;
 
-use crate::bar::{build_dock, DOCK_HEIGHT, DOCK_WIDTH};
+use crate::bar::build_dock;
 use crate::plugins::all_plugins;
 use chrono::Local;
 use coconut_api::audio::{AudioIntegration, Playback};
@@ -54,8 +54,8 @@ pub fn run() {
     let desktop_work_area = Signal::new(integrations.desktop.work_area());
 
     let shared = SharedState::default();
+    shared.insert(bar::ModuleConfigRevision(Signal::new(0)));
 
-    // -- app launcher / window list -----------------------------------
     let windows = Signal::new(integrations.desktop.windows());
     let launcher_open = Signal::new(false);
     shared.insert(LauncherOpenSignal(launcher_open.clone()));
@@ -73,7 +73,6 @@ pub fn run() {
         });
     }
 
-    // -- current playing -------------------------------------------------
     let playback_backend = integrations.audio.clone();
     let playback_state: Signal<Option<Playback>> = Signal::new(playback_backend.playback());
     {
@@ -96,17 +95,14 @@ pub fn run() {
         })));
     }
 
-    // -- clock -------------------------------------------------------------
     let clock_config: ClockConfig = coconut_core::modules::load_module("clock");
     let clock_format = Rc::new(clock_config.format.clone());
     let clock_text = Signal::new(Local::now().format(&clock_config.format).to_string());
     shared.insert(ClockText(clock_text.clone()));
 
-    // -- weather -------------------------------------------------------------
     let weather_state: Signal<WeatherState> = Signal::new(WeatherState::Loading);
     shared.insert(weather_state.clone());
 
-    // -- tray / control center ---------------------------------------------
     shared.insert(integrations.network.clone());
     shared.insert(integrations.bluetooth.clone());
     shared.insert(integrations.battery.clone());
@@ -341,10 +337,11 @@ fn append_docks(
         };
         let length = dock.max_length.unwrap_or(800.0).clamp(160.0, 8000.0) as u32;
         let margin = dock.margin.max(0.0).round() as u32;
+        let thickness = dock.thickness.max(1.0).round() as u32;
         let (width, height) = if position.is_vertical() {
-            (DOCK_WIDTH + margin, length)
+            (thickness + margin, length)
         } else {
-            (length, DOCK_HEIGHT + margin)
+            (length, thickness + margin)
         };
         let dock = dock.clone();
         let registry = registry.clone();
@@ -371,12 +368,7 @@ fn append_docks(
                 ready_backend.prepare_window(&window);
                 themed_windows.borrow_mut().push(window.clone());
                 dock_windows.borrow_mut().push(window.clone());
-                let thickness = if position.is_vertical() {
-                    DOCK_WIDTH as f32
-                } else {
-                    DOCK_HEIGHT as f32
-                };
-                panel_host.set_dock(index, window, position, thickness);
+                panel_host.set_dock(index, window, position, thickness as f32);
             },
             move |viewport: Size| -> BoxedWidget {
                 build_dock(viewport, &dock, &registry, &shared, &open_panel)
@@ -464,6 +456,11 @@ fn schedule_runtime_events(
                     RuntimeEvent::UserProfileChanged => {
                         if island_present(&config.peek().docks, "weather") {
                             refresh_weather(app.clone(), weather_state.clone());
+                        }
+                    }
+                    RuntimeEvent::ModuleConfigChanged => {
+                        if let Some(revision) = shared.get::<bar::ModuleConfigRevision>() {
+                            revision.0.update(|value| *value = value.wrapping_add(1));
                         }
                     }
                 }

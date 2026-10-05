@@ -36,14 +36,15 @@ impl Island for CurrentPlayingIsland {
     }
 
     fn build(&self, ctx: &IslandRenderContext) -> BoxedWidget {
+        let s = ctx.scale;
         let open = ctx.open_panel.clone();
         if ctx.position.is_vertical() {
             return Box::new(
-                RawButton::new(side_button_style(), || {})
+                RawButton::new(side_button_style(s), || {})
                     .with_click_position(move |point| open("current_playing", point))
                     .child(Box::new(jsx! {
-                        <Flex size={(SIDE_ITEM_SIZE, SIDE_ITEM_SIZE)} align={Align::Center} justify={Justify::Center}>
-                            {pixel_icon("player_play", 19.0, shell_text())}
+                        <Flex size={(SIDE_ITEM_SIZE * s, SIDE_ITEM_SIZE * s)} align={Align::Center} justify={Justify::Center}>
+                            {pixel_icon("player_play", 19.0 * s, shell_text())}
                         </Flex>
                     })),
             );
@@ -66,7 +67,7 @@ impl Island for CurrentPlayingIsland {
             .map(|value| value.0)
             .unwrap_or_else(|| Rc::new(|| {}));
 
-        compact_playback_widget(playback.as_ref(), open, previous, toggle, next)
+        compact_playback_widget(playback.as_ref(), open, previous, toggle, next, s)
     }
 }
 
@@ -82,15 +83,16 @@ fn compact_playback_widget(
     previous: Rc<dyn Fn()>,
     toggle: Rc<dyn Fn()>,
     next: Rc<dyn Fn()>,
+    scale: f32,
 ) -> BoxedWidget {
     let duration = playback
         .map(|item| item.position.as_str())
         .filter(|position| !position.is_empty());
-    let width = if duration.is_some() { 144.0 } else { 108.0 };
+    let width = (if duration.is_some() { 144.0 } else { 108.0 }) * scale;
     let duration_widget: BoxedWidget = duration
         .map(|duration| {
             Box::new(jsx! {
-                <RawText color={shell_muted()} font_size={10.0} align={TextAlign::End}>{duration}</RawText>
+                <RawText color={shell_muted()} font_size={10.0 * scale} align={TextAlign::End}>{duration}</RawText>
             }) as BoxedWidget
         })
         .unwrap_or_else(|| Box::new(creamui_widgets::layout::Flex::row().size(0.0, 0.0)));
@@ -100,33 +102,34 @@ fn compact_playback_widget(
         "player_play"
     };
     Box::new(
-        RawButton::new(island_button_style(width), || {})
+        RawButton::new(island_button_style(width, scale), || {})
             .with_click_position(move |point| open("current_playing", point))
             .child(Box::new(jsx! {
-                <Flex direction={FlexDirection::Row} size={(width, 32.0)} padding={4.0} gap={3.0} align={Align::Center}>
-                    {music_cover(playback)}
-                    {compact_media_button("player_previous", previous)}
-                    {compact_media_button(play_icon, toggle)}
-                    {compact_media_button("player_next", next)}
+                <Flex direction={FlexDirection::Row} size={(width, 32.0 * scale)} padding={4.0 * scale} gap={3.0 * scale} align={Align::Center}>
+                    {music_cover(playback, scale)}
+                    {compact_media_button("player_previous", previous, scale)}
+                    {compact_media_button(play_icon, toggle, scale)}
+                    {compact_media_button("player_next", next, scale)}
                     {duration_widget}
                 </Flex>
             })),
     )
 }
 
-fn compact_media_button(icon: &'static str, on_click: Rc<dyn Fn()>) -> BoxedWidget {
+fn compact_media_button(icon: &'static str, on_click: Rc<dyn Fn()>, scale: f32) -> BoxedWidget {
     Box::new(
-        RawButton::new(media_control_style(), || {})
+        RawButton::new(media_control_style(scale), || {})
             .with_click_position(move |_| on_click())
             .child(Box::new(jsx! {
-                <Flex size={(18.0, 24.0)} align={Align::Center} justify={Justify::Center}>
-                    {pixel_icon(icon, 13.0, shell_text())}
+                <Flex size={(18.0 * scale, 24.0 * scale)} align={Align::Center} justify={Justify::Center}>
+                    {pixel_icon(icon, 13.0 * scale, shell_text())}
                 </Flex>
             })),
     )
 }
 
-fn music_cover(playback: Option<&Playback>) -> BoxedWidget {
+fn music_cover(playback: Option<&Playback>, scale: f32) -> BoxedWidget {
+    let size = 24.0 * scale;
     let Some(data) = playback
         .and_then(|item| item.art_url.as_ref())
         .and_then(safe_image_data)
@@ -135,12 +138,12 @@ fn music_cover(playback: Option<&Playback>) -> BoxedWidget {
             .and_then(|item| item.app_icon.as_ref())
             .and_then(safe_image_data)
         else {
-            return Box::new(jsx! { <Flex size={(24.0, 24.0)} /> });
+            return Box::new(jsx! { <Flex size={(size, size)} /> });
         };
         return Box::new(
             Image::new(data)
                 .layout(LayoutStyle {
-                    size: fixed(24.0, 24.0),
+                    size: fixed(size, size),
                     ..Default::default()
                 })
                 .fit(ImageFit::Contain),
@@ -149,7 +152,7 @@ fn music_cover(playback: Option<&Playback>) -> BoxedWidget {
     Box::new(
         Image::new(data)
             .layout(LayoutStyle {
-                size: fixed(24.0, 24.0),
+                size: fixed(size, size),
                 ..Default::default()
             })
             .fit(ImageFit::Cover),
@@ -173,37 +176,37 @@ fn safe_image_data(path: &PathBuf) -> Option<ImageData> {
     Some(data)
 }
 
-fn island_button_style(width: f32) -> Style {
+fn island_button_style(width: f32, scale: f32) -> Style {
     Style::new()
         .layout(LayoutStyle {
-            size: fixed(width, 32.0),
+            size: fixed(width, 32.0 * scale),
             ..Default::default()
         })
         .background(shell_panel())
-        .corner_radius(9.0)
+        .corner_radius(9.0 * scale)
         .hover(StateStyle::new().background(shell_control_hover()))
         .pressed(StateStyle::new().background(shell_control_hover()))
 }
 
-fn side_button_style() -> Style {
+fn side_button_style(scale: f32) -> Style {
     Style::new()
         .layout(LayoutStyle {
-            size: fixed(SIDE_ITEM_SIZE, SIDE_ITEM_SIZE),
+            size: fixed(SIDE_ITEM_SIZE * scale, SIDE_ITEM_SIZE * scale),
             ..Default::default()
         })
         .background(shell_panel())
-        .corner_radius(8.0)
+        .corner_radius(8.0 * scale)
         .hover(StateStyle::new().background(shell_control_hover()))
         .pressed(StateStyle::new().background(shell_control_hover()))
 }
 
-fn media_control_style() -> Style {
+fn media_control_style(scale: f32) -> Style {
     Style::new()
         .layout(LayoutStyle {
-            size: fixed(18.0, 24.0),
+            size: fixed(18.0 * scale, 24.0 * scale),
             ..Default::default()
         })
-        .corner_radius(6.0)
+        .corner_radius(6.0 * scale)
         .hover(StateStyle::new().background(shell_control_hover()))
         .pressed(StateStyle::new().background(shell_control_hover()))
 }

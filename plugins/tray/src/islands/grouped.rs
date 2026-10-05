@@ -35,6 +35,7 @@ impl Island for ControlCenterIsland {
     }
 
     fn build(&self, ctx: &IslandRenderContext) -> BoxedWidget {
+        let s = ctx.scale;
         let network = ctx
             .shared
             .get::<Rc<dyn NetworkIntegration>>()
@@ -79,37 +80,37 @@ impl Island for ControlCenterIsland {
 
         let mut icon_count = 0;
         let mut row = Flex::row()
-            .padding(4.0)
-            .gap(7.0)
+            .padding(4.0 * s)
+            .gap(7.0 * s)
             .justify(Justify::Center)
             .align(Align::Center);
         if self.tray.wifi.shows_in_bar() {
-            row = row.child(pixel_icon(network_icon_name, 16.0, shell_text()));
+            row = row.child(pixel_icon(network_icon_name, 16.0 * s, shell_text()));
             icon_count += 1;
         }
         if self.tray.brightness.shows_in_bar() {
-            row = row.child(pixel_icon("brightness", 16.0, shell_text()));
+            row = row.child(pixel_icon("brightness", 16.0 * s, shell_text()));
             icon_count += 1;
         }
         if self.tray.volume.shows_in_bar() {
-            row = row.child(pixel_icon(volume_icon_name, 16.0, shell_text()));
+            row = row.child(pixel_icon(volume_icon_name, 16.0 * s, shell_text()));
             icon_count += 1;
         }
         if self.tray.bluetooth.shows_in_bar() {
-            row = row.child(pixel_icon(bluetooth_icon_name, 16.0, shell_text()));
+            row = row.child(pixel_icon(bluetooth_icon_name, 16.0 * s, shell_text()));
             icon_count += 1;
         }
         if self.tray.battery.shows_in_bar() {
-            row = row.child(pixel_icon(battery_icon_name, 16.0, shell_text()));
+            row = row.child(pixel_icon(battery_icon_name, 16.0 * s, shell_text()));
             icon_count += 1;
         }
-        row = row.child(pixel_icon("chevron-up", 13.0, shell_text()));
-        let width = control_button_width(icon_count);
-        row = row.size(width, 32.0);
+        row = row.child(pixel_icon("chevron-up", 13.0 * s, shell_text()));
+        let width = control_button_width(icon_count, s);
+        row = row.size(width, 32.0 * s);
 
         let open_panel = ctx.open_panel.clone();
         Box::new(
-            RawButton::new(island_button_style(width, 32.0), || {})
+            RawButton::new(island_button_style(width, 32.0 * s, s), || {})
                 .with_click_position(move |point| open_panel("control_center", point))
                 .child(Box::new(row)),
         )
@@ -119,13 +120,13 @@ impl Island for ControlCenterIsland {
 /// Grows with the number of visible device icons, plus the trailing
 /// chevron. Ported verbatim from
 /// `apps/shell/src/bar/mod.rs::control_button_width`.
-fn control_button_width(icon_count: usize) -> f32 {
+fn control_button_width(icon_count: usize, scale: f32) -> f32 {
     const ICON_WIDTH: f32 = 16.0;
     const CHEVRON_WIDTH: f32 = 13.0;
     const GAP: f32 = 7.0;
     const PADDING: f32 = 8.0;
     let icons = icon_count as f32;
-    PADDING + icons * ICON_WIDTH + (icons + 1.0) * GAP + CHEVRON_WIDTH
+    (PADDING + icons * ICON_WIDTH + (icons + 1.0) * GAP + CHEVRON_WIDTH) * scale
 }
 
 #[cfg(test)]
@@ -135,7 +136,7 @@ mod tests {
     /// Moved from `apps/shell/src/bar/mod.rs::control_button_grows_with_visible_icons`.
     #[test]
     fn control_button_grows_with_visible_icons() {
-        assert!(control_button_width(0) < control_button_width(3));
-        assert!(control_button_width(3) < control_button_width(5));
+        assert!(control_button_width(0, 1.0) < control_button_width(3, 1.0));
+        assert!(control_button_width(3, 1.0) < control_button_width(5, 1.0));
     }
 }

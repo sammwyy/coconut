@@ -1,16 +1,22 @@
 use crate::common::{fixed_body, group, row, section, tab_colors, update_config};
-use coconut_core::{DockAlign, DockConfig, DockPosition, IslandEntry, SectionConfig, ShellConfig};
+use coconut_core::{
+    BackgroundSource, DesktopColor, DockAlign, DockConfig, DockPosition, IslandEntry,
+    SectionConfig, ShellConfig,
+};
 use creamui_core::layout::{Dimension, FlexDirection, LengthPercentage, Style as LayoutStyle};
 use creamui_core::{BoxedWidget, Size, StateStyle, Style, Styled};
 use creamui_image::{ImageData, SvgSize};
 use creamui_reactive::Signal;
-use creamui_theme::use_theme;
+use creamui_theme::{use_theme, Color};
 use creamui_widgets::layout::{Align, Flex, Justify};
 use creamui_widgets::{
-    tab_styles, Button, ButtonSize, ButtonState, ButtonVariant, Icon, IconImage, IconSource,
-    RawButton, RawText, RawView, ScrollController, SegmentedControl, Select, SelectController,
-    Surface, SurfaceRole, Switch, Symbol, Tab, TabSizing, Tabs, Text, TextSize,
+    tab_styles, Button, ButtonSize, ButtonState, ButtonVariant, ColorPicker, ColorPickerController,
+    Icon, IconImage, IconSource, RawButton, RawText, RawView, ScrollController, SegmentedControl,
+    Select, SelectController, Slider, Surface, SurfaceRole, Switch, Symbol, Tab, TabSizing, Tabs,
+    Text, TextSize,
 };
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
 
 const POSITIONS: [DockPosition; 4] = [
@@ -33,21 +39,39 @@ pub enum DockTab {
     Content,
 }
 
+/// Owns each section's "Add island" `SelectController` across rebuilds — the
+/// immediate-mode widget tree is rebuilt on every config change, so a
+/// controller created inline would reset its open/closed state right after
+/// the click that opens it.
+#[derive(Clone, Default)]
+pub struct AddIslandPickers(Rc<RefCell<HashMap<(usize, usize), SelectController>>>);
+
+impl AddIslandPickers {
+    fn controller(&self, dock_index: usize, section_index: usize) -> SelectController {
+        self.0
+            .borrow_mut()
+            .entry((dock_index, section_index))
+            .or_insert_with(|| SelectController::new(0))
+            .clone()
+    }
+}
+
 /// Ids a click-to-add picker offers per section. Tray's per-device ids
 /// ("tray.wifi", ...) are intentionally left out here — those only exist
 /// under `TrayMode::Individual` and are managed by `modules/tray.toml`, not
 /// by picking a fixed id like the rest of these.
-const KNOWN_WIDGETS: &[(&str, &str)] = &[
+const KNOWN_ISLANDS: &[(&str, &str)] = &[
     ("logo", "Logo"),
     ("weather", "Weather"),
     ("current_playing", "Now playing"),
     ("app_launcher", "App launcher"),
+    ("open_windows", "Open windows"),
     ("control_center", "Control center"),
     ("clock", "Clock"),
 ];
 
-fn widget_label(id: &str) -> &str {
-    KNOWN_WIDGETS
+fn island_label(id: &str) -> &str {
+    KNOWN_ISLANDS
         .iter()
         .find_map(|(known_id, label)| (*known_id == id).then_some(*label))
         .unwrap_or(id)
@@ -63,12 +87,16 @@ pub fn dock_label(index: usize, dock: &DockConfig) -> String {
         .unwrap_or_else(|| format!("Panel {}", index + 1))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn build_dock_page(
     _: Size,
     config: &Signal<ShellConfig>,
     scroll: &ScrollController,
     tab: &Signal<DockTab>,
     dock_index: usize,
+    background_picker: &ColorPickerController,
+    island_background_picker: &ColorPickerController,
+    add_island_pickers: &AddIslandPickers,
 ) -> BoxedWidget {
     let docks = config.get().docks;
     let dock_count = docks.len();
@@ -97,7 +125,13 @@ pub fn build_dock_page(
                 )]));
             }
         }
-        DockTab::Appearance => body.push(appearance_card(config, dock_index, dock)),
+        DockTab::Appearance => body.push(appearance_card(
+            config,
+            dock_index,
+            dock,
+            background_picker,
+            island_background_picker,
+        )),
         DockTab::Content => {
             let section_count = dock.sections.len();
             for (section_index, dock_section) in dock.sections.iter().enumerate() {
@@ -108,6 +142,7 @@ pub fn build_dock_page(
                     section_index,
                     section_count,
                     dock_section,
+                    add_island_pickers,
                 ));
             }
             body.push(insert_section_button(config, dock_index, section_count));
@@ -342,13 +377,42 @@ fn top_card(config: &Signal<ShellConfig>, dock_index: usize, dock: &DockConfig) 
             row("Section spacing", section_gap_control),
             row("Margin", margin_control),
         ]),
+        group(vec![thickness_row(config, dock_index, dock.thickness)]),
     ]))
+}
+
+const THICKNESS_RANGE: (f32, f32) = (32.0, 72.0);
+
+/// The dock's height (top/bottom) or width (left/right), in logical pixels.
+/// Every island scales its icons, text and padding to match.
+fn thickness_row(config: &Signal<ShellConfig>, dock_index: usize, value: f32) -> BoxedWidget {
+    let (min, max) = THICKNESS_RANGE;
+    let normalized = ((value - min) / (max - min)).clamp(0.0, 1.0);
+    let apply = config.clone();
+    let slider: BoxedWidget = Box::new(Slider::new(normalized, move |normalized: f32| {
+        update_config(&apply, |c| {
+            if let Some(dock) = c.docks.get_mut(dock_index) {
+                dock.thickness = min + normalized.clamp(0.0, 1.0) * (max - min);
+            }
+        });
+    }));
+    let value_text = format!("{:.0} px", value);
+    let control: BoxedWidget = Box::new(
+        Flex::row()
+            .gap(10.0)
+            .align(Align::Center)
+            .child(slider)
+            .child(Box::new(Text::secondary(value_text).size(TextSize::Sm)) as BoxedWidget),
+    );
+    row("Size", control)
 }
 
 fn appearance_card(
     config: &Signal<ShellConfig>,
     dock_index: usize,
     dock: &DockConfig,
+    background_picker: &ColorPickerController,
+    island_background_picker: &ColorPickerController,
 ) -> BoxedWidget {
     let toggle = |label: &'static str, enabled: bool, apply: fn(&mut DockConfig)| {
         row(
@@ -365,24 +429,169 @@ fn appearance_card(
             })) as BoxedWidget,
         )
     };
+
+    let mut background_rows = vec![
+        toggle("Panel background", dock.show_background, |dock| {
+            dock.show_background = !dock.show_background
+        }),
+        toggle("Panel border", dock.show_border, |dock| {
+            dock.show_border = !dock.show_border
+        }),
+        row(
+            "Background color",
+            background_source_control(config, dock_index, dock.background_source, |dock| {
+                &mut dock.background_source
+            }),
+        ),
+    ];
+    if dock.background_source == BackgroundSource::Custom {
+        background_rows.push(row(
+            "Custom color",
+            background_color_control(
+                config,
+                dock_index,
+                dock.background_color,
+                background_picker,
+                |dock| &mut dock.background_color,
+            ),
+        ));
+    }
+    background_rows.push(opacity_row(
+        "Background opacity",
+        dock.background_opacity,
+        config,
+        dock_index,
+        |dock| &mut dock.background_opacity,
+    ));
+
+    let mut island_rows = vec![
+        toggle("Island backgrounds", dock.show_island_background, |dock| {
+            dock.show_island_background = !dock.show_island_background
+        }),
+        toggle("Island borders", dock.show_island_border, |dock| {
+            dock.show_island_border = !dock.show_island_border
+        }),
+        toggle(
+            "Unify section backgrounds",
+            dock.unify_island_background,
+            |dock| dock.unify_island_background = !dock.unify_island_background,
+        ),
+        row(
+            "Background color",
+            background_source_control(
+                config,
+                dock_index,
+                dock.island_background_source,
+                |dock| &mut dock.island_background_source,
+            ),
+        ),
+    ];
+    if dock.island_background_source == BackgroundSource::Custom {
+        island_rows.push(row(
+            "Custom color",
+            background_color_control(
+                config,
+                dock_index,
+                dock.island_background_color,
+                island_background_picker,
+                |dock| &mut dock.island_background_color,
+            ),
+        ));
+    }
+    island_rows.push(opacity_row(
+        "Background opacity",
+        dock.island_background_opacity,
+        config,
+        dock_index,
+        |dock| &mut dock.island_background_opacity,
+    ));
+
     Box::new(Flex::column().gap(14.0).with_children(vec![
-        group(vec![
-            toggle("Panel background", dock.show_background, |dock| {
-                dock.show_background = !dock.show_background
-            }),
-            toggle("Panel border", dock.show_border, |dock| {
-                dock.show_border = !dock.show_border
-            }),
-        ]),
-        group(vec![
-            toggle("Widget backgrounds", dock.show_island_background, |dock| {
-                dock.show_island_background = !dock.show_island_background
-            }),
-            toggle("Widget borders", dock.show_island_border, |dock| {
-                dock.show_island_border = !dock.show_island_border
-            }),
-        ]),
+        group(background_rows),
+        group(island_rows),
     ]))
+}
+
+/// A two-way Theme/Custom toggle shared by the dock's own background and its
+/// islands' background.
+fn background_source_control(
+    config: &Signal<ShellConfig>,
+    dock_index: usize,
+    selected: BackgroundSource,
+    field: fn(&mut DockConfig) -> &mut BackgroundSource,
+) -> BoxedWidget {
+    let index = match selected {
+        BackgroundSource::Theme => 0,
+        BackgroundSource::Custom => 1,
+    };
+    let apply = config.clone();
+    Box::new(
+        SegmentedControl::new(index, move |index: usize| {
+            update_config(&apply, |c| {
+                if let Some(dock) = c.docks.get_mut(dock_index) {
+                    *field(dock) = if index == 0 {
+                        BackgroundSource::Theme
+                    } else {
+                        BackgroundSource::Custom
+                    };
+                }
+            });
+        })
+        .option("Theme")
+        .option("Custom"),
+    )
+}
+
+fn background_color_control(
+    config: &Signal<ShellConfig>,
+    dock_index: usize,
+    current: DesktopColor,
+    picker: &ColorPickerController,
+    field: fn(&mut DockConfig) -> &mut DesktopColor,
+) -> BoxedWidget {
+    let apply = config.clone();
+    Box::new(ColorPicker::controlled(
+        Color::rgb(current.r, current.g, current.b),
+        picker,
+        move |color| {
+            update_config(&apply, |c| {
+                if let Some(dock) = c.docks.get_mut(dock_index) {
+                    *field(dock) = DesktopColor {
+                        r: color.r,
+                        g: color.g,
+                        b: color.b,
+                    };
+                }
+            });
+        },
+    ))
+}
+
+fn opacity_row(
+    label: &'static str,
+    value: f32,
+    config: &Signal<ShellConfig>,
+    dock_index: usize,
+    field: fn(&mut DockConfig) -> &mut f32,
+) -> BoxedWidget {
+    let normalized = value.clamp(0.0, 1.0);
+    let apply = config.clone();
+    let slider: BoxedWidget = Box::new(Slider::new(normalized, move |normalized: f32| {
+        update_config(&apply, |c| {
+            if let Some(dock) = c.docks.get_mut(dock_index) {
+                *field(dock) = normalized.clamp(0.0, 1.0);
+            }
+        });
+    }));
+    let value_text = format!("{:.0}%", normalized * 100.0);
+    let control: BoxedWidget = Box::new(
+        Flex::row()
+            .gap(10.0)
+            .align(Align::Center)
+            .child(slider)
+            .child(Box::new(Text::secondary(value_text).size(TextSize::Sm)) as BoxedWidget),
+    );
+    row(label, control)
 }
 
 fn insert_section_button(
@@ -414,6 +623,7 @@ fn section_card(
     section_index: usize,
     section_count: usize,
     dock_section: &SectionConfig,
+    add_island_pickers: &AddIslandPickers,
 ) -> BoxedWidget {
     let indicator = section_indicator(
         config,
@@ -493,7 +703,7 @@ fn section_card(
     let island_count = dock_section.islands.len();
     for (island_index, entry) in dock_section.islands.iter().enumerate() {
         island_rows.push(row(
-            widget_label(&entry.id),
+            island_label(&entry.id),
             island_controls(
                 config,
                 dock_index,
@@ -505,13 +715,13 @@ fn section_card(
         ));
     }
 
-    let missing: Vec<(&'static str, &'static str)> = KNOWN_WIDGETS
+    let missing: Vec<(&'static str, &'static str)> = KNOWN_ISLANDS
         .iter()
         .copied()
         .filter(|(id, _)| !dock_section.islands.iter().any(|entry| entry.id == *id))
         .collect();
     if !missing.is_empty() {
-        let controller = SelectController::new(0);
+        let controller = add_island_pickers.controller(dock_index, section_index);
         let labels: Vec<&str> = missing.iter().map(|(_, label)| *label).collect();
         let picker: BoxedWidget = Box::new(
             Select::controlled(&labels, controller)
@@ -532,7 +742,7 @@ fn section_card(
                     }
                 }),
         );
-        island_rows.push(row("Add widget", picker));
+        island_rows.push(row("Add island", picker));
     }
 
     let last_row = island_rows.len().saturating_sub(1);

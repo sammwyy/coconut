@@ -1,3 +1,4 @@
+use crate::desktop::DesktopColor;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -46,6 +47,34 @@ impl Default for DockAlign {
     }
 }
 
+/// Where a background color comes from: the active theme, or a color the
+/// user picked explicitly. Used independently for the dock's own background
+/// and for its islands' background.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum BackgroundSource {
+    Theme,
+    Custom,
+}
+
+impl Default for BackgroundSource {
+    fn default() -> Self {
+        BackgroundSource::Theme
+    }
+}
+
+fn default_opacity() -> f32 {
+    1.0
+}
+
+/// The baseline dock thickness ([`DockConfig::thickness`]) every island's
+/// scale factor is measured against.
+pub const DEFAULT_THICKNESS: f32 = 44.0;
+
+fn default_thickness() -> f32 {
+    DEFAULT_THICKNESS
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct DockConfig {
@@ -74,6 +103,12 @@ pub struct DockConfig {
     pub max_length: Option<f32>,
     /// Space between the dock and the screen edge it is anchored to.
     pub margin: f32,
+    /// The dock's thickness in logical pixels: height for a horizontal dock
+    /// (top/bottom), width for a vertical one (left/right). Islands scale
+    /// their icons, text and padding relative to [`DEFAULT_THICKNESS`] to
+    /// fill it.
+    #[serde(default = "default_thickness")]
+    pub thickness: f32,
     #[serde(default = "default_true")]
     pub show_background: bool,
     #[serde(default = "default_true")]
@@ -82,6 +117,25 @@ pub struct DockConfig {
     pub show_island_background: bool,
     #[serde(default = "default_true")]
     pub show_island_border: bool,
+    /// When true, a section's islands share one background/border instead of
+    /// each drawing its own.
+    pub unify_island_background: bool,
+    /// Where the dock's own background color comes from.
+    pub background_source: BackgroundSource,
+    /// The color used when `background_source` is `Custom`.
+    pub background_color: DesktopColor,
+    /// Opacity applied to the dock background, whichever color it resolves
+    /// to (theme or custom). `0.0` is fully transparent, `1.0` opaque.
+    #[serde(default = "default_opacity")]
+    pub background_opacity: f32,
+    /// Where each island's background color comes from.
+    pub island_background_source: BackgroundSource,
+    /// The color used when `island_background_source` is `Custom`.
+    pub island_background_color: DesktopColor,
+    /// Opacity applied to every island's background, whichever color it
+    /// resolves to.
+    #[serde(default = "default_opacity")]
+    pub island_background_opacity: f32,
     #[serde(rename = "section")]
     pub sections: Vec<SectionConfig>,
 }
@@ -115,10 +169,18 @@ impl Default for DockConfig {
             fill_available_space: true,
             max_length: None,
             margin: 0.0,
+            thickness: default_thickness(),
             show_background: true,
             show_border: true,
             show_island_background: true,
             show_island_border: true,
+            unify_island_background: false,
+            background_source: BackgroundSource::default(),
+            background_color: DesktopColor::default(),
+            background_opacity: default_opacity(),
+            island_background_source: BackgroundSource::default(),
+            island_background_color: DesktopColor::default(),
+            island_background_opacity: default_opacity(),
             sections: vec![
                 SectionConfig {
                     enabled: true,
@@ -132,7 +194,10 @@ impl Default for DockConfig {
                 SectionConfig {
                     enabled: true,
                     gap: default_gap(),
-                    islands: vec![IslandEntry::with_id("app_launcher")],
+                    islands: vec![
+                        IslandEntry::with_id("app_launcher"),
+                        IslandEntry::with_id("open_windows"),
+                    ],
                 },
                 SectionConfig {
                     enabled: true,
@@ -289,7 +354,10 @@ mod tests {
             ids(&dock.sections[0]),
             vec!["logo", "weather", "current_playing"]
         );
-        assert_eq!(ids(&dock.sections[1]), vec!["app_launcher"]);
+        assert_eq!(
+            ids(&dock.sections[1]),
+            vec!["app_launcher", "open_windows"]
+        );
         assert_eq!(ids(&dock.sections[2]), vec!["control_center", "clock"]);
     }
 }

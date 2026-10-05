@@ -95,7 +95,7 @@ impl Island for DeviceIsland {
         let icon = self.icon_name(ctx);
         let panel_id = self.device.panel_id();
         let open_panel = ctx.open_panel.clone();
-        tray_icon_button(icon, move |point| open_panel(panel_id, point))
+        tray_icon_button(icon, move |point| open_panel(panel_id, point), ctx.scale)
     }
 }
 
@@ -151,16 +151,17 @@ impl DeviceIsland {
     }
 }
 
-fn tray_icon_button(icon: &'static str, on_click: impl Fn(Point) + 'static) -> BoxedWidget {
+fn tray_icon_button(icon: &'static str, on_click: impl Fn(Point) + 'static, scale: f32) -> BoxedWidget {
+    let size = 32.0 * scale;
     Box::new(
-        RawButton::new(island_button_style(32.0, 32.0), || {})
+        RawButton::new(island_button_style(size, size, scale), || {})
             .with_click_position(on_click)
             .child(Box::new(
                 Flex::row()
-                    .size(32.0, 32.0)
+                    .size(size, size)
                     .align(Align::Center)
                     .justify(Justify::Center)
-                    .child(pixel_icon(icon, 16.0, shell_text())),
+                    .child(pixel_icon(icon, 16.0 * scale, shell_text())),
             )),
     )
 }

@@ -1,4 +1,4 @@
-use crate::{IslandConfig, SharedState};
+use crate::{ConfigField, IslandConfig, SharedState};
 use coconut_core::DockPosition;
 use creamui_core::{BoxedWidget, Point};
 use std::rc::Rc;
@@ -12,6 +12,10 @@ pub struct IslandRenderContext<'a> {
     /// merged by the engine before this context is built.
     pub config: &'a IslandConfig,
     pub position: DockPosition,
+    /// The dock's thickness relative to [`coconut_core::DEFAULT_THICKNESS`]
+    /// (`1.0` at the default). Islands multiply their own fixed pixel sizes
+    /// by this so their icons and content fill a resized bar.
+    pub scale: f32,
     /// Opens the panel registered under `id` anchored at `at` (in the
     /// island's own window's logical-pixel coordinates). Replaces
     /// `BarActions`'s 16 named `open_*` fields with one dispatcher shared by
@@ -34,5 +38,11 @@ pub trait Island {
     /// every dock rebuild; defaults to always visible.
     fn is_visible(&self, _ctx: &IslandRenderContext) -> bool {
         true
+    }
+
+    /// Per-instance settings Settings auto-renders as a detail page. Empty
+    /// (the default) hides that page's entry point.
+    fn config_schema(&self) -> Vec<ConfigField> {
+        Vec::new()
     }
 }

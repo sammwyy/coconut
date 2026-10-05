@@ -31,14 +31,15 @@ impl Island for WeatherIsland {
     }
 
     fn build(&self, ctx: &IslandRenderContext) -> BoxedWidget {
+        let s = ctx.scale;
         let open = ctx.open_panel.clone();
         if ctx.position.is_vertical() {
             return Box::new(
-                RawButton::new(side_button_style(), || {})
+                RawButton::new(side_button_style(s), || {})
                     .with_click_position(move |point| open("weather", point))
                     .child(Box::new(jsx! {
-                        <Flex size={(SIDE_ITEM_SIZE, SIDE_ITEM_SIZE)} align={Align::Center} justify={Justify::Center}>
-                            {pixel_icon("weather_cloud_sun", 19.0, shell_text())}
+                        <Flex size={(SIDE_ITEM_SIZE * s, SIDE_ITEM_SIZE * s)} align={Align::Center} justify={Justify::Center}>
+                            {pixel_icon("weather_cloud_sun", 19.0 * s, shell_text())}
                         </Flex>
                     })),
             );
@@ -51,16 +52,20 @@ impl Island for WeatherIsland {
             .unwrap_or(WeatherState::Loading);
         let icon = weather_icon(&weather);
         let temperature = weather.bar_temperature();
-        let condition: BoxedWidget =
-            Box::new(RawMarquee::new(weather.bar_condition(), shell_text(), 12.0, 58.0));
+        let condition: BoxedWidget = Box::new(RawMarquee::new(
+            weather.bar_condition(),
+            shell_text(),
+            12.0 * s,
+            58.0 * s,
+        ));
 
         Box::new(
-            RawButton::new(island_button_style(), || {})
+            RawButton::new(island_button_style(s), || {})
                 .with_click_position(move |point| open("weather", point))
                 .child(Box::new(jsx! {
-                    <Flex direction={FlexDirection::Row} size={(120.0, 32.0)} padding={6.0} gap={4.0} align={Align::Center}>
-                        {pixel_icon(icon, 14.0, shell_text())}
-                        <RawText color={shell_text()} font_size={12.0} width={32.0} align={TextAlign::Start}>{temperature}</RawText>
+                    <Flex direction={FlexDirection::Row} size={(120.0 * s, 32.0 * s)} padding={6.0 * s} gap={4.0 * s} align={Align::Center}>
+                        {pixel_icon(icon, 14.0 * s, shell_text())}
+                        <RawText color={shell_text()} font_size={12.0 * s} width={32.0 * s} align={TextAlign::Start}>{temperature}</RawText>
                         {condition}
                     </Flex>
                 })),
@@ -76,26 +81,26 @@ fn weather_icon(weather: &WeatherState) -> &'static str {
     }
 }
 
-fn island_button_style() -> Style {
+fn island_button_style(scale: f32) -> Style {
     Style::new()
         .layout(LayoutStyle {
-            size: fixed(120.0, 32.0),
+            size: fixed(120.0 * scale, 32.0 * scale),
             ..Default::default()
         })
         .background(shell_panel())
-        .corner_radius(9.0)
+        .corner_radius(9.0 * scale)
         .hover(StateStyle::new().background(shell_control_hover()))
         .pressed(StateStyle::new().background(shell_selected()))
 }
 
-fn side_button_style() -> Style {
+fn side_button_style(scale: f32) -> Style {
     Style::new()
         .layout(LayoutStyle {
-            size: fixed(SIDE_ITEM_SIZE, SIDE_ITEM_SIZE),
+            size: fixed(SIDE_ITEM_SIZE * scale, SIDE_ITEM_SIZE * scale),
             ..Default::default()
         })
         .background(shell_panel())
-        .corner_radius(8.0)
+        .corner_radius(8.0 * scale)
         .hover(StateStyle::new().background(shell_control_hover()))
         .pressed(StateStyle::new().background(shell_selected()))
 }

@@ -11,7 +11,8 @@ pub use desktop::{
     ClickAction, DesktopColor, DesktopConfig, DesktopIconsConfig, IconShape, WallpaperMode,
 };
 pub use dock::{
-    ordered_islands, DockAlign, DockConfig, DockDirection, DockPosition, IslandEntry, SectionConfig,
+    ordered_islands, BackgroundSource, DockAlign, DockConfig, DockDirection, DockPosition,
+    IslandEntry, SectionConfig, DEFAULT_THICKNESS,
 };
 pub use profile::UserProfile;
 
@@ -73,12 +74,28 @@ fill_available_space = true
 # max_length = 600.0
 # Offset the dock away from its anchored screen edge.
 margin = 0.0
+# Dock thickness in pixels: height for "top"/"bottom", width for "left"/
+# "right". Islands (icons, text, padding) scale to match.
+thickness = 44.0
 # Dock and island chrome can be independently disabled for a transparent,
 # borderless presentation.
 show_background = true
 show_border = true
 show_island_background = true
 show_island_border = true
+# When true, a section's islands share one background/border instead of
+# each drawing its own.
+unify_island_background = false
+# Background color source for the dock ("theme" or "custom") and, when
+# "custom", the color and opacity applied to it. Opacity (0.0-1.0) applies
+# either way.
+# background_source = "theme"
+# background_color = { r = 24, g = 24, b = 24 }
+background_opacity = 1.0
+# Same, but for each island's own background.
+# island_background_source = "theme"
+# island_background_color = { r = 24, g = 24, b = 24 }
+island_background_opacity = 1.0
 
 [[dock.section]]
 # Spacing between the islands in this section: a fixed length ("10px"), a
@@ -95,6 +112,8 @@ id = "current_playing"
 gap = "10px"
 [[dock.section.island]]
 id = "app_launcher"
+[[dock.section.island]]
+id = "open_windows"
 
 [[dock.section]]
 gap = "10px"

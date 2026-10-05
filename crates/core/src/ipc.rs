@@ -18,6 +18,7 @@ pub const SHELL_PATH: &str = "/org/coconut/Shell";
 pub const SHELL_INTERFACE: &str = "org.coconut.Shell";
 pub const SHELL_CONFIG_CHANGED: &str = "ConfigChanged";
 pub const USER_PROFILE_CHANGED: &str = "UserProfileChanged";
+pub const MODULE_CONFIG_CHANGED: &str = "ModuleConfigChanged";
 
 /// Color pickers can produce a value for every pointer motion.  Keep those
 /// updates responsive while ensuring only the final value of a short burst is
@@ -34,6 +35,8 @@ pub enum RuntimeEvent {
     ShellConfig(ShellConfig),
     /// The user's saved location changed and location-backed widgets should refresh.
     UserProfileChanged,
+    /// A `modules/<id>.toml` changed on disk; islands should re-read their config.
+    ModuleConfigChanged,
 }
 
 /// Emits `org.creamui.Theme.ReloadTheme` on the session bus.
@@ -55,6 +58,17 @@ pub fn publish_shell_config(config: &ShellConfig) -> Result<(), String> {
 /// Emits `org.coconut.Shell.UserProfileChanged` on the session bus.
 pub fn publish_user_profile_changed() -> Result<(), String> {
     publish_signal(SHELL_PATH, SHELL_INTERFACE, USER_PROFILE_CHANGED, ())
+}
+
+static MODULE_CONFIG_PUBLISHER: OnceLock<DebouncedModuleConfigPublisher> = OnceLock::new();
+
+/// Schedules `org.coconut.Shell.ModuleConfigChanged`, debounced the same way
+/// as [`publish_shell_config`] so a dragged slider emits once per burst.
+pub fn publish_module_config_changed() -> Result<(), String> {
+    MODULE_CONFIG_PUBLISHER
+        .get_or_init(DebouncedModuleConfigPublisher::new)
+        .schedule();
+    Ok(())
 }
 
 fn publish_shell_config_now(config: &ShellConfig) -> Result<(), String> {
@@ -109,6 +123,50 @@ fn publish_debounced_shell_configs(pending: Arc<(Mutex<Option<ShellConfig>>, Con
 
         if let Err(error) = publish_shell_config_now(&config) {
             eprintln!("coconut: failed to publish shell configuration update: {error}");
+        }
+    }
+}
+
+struct DebouncedModuleConfigPublisher {
+    pending: Arc<(Mutex<bool>, Condvar)>,
+}
+
+impl DebouncedModuleConfigPublisher {
+    fn new() -> Self {
+        let pending = Arc::new((Mutex::new(false), Condvar::new()));
+        let worker_pending = pending.clone();
+        std::thread::spawn(move || publish_debounced_module_configs(worker_pending));
+        Self { pending }
+    }
+
+    fn schedule(&self) {
+        let (pending, wake) = &*self.pending;
+        *pending.lock().unwrap_or_else(|error| error.into_inner()) = true;
+        wake.notify_one();
+    }
+}
+
+fn publish_debounced_module_configs(pending: Arc<(Mutex<bool>, Condvar)>) {
+    let (slot, wake) = &*pending;
+    loop {
+        {
+            let mut flag = slot.lock().unwrap_or_else(|error| error.into_inner());
+            while !*flag {
+                flag = wake.wait(flag).unwrap_or_else(|error| error.into_inner());
+            }
+            loop {
+                let (next, timeout) = wake
+                    .wait_timeout(flag, SHELL_CONFIG_DEBOUNCE)
+                    .unwrap_or_else(|error| error.into_inner());
+                flag = next;
+                if timeout.timed_out() {
+                    *flag = false;
+                    break;
+                }
+            }
+        }
+        if let Err(error) = publish_signal(SHELL_PATH, SHELL_INTERFACE, MODULE_CONFIG_CHANGED, ()) {
+            eprintln!("coconut: failed to publish module configuration update: {error}");
         }
     }
 }
@@ -179,6 +237,14 @@ fn listen(sender: EventSender<RuntimeEvent>) {
         },
     ) {
         eprintln!("coconut: failed to listen for profile updates: {error}");
+    }
+
+    let module_sender = sender.clone();
+    if let Err(error) = connection.add_match(
+        MatchRule::new_signal(SHELL_INTERFACE, MODULE_CONFIG_CHANGED).with_path(SHELL_PATH),
+        move |_: (), _, _| module_sender.send(RuntimeEvent::ModuleConfigChanged).is_ok(),
+    ) {
+        eprintln!("coconut: failed to listen for module config updates: {error}");
     }
 
     loop {

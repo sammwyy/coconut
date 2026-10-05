@@ -1,4 +1,3 @@
-use crate::bar::DOCK_HEIGHT;
 use coconut_api::desktop::DesktopWorkArea;
 use coconut_core::{ClickAction, DesktopIconsConfig, IconShape, ShellConfig, WallpaperMode};
 use coconut_plugin_kit::{build_icon_index, load_icon, pixel_icon, resolve_icon};
@@ -234,12 +233,12 @@ pub fn build(
     let desktop = shell.desktop;
     let theme = use_theme();
     let layout = IconLayout::from_config(&desktop.icons, theme.colors);
-    let dock_position = shell
+    let (dock_position, dock_thickness) = shell
         .docks
         .first()
-        .map(|dock| dock.position)
-        .unwrap_or_default();
-    let work_area = usable_area(viewport, work_area.get(), dock_position);
+        .map(|dock| (dock.position, dock.thickness.max(1.0)))
+        .unwrap_or((Default::default(), coconut_core::DEFAULT_THICKNESS));
+    let work_area = usable_area(viewport, work_area.get(), dock_position, dock_thickness);
     Box::new(
         RawView::new(
             Style::new()
@@ -709,7 +708,12 @@ fn icon_position(position: Point, viewport: Size, layout: &IconLayout) -> Point 
         position,
         viewport,
         layout,
-        usable_area(viewport, None, coconut_core::DockPosition::Bottom),
+        usable_area(
+            viewport,
+            None,
+            coconut_core::DockPosition::Bottom,
+            coconut_core::DEFAULT_THICKNESS,
+        ),
     )
 }
 
@@ -743,8 +747,8 @@ fn usable_area(
     viewport: Size,
     area: Option<DesktopWorkArea>,
     position: coconut_core::DockPosition,
+    thickness: f32,
 ) -> Rect {
-    let thickness = DOCK_HEIGHT as f32;
     let fallback = match position {
         coconut_core::DockPosition::Top => Rect {
             x: 0.0,
@@ -841,7 +845,10 @@ mod tests {
         assert_eq!(position.x, grid_limit_x(viewport.width, &layout));
         assert_eq!(
             position.y,
-            grid_limit_y(viewport.height - DOCK_HEIGHT as f32, &layout)
+            grid_limit_y(
+                viewport.height - coconut_core::DEFAULT_THICKNESS,
+                &layout
+            )
         );
     }
 

@@ -28,26 +28,27 @@ impl Island for ClockIsland {
     }
 
     fn build(&self, ctx: &IslandRenderContext) -> BoxedWidget {
+        let s = ctx.scale;
         let open = ctx.open_panel.clone();
         if ctx.position.is_vertical() {
             return Box::new(
-                RawButton::new(side_button_style(), || {})
+                RawButton::new(side_button_style(s), || {})
                     .with_click_position(move |point| open("clock", point))
                     .child(Box::new(jsx! {
-                        <Flex size={(SIDE_ITEM_SIZE, SIDE_ITEM_SIZE)} align={Align::Center} justify={Justify::Center}>
-                            {Box::new(Icon::new(Symbol::Sun, shell_text()).size(19.0)) as BoxedWidget}
+                        <Flex size={(SIDE_ITEM_SIZE * s, SIDE_ITEM_SIZE * s)} align={Align::Center} justify={Justify::Center}>
+                            {Box::new(Icon::new(Symbol::Sun, shell_text()).size(19.0 * s)) as BoxedWidget}
                         </Flex>
                     })),
             );
         }
 
         let text = self.current_text(ctx);
-        let clock: BoxedWidget = Box::new(LiveClock { text });
+        let clock: BoxedWidget = Box::new(LiveClock { text, scale: s });
         Box::new(
-            RawButton::new(island_button_style(), || {})
+            RawButton::new(island_button_style(s), || {})
                 .with_click_position(move |point| open("clock", point))
                 .child(Box::new(jsx! {
-                    <Flex direction={FlexDirection::Column} size={(68.0, 32.0)} padding={2.0} justify={Justify::Center} align={Align::Center}>
+                    <Flex direction={FlexDirection::Column} size={(68.0 * s, 32.0 * s)} padding={2.0 * s} justify={Justify::Center} align={Align::Center}>
                         {clock}
                     </Flex>
                 })),
@@ -71,12 +72,13 @@ impl ClockIsland {
 
 struct LiveClock {
     text: String,
+    scale: f32,
 }
 
 impl Widget for LiveClock {
     fn style(&self) -> Style {
         Style::new().layout(LayoutStyle {
-            size: fixed(CLOCK_WIDTH, 24.0),
+            size: fixed(CLOCK_WIDTH * self.scale, 24.0 * self.scale),
             ..Default::default()
         })
     }
@@ -86,7 +88,7 @@ impl Widget for LiveClock {
             rect,
             &self.text,
             shell_text(),
-            13.0,
+            13.0 * self.scale,
             TextAlign::Center,
             None,
             false,
@@ -95,27 +97,27 @@ impl Widget for LiveClock {
     }
 }
 
-fn island_button_style() -> Style {
+fn island_button_style(scale: f32) -> Style {
     Style::new()
         .layout(LayoutStyle {
-            size: fixed(68.0, 32.0),
+            size: fixed(68.0 * scale, 32.0 * scale),
             ..Default::default()
         })
         .background(shell_panel())
         .border(shell_border(), 1.0)
-        .corner_radius(9.0)
+        .corner_radius(9.0 * scale)
         .hover(StateStyle::new().background(shell_control_hover()))
         .pressed(StateStyle::new().background(shell_selected()))
 }
 
-fn side_button_style() -> Style {
+fn side_button_style(scale: f32) -> Style {
     Style::new()
         .layout(LayoutStyle {
-            size: fixed(SIDE_ITEM_SIZE, SIDE_ITEM_SIZE),
+            size: fixed(SIDE_ITEM_SIZE * scale, SIDE_ITEM_SIZE * scale),
             ..Default::default()
         })
         .background(shell_panel())
-        .corner_radius(8.0)
+        .corner_radius(8.0 * scale)
         .hover(StateStyle::new().background(shell_control_hover()))
         .pressed(StateStyle::new().background(shell_selected()))
 }
