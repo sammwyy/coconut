@@ -7,6 +7,7 @@ license = "Apache-2.0"
 
 [dependencies]
 coconut-api = { path = "../../crates/api" }
+coconut-core = { path = "../../crates/core" }
 coconut-plugin-kit = { path = "../../crates/plugin-kit" }
 creamui-core = { path = "../../../creamui/crates/core" }
 creamui-jsx = { path = "../../../creamui/crates/jsx" }

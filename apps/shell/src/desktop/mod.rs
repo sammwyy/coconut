@@ -842,10 +842,7 @@ mod tests {
         assert_eq!(position.x, grid_limit_x(viewport.width, &layout));
         assert_eq!(
             position.y,
-            grid_limit_y(
-                viewport.height - coconut_core::DEFAULT_THICKNESS,
-                &layout
-            )
+            grid_limit_y(viewport.height - coconut_core::DEFAULT_THICKNESS, &layout)
         );
     }
 

@@ -18,7 +18,15 @@ pub fn detect() -> Registry {
         network: detect_network(),
         bluetooth: detect_bluetooth(),
         power_profile: detect_power_profile(),
+        settings: detect_settings(),
     }
+}
+
+fn detect_settings() -> std::sync::Arc<dyn coconut_api::settings::SettingsIntegration> {
+    #[cfg(all(feature = "system", target_os = "linux"))]
+    return std::sync::Arc::new(coconut_integration_system::LinuxSettings);
+    #[allow(unreachable_code)]
+    std::sync::Arc::new(coconut_api::settings::Fallback)
 }
 
 fn detect_desktop() -> Rc<dyn coconut_api::desktop::DesktopIntegration> {

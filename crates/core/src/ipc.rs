@@ -242,7 +242,11 @@ fn listen(sender: EventSender<RuntimeEvent>) {
     let module_sender = sender.clone();
     if let Err(error) = connection.add_match(
         MatchRule::new_signal(SHELL_INTERFACE, MODULE_CONFIG_CHANGED).with_path(SHELL_PATH),
-        move |_: (), _, _| module_sender.send(RuntimeEvent::ModuleConfigChanged).is_ok(),
+        move |_: (), _, _| {
+            module_sender
+                .send(RuntimeEvent::ModuleConfigChanged)
+                .is_ok()
+        },
     ) {
         eprintln!("coconut: failed to listen for module config updates: {error}");
     }

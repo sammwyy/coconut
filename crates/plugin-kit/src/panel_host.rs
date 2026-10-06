@@ -50,14 +50,20 @@ impl PanelHost {
             registry,
             shared,
             docks: RefCell::new(HashMap::new()),
-            theme: Cell::new(Theme::default()),
+            theme: Cell::new(crate::design::coconut_theme(Theme::default())),
             open_panels: RefCell::new(HashMap::new()),
         })
     }
 
     /// Registers/refreshes `dock_index`'s anchor window and geometry. Call
     /// whenever that dock's window is (re)created.
-    pub fn set_dock(&self, dock_index: usize, window: WindowHandle, position: DockPosition, thickness: f32) {
+    pub fn set_dock(
+        &self,
+        dock_index: usize,
+        window: WindowHandle,
+        position: DockPosition,
+        thickness: f32,
+    ) {
         self.docks.borrow_mut().insert(
             dock_index,
             DockAnchor {
@@ -73,9 +79,12 @@ impl PanelHost {
         self.docks.borrow_mut().clear();
     }
 
-    /// Updates the theme applied to newly opened popups.
+    /// Updates existing popups as well as subsequently opened ones.
     pub fn set_theme(&self, theme: Theme) {
         self.theme.set(theme);
+        for panel in self.open_panels.borrow().values() {
+            panel.set_theme(theme);
+        }
     }
 
     /// Returns the `open_panel(id, at)` closure bound to `dock_index`.
@@ -122,7 +131,13 @@ impl PanelHost {
 
     /// Builds and appends the popup for `panel`, once any previously open
     /// panel is confirmed closed. See [`Self::open`].
-    fn do_open(self: &Rc<Self>, dock_index: usize, id: &'static str, at: Point, panel: Rc<dyn Panel>) {
+    fn do_open(
+        self: &Rc<Self>,
+        dock_index: usize,
+        id: &'static str,
+        at: Point,
+        panel: Rc<dyn Panel>,
+    ) {
         let Some(anchor) = self.docks.borrow().get(&dock_index).cloned() else {
             eprintln!(
                 "plugin-kit: no dock registered at index {dock_index}; ignoring open request"
@@ -249,7 +264,27 @@ fn popup_options(title: &str, width: u32, height: u32, theme: Theme) -> WindowOp
         decorations: false,
         resizable: false,
         transparent: true,
+        blur: Some(creamui_render::BlurRegion::Window),
         theme,
         ..Default::default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn glass_popups_enable_native_blur_without_client_decorations() {
+        let theme = crate::design::coconut_theme(Theme::light());
+        let options = popup_options("Network", 380, 620, theme);
+        assert!(options.transparent);
+        assert!(matches!(
+            options.blur,
+            Some(creamui_render::BlurRegion::Window)
+        ));
+        assert!(!options.decorations);
+        assert!(!options.resizable);
+        assert_eq!(options.theme, theme);
     }
 }

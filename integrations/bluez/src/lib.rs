@@ -234,6 +234,7 @@ fn run_event_bridge(
 ) -> Result<(), String> {
     let connection = SyncConnection::new_system().map_err(|error| error.to_string())?;
     refresh(&connection, &state);
+    let _ = changes.try_send(());
 
     let sender = dbus::strings::BusName::new(SERVICE).map_err(|error| error.to_string())?;
 

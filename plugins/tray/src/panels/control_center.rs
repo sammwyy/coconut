@@ -417,7 +417,7 @@ impl Panel for ControlCenterPanel {
 
         Box::new(jsx! {
             <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={16.0} gap={12.0} background={shell_card()} border={(shell_border(), 1.0)}>
-                <RawText color={shell_muted()} font_size={14.0}>"CONTROL"</RawText>
+                {coconut_plugin_kit::chrome::panel_header("Control center", None)}
                 {Box::new(device_row) as BoxedWidget}
                 {Box::new(status_row) as BoxedWidget}
                 {brightness_card}
@@ -449,13 +449,13 @@ fn device_tile(
     on_toggle: Rc<dyn Fn()>,
     on_open: Rc<dyn Fn()>,
 ) -> BoxedWidget {
-    let mut name = RawMarquee::new(name, shell_text(), 15.0, TILE_W - 20.0);
+    let mut name = RawMarquee::new(name, shell_text(), 13.0, TILE_W - 20.0).bold(true);
     name.style.layout.size.height = creamui_core::layout::Dimension::Length(18.0);
     let name = Box::new(name) as BoxedWidget;
     let content = Box::new(jsx! {
         <Flex direction={FlexDirection::Column} size={(TILE_W, TILE_H)} padding={10.0} gap={7.0}>
             <Flex direction={FlexDirection::Row} gap={8.0} align={Align::Center}>
-                {coconut_plugin_kit::pixel_icon(icon, 16.0, shell_text())}
+                {coconut_plugin_kit::chrome::icon_badge(icon, 24.0)}
                 <RawText color={shell_muted()} font_size={11.0} align={TextAlign::Start}>{kicker}</RawText>
                 <Flex grow={1.0} />
                 {compact_switch(enabled, on_toggle)}
@@ -477,7 +477,7 @@ fn status_tile(
     let content = Box::new(jsx! {
         <Flex direction={FlexDirection::Column} size={(TILE_W, TILE_H)} padding={10.0} gap={6.0} justify={creamui_widgets::layout::Justify::Center}>
             <Flex direction={FlexDirection::Row} gap={8.0} align={Align::Center}>
-                {coconut_plugin_kit::pixel_icon(icon, 16.0, shell_text())}
+                {coconut_plugin_kit::chrome::icon_badge(icon, 24.0)}
                 <RawText color={shell_muted()} font_size={11.0} align={TextAlign::Start}>{kicker}</RawText>
             </Flex>
             <Flex direction={FlexDirection::Row} align={Align::Center} gap={8.0}>
@@ -498,6 +498,7 @@ fn tile_style() -> Style {
         .background(shell_panel())
         .border(shell_border(), 1.0)
         .corner_radius(ISLAND_RADIUS)
+        .box_shadow(coconut_plugin_kit::design::card_shadow())
         .hover(StateStyle::new().background(shell_control_hover()))
         .pressed(StateStyle::new().background(shell_selected()))
 }

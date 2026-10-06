@@ -1,10 +1,8 @@
 use crate::shared::ClockText;
-use coconut_plugin_kit::chrome::{
-    shell_border, shell_control_hover, shell_panel, shell_selected, shell_text,
-};
+use coconut_plugin_kit::chrome::{island_style, shell_text};
 use coconut_plugin_kit::{Island, IslandRenderContext};
 use creamui_core::layout::{FlexDirection, Style as LayoutStyle};
-use creamui_core::{BoxedWidget, Painter, Rect, StateStyle, Style, TextAlign, Widget};
+use creamui_core::{BoxedWidget, Painter, Rect, Style, TextAlign, Widget};
 use creamui_macros::jsx;
 use creamui_widgets::layout::{fixed, Align, Justify};
 use creamui_widgets::{Icon, RawButton, Symbol};
@@ -98,26 +96,9 @@ impl Widget for LiveClock {
 }
 
 fn island_button_style(scale: f32) -> Style {
-    Style::new()
-        .layout(LayoutStyle {
-            size: fixed(68.0 * scale, 32.0 * scale),
-            ..Default::default()
-        })
-        .background(shell_panel())
-        .border(shell_border(), 1.0)
-        .corner_radius(16.0 * scale)
-        .hover(StateStyle::new().background(shell_control_hover()))
-        .pressed(StateStyle::new().background(shell_selected()))
+    island_style(68.0 * scale, 32.0 * scale, scale)
 }
 
 fn side_button_style(scale: f32) -> Style {
-    Style::new()
-        .layout(LayoutStyle {
-            size: fixed(SIDE_ITEM_SIZE * scale, SIDE_ITEM_SIZE * scale),
-            ..Default::default()
-        })
-        .background(shell_panel())
-        .corner_radius(8.0 * scale)
-        .hover(StateStyle::new().background(shell_control_hover()))
-        .pressed(StateStyle::new().background(shell_selected()))
+    island_style(SIDE_ITEM_SIZE * scale, SIDE_ITEM_SIZE * scale, scale).corner_radius(12.0 * scale)
 }

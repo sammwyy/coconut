@@ -6,6 +6,7 @@ license = "Apache-2.0"
 
 [dependencies]
 coconut-api = { path = "../api" }
+coconut-integration-system = { path = "../../integrations/system", optional = true }
 coconut-integration-mpris = { path = "../../integrations/mpris", optional = true }
 coconut-integration-upower = { path = "../../integrations/upower", optional = true }
 coconut-integration-bluez = { path = "../../integrations/bluez", optional = true }
@@ -19,6 +20,7 @@ coconut-integration-windows = { path = "../../integrations/windows", optional = 
 
 [features]
 default = [
+    "system",
     "mpris",
     "upower",
     "bluez",
@@ -29,6 +31,7 @@ default = [
     "kwin",
     "blair",
 ]
+system = ["dep:coconut-integration-system"]
 mpris = ["dep:coconut-integration-mpris"]
 upower = ["dep:coconut-integration-upower"]
 bluez = ["dep:coconut-integration-bluez"]

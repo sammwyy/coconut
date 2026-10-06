@@ -1,7 +1,10 @@
-use crate::shared::{CurrentPlayback, NextPlayback, PreviousPlayback, SeekPlayback, TogglePlayback};
+use crate::shared::{
+    CurrentPlayback, NextPlayback, PreviousPlayback, SeekPlayback, TogglePlayback,
+};
 use coconut_api::audio::Playback;
 use coconut_plugin_kit::chrome::{
-    shell_accent, shell_border, shell_fill, shell_muted, shell_panel, shell_text, shell_track,
+    icon_badge, shell_accent, shell_border, shell_card, shell_control, shell_fill, shell_muted,
+    shell_panel, shell_text, shell_track,
 };
 use coconut_plugin_kit::{pixel_icon, Panel, PanelRenderContext};
 use creamui_core::layout::{FlexDirection, Style as LayoutStyle};
@@ -82,7 +85,7 @@ impl Panel for CurrentPlayingPanel {
             _ => 0.0,
         };
         let seek_enabled = length.is_some_and(|length| length > 0.0);
-        let cover: BoxedWidget = match cover_data(playback.as_ref()) {
+        let cover_content: BoxedWidget = match cover_data(playback.as_ref()) {
             Some(data) => Box::new(
                 Image::new(data)
                     .layout(LayoutStyle {
@@ -91,8 +94,18 @@ impl Panel for CurrentPlayingPanel {
                     })
                     .fit(ImageFit::Cover),
             ),
-            None => Box::new(jsx! { <Flex size={(COVER_SIZE, COVER_SIZE)} /> }),
+            None => icon_badge("player_play", 48.0),
         };
+        let cover: BoxedWidget = Box::new(
+            creamui_widgets::layout::Flex::row()
+                .size(COVER_SIZE, COVER_SIZE)
+                .align(Align::Center)
+                .justify(Justify::Center)
+                .background(shell_panel())
+                .border(shell_border(), 1.0)
+                .corner_radius(16.0)
+                .child(cover_content),
+        );
         let position_text = playback
             .as_ref()
             .map(|item| item.position.as_str())
@@ -110,7 +123,7 @@ impl Panel for CurrentPlayingPanel {
             "player_play"
         };
         Box::new(jsx! {
-            <Flex direction={FlexDirection::Row} size={(WIDTH as f32, HEIGHT as f32)} padding={14.0} gap={12.0} align={Align::Center} background={shell_panel()} border={(shell_border(), 1.0)}>
+            <Flex direction={FlexDirection::Row} size={(WIDTH as f32, HEIGHT as f32)} padding={14.0} gap={12.0} align={Align::Center} background={shell_card()} border={(shell_border(), 1.0)}>
                     {cover}
                     <Flex direction={FlexDirection::Column} gap={5.0} grow={1.0} justify={Justify::Center}>
                         {Box::new(creamui_widgets::RawMarquee::expanding(playback.as_ref().map(|item| item.title.as_str()).unwrap_or_default(), shell_text(), 15.0)) as BoxedWidget}
@@ -144,12 +157,12 @@ fn progress_slider(progress: f32, enabled: bool, seek: Rc<dyn Fn(f64)>) -> Boxed
             progress,
             shell_track(),
             shell_fill(),
-            shell_text(),
+            Color::rgb(255, 255, 255),
             seek,
         )
         .track(6.0, 3.0)
         .handle(11.0, 6.0)
-        .hover_handle_color(shell_text())
+        .hover_handle_color(Color::rgb(255, 255, 255))
         .pressed_handle_color(shell_fill())
         .disabled(!enabled),
     )
@@ -177,7 +190,7 @@ fn play_button(icon: &'static str, on_click: Rc<dyn Fn()>) -> BoxedWidget {
     Box::new(jsx! {
         <RawButton style={control_style()} on_click={move || on_click()}>
             <Flex size={(30.0, 28.0)} align={Align::Center} justify={Justify::Center}>
-                {pixel_icon(icon, 14.0, shell_text())}
+                {pixel_icon(icon, 14.0, creamui_theme::Color::rgb(255, 255, 255))}
             </Flex>
         </RawButton>
     })
@@ -233,8 +246,8 @@ fn small_control_style() -> Style {
             size: fixed(24.0, 28.0),
             ..Default::default()
         })
-        .background(shell_accent())
-        .corner_radius(8.0)
+        .background(shell_control())
+        .corner_radius(10.0)
 }
 
 fn parse_time(value: &str) -> Option<f64> {

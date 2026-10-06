@@ -264,15 +264,60 @@ impl ShellConfig {
             .map_err(|error| std::io::Error::other(error.to_string()))?;
         std::fs::write(path, contents)
     }
+
+    /// Reset only Coconut's shell configuration, preserving an exact backup.
+    /// Called only after the user opens and confirms the reset page.
+    pub fn reset_with_backup(&self) -> std::io::Result<PathBuf> {
+        use std::io::Write;
+        let target = config_file_path();
+        let directory = target
+            .parent()
+            .ok_or_else(|| std::io::Error::other("No configuration directory"))?;
+        std::fs::create_dir_all(directory)?;
+        if std::fs::symlink_metadata(&target).is_ok_and(|m| m.file_type().is_symlink()) {
+            return Err(std::io::Error::other("Refusing to replace a symbolic link"));
+        }
+        let previous = match std::fs::read(&target) {
+            Ok(bytes) => bytes,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                toml::to_string_pretty(self)
+                    .map_err(std::io::Error::other)?
+                    .into_bytes()
+            }
+            Err(error) => return Err(error),
+        };
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let backup = directory.join(format!("shell-backup-{stamp}.toml"));
+        let mut file = std::fs::OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(&backup)?;
+        file.write_all(&previous)?;
+        file.sync_all()?;
+        let temporary = directory.join(format!("shell-reset-{stamp}.toml"));
+        let mut file = std::fs::OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(&temporary)?;
+        file.write_all(
+            toml::to_string_pretty(&Self::default())
+                .map_err(std::io::Error::other)?
+                .as_bytes(),
+        )?;
+        file.sync_all()?;
+        std::fs::rename(temporary, target)?;
+        Ok(backup)
+    }
 }
 
 fn legacy_dock_config(contents: &str) -> bool {
     let Ok(toml::Value::Table(table)) = toml::from_str(contents) else {
         return false;
     };
-    table.contains_key("dock")
-        && !table.contains_key("statusbar")
-        && !table.contains_key("dockbar")
+    table.contains_key("dock") && !table.contains_key("statusbar") && !table.contains_key("dockbar")
 }
 
 fn write_default_config(path: &std::path::Path) {

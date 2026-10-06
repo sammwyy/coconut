@@ -347,8 +347,8 @@ fn append_bars(
                 decorations: false,
                 resizable: false,
                 transparent: true,
-                blur: (dock.show_background && dock.background_opacity < 1.0)
-                    .then_some(BlurRegion::Window),
+                blur: (dock.show_background || dock.show_island_background)
+                    .then_some(BlurRegion::Content),
                 role,
                 theme: system_theme(),
                 ..Default::default()
@@ -730,16 +730,22 @@ fn reload_system_theme() -> Theme {
 }
 
 fn load_system_theme() -> Theme {
-    match creamui_theme_loader::SystemThemeLoader::new().load() {
+    coconut_plugin_kit::design::load_fonts();
+    let base = match creamui_theme_loader::SystemThemeLoader::new().load() {
         Ok(appearance) => {
             if let Some(font_family) = &appearance.font_family {
                 creamui_fonts::use_system_font(font_family);
             }
-            appearance.theme
+            return coconut_plugin_kit::design::coconut_appearance(&appearance);
         }
         Err(error) => {
             eprintln!("shell: failed to load CreamUI system appearance: {error}");
             Theme::default()
         }
-    }
+    };
+    coconut_plugin_kit::design::load_fonts();
+    coconut_plugin_kit::design::coconut_theme(base)
 }
+
+#[cfg(test)]
+mod visual_tests;

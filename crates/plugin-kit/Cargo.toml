@@ -9,6 +9,7 @@ build = "build.rs"
 [dependencies]
 coconut-core = { path = "../core" }
 creamui-core = { path = "../../../creamui/crates/core" }
+creamui-fonts = { path = "../../../creamui/crates/fonts" }
 creamui-image = { path = "../../../creamui/crates/image", features = ["webp", "jpeg", "svg"] }
 creamui-jsx = { path = "../../../creamui/crates/jsx" }
 creamui-macros = { path = "../../../creamui/crates/macros" }

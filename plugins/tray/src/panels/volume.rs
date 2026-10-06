@@ -1,8 +1,6 @@
 use crate::shared::VolumeLevel;
 use coconut_api::volume::{Fallback as VolumeFallback, VolumeIntegration};
-use coconut_plugin_kit::chrome::{
-    fat_slider, hero_card, panel_header, shell_border, shell_card,
-};
+use coconut_plugin_kit::chrome::{fat_slider, hero_card, panel_header, shell_border, shell_card};
 use coconut_plugin_kit::{Panel, PanelRenderContext, SharedState};
 use creamui_core::layout::FlexDirection;
 use creamui_core::{BoxedWidget, Size};

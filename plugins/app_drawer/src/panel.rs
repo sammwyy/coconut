@@ -31,7 +31,7 @@
 
 use coconut_plugin_kit::chrome::{
     shell_accent, shell_border, shell_card, shell_control, shell_control_hover, shell_muted,
-    shell_panel, shell_selected, shell_text, ISLAND_RADIUS,
+    shell_on_accent, shell_panel, shell_selected, shell_text, ISLAND_RADIUS,
 };
 use coconut_plugin_kit::{build_icon_index, load_icon, resolve_icon, xdg_data_directories};
 use coconut_plugin_kit::{Panel, PanelRenderContext};
@@ -172,7 +172,7 @@ fn build_drawer(catalog: AppCatalog, state: DrawerState, on_launch: Rc<dyn Fn()>
     let content: BoxedWidget = if apps.is_empty() {
         let message = if loaded { "No matches" } else { "Scanning" };
         Box::new(jsx! {
-            <Flex grow={1.0} size={(572.0, 304.0)} align={Align::Center} justify={Justify::Center}>
+            <Flex grow={1.0} size={(568.0, 304.0)} align={Align::Center} justify={Justify::Center}>
                 <RawText color={shell_muted()} font_size={16.0}>{message}</RawText>
             </Flex>
         })
@@ -231,10 +231,10 @@ fn build_drawer(catalog: AppCatalog, state: DrawerState, on_launch: Rc<dyn Fn()>
     let search_icon = Box::new(Icon::new(Symbol::Search, shell_muted()).size(16.0)) as BoxedWidget;
 
     Box::new(jsx! {
-        <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={12.0} gap={10.0} background={shell_card()} border={(shell_border(), 1.0)} corner_radius={16.0}>
+        <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={16.0} gap={12.0} background={shell_card()} border={(shell_border(), 1.0)}>
             <Flex direction={FlexDirection::Row} align={Align::Center} padding={10.0} gap={10.0} background={shell_control()} corner_radius={12.0}>
                 <Flex size={(34.0, 34.0)} align={Align::Center} justify={Justify::Center} background={shell_accent()} corner_radius={17.0}>
-                    <RawText color={shell_text()} font_size={14.0}>{initial}</RawText>
+                    <RawText color={shell_on_accent()} font_size={14.0}>{initial}</RawText>
                 </Flex>
                 <Flex direction={FlexDirection::Column} gap={2.0}>
                     <RawText color={shell_text()} font_size={12.0}>{name}</RawText>
@@ -275,7 +275,7 @@ fn app_card(app: &AppEntry) -> BoxedWidget {
         .unwrap_or_else(|| {
             Box::new(jsx! {
                 <Flex size={(48.0, 48.0)} align={Align::Center} justify={Justify::Center} background={shell_accent()} corner_radius={14.0}>
-                    <RawText color={shell_text()} font_size={20.0}>{app.name.chars().next().unwrap_or('•').to_uppercase().to_string()}</RawText>
+                    <RawText color={shell_on_accent()} font_size={20.0}>{app.name.chars().next().unwrap_or('•').to_uppercase().to_string()}</RawText>
                 </Flex>
             })
         });
@@ -308,7 +308,7 @@ fn category_tabs(state: DrawerState, categories: &[String]) -> BoxedWidget {
                 scroll.set(0.0);
             })
             .child(Box::new(jsx! {
-                <RawText color={if active { shell_card() } else { shell_muted() }} font_size={10.0}>{label}</RawText>
+                <RawText color={if active { shell_accent() } else { shell_muted() }} font_size={11.0}>{label}</RawText>
             }) as BoxedWidget),
         ) as BoxedWidget);
     }
@@ -606,7 +606,7 @@ fn search_style() -> creamui_core::layout::Style {
 
 fn scroll_style() -> creamui_core::layout::Style {
     LayoutStyle {
-        size: fixed(576.0, 318.0),
+        size: fixed(568.0, 318.0),
         ..Default::default()
     }
 }
@@ -622,12 +622,16 @@ fn category_button_style(active: bool) -> Style {
         })
         .padding(8.0)
         .background(if active {
-            shell_text()
+            shell_selected()
         } else {
             shell_control()
         })
-        .corner_radius(8.0)
-        .hover(StateStyle::new().background(if active { shell_text() } else { shell_panel() }))
+        .corner_radius(10.0)
+        .hover(StateStyle::new().background(if active {
+            shell_selected()
+        } else {
+            shell_control_hover()
+        }))
 }
 
 fn settings_button_style() -> Style {
@@ -658,10 +662,12 @@ fn centered_icon_button_style(size: f32) -> Style {
 }
 
 fn account_button(program: PathBuf) -> BoxedWidget {
+    let mut style = small_button_style();
+    style.layout.size = fixed(64.0, 32.0);
     Box::new(
-        RawButton::new(small_button_style(), move || open_settings(program.clone()))
+        RawButton::new(style, move || open_settings(program.clone()))
             .child(Box::new(
-                jsx! { <RawText color={shell_text()} font_size={10.0}>{"Account"}</RawText> },
+                jsx! { <RawText color={shell_text()} font_size={11.0}>{"Account"}</RawText> },
             ) as BoxedWidget),
     )
 }

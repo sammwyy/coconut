@@ -300,6 +300,16 @@ name = "blair-protocol"
 version = "0.1.0"
 
 [[package]]
+name = "blair-window-integration-protocol"
+version = "0.1.0"
+dependencies = [
+ "wayland-backend",
+ "wayland-client",
+ "wayland-protocols",
+ "wayland-scanner",
+]
+
+[[package]]
 name = "block"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -565,6 +575,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "coconut-integration-system"
+version = "0.1.0"
+dependencies = [
+ "coconut-api",
+ "dbus",
+ "libc",
+ "serde_json",
+ "toml 0.9.12+spec-1.1.0",
+]
+
+[[package]]
 name = "coconut-integration-upower"
 version = "0.1.0"
 dependencies = [
@@ -646,6 +667,7 @@ version = "0.1.0"
 dependencies = [
  "coconut-core",
  "creamui-core",
+ "creamui-fonts",
  "creamui-image",
  "creamui-jsx",
  "creamui-macros",
@@ -673,6 +695,7 @@ name = "coconut-plugin-tray"
 version = "0.1.0"
 dependencies = [
  "coconut-api",
+ "coconut-core",
  "coconut-plugin-kit",
  "creamui-core",
  "creamui-jsx",
@@ -711,6 +734,7 @@ dependencies = [
  "coconut-integration-network-manager",
  "coconut-integration-pipewire",
  "coconut-integration-power-profiles-daemon",
+ "coconut-integration-system",
  "coconut-integration-upower",
  "coconut-integration-windows",
 ]
@@ -721,11 +745,13 @@ version = "0.1.0"
 dependencies = [
  "blair-client",
  "blair-protocol",
+ "coconut-api",
  "coconut-core",
  "coconut-plugin-app-launcher",
  "coconut-plugin-clock",
  "coconut-plugin-kit",
  "coconut-plugin-tray",
+ "coconut-registry",
  "creamui-core",
  "creamui-fonts",
  "creamui-image",
@@ -997,6 +1023,7 @@ name = "creamui-platform"
 version = "0.1.1"
 dependencies = [
  "blair-blur-protocol",
+ "blair-window-integration-protocol",
  "jni",
  "libc",
  "log",

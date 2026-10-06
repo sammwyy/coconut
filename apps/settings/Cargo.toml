@@ -11,6 +11,8 @@ path = "src/main.rs"
 
 [dependencies]
 coconut-core = { path = "../../crates/core" }
+coconut-api = { path = "../../crates/api" }
+coconut-registry = { path = "../../crates/registry" }
 coconut-plugin-kit = { path = "../../crates/plugin-kit" }
 coconut-plugin-tray = { path = "../../plugins/tray" }
 coconut-plugin-clock = { path = "../../plugins/clock" }
@@ -23,7 +25,7 @@ creamui-image = { path = "../../../creamui/crates/image", features = ["webp", "j
 creamui-jsx = { path = "../../../creamui/crates/jsx" }
 creamui-macros = { path = "../../../creamui/crates/macros" }
 creamui-reactive = { path = "../../../creamui/crates/reactive" }
-creamui-render = { path = "../../../creamui/crates/render", features = ["platform-wayland", "system-theme"] }
+creamui-render = { path = "../../../creamui/crates/render", features = ["platform-wayland", "system-theme", "platform-window-integration-blair", "platform-blur-blair", "platform-blur-kwin"] }
 creamui-theme = { path = "../../../creamui/crates/theme" }
 creamui-theme-loader = { path = "../../../creamui/crates/theme-loader" }
 creamui-widgets = { path = "../../../creamui/crates/widgets" }

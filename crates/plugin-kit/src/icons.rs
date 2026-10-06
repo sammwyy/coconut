@@ -19,7 +19,7 @@ pub fn pixel_icon(name: &str, size: f32, color: Color) -> BoxedWidget {
     Box::new(Icon::new(icon_source(name), color).size(size))
 }
 
-fn icon_source(name: &str) -> IconSource {
+pub(crate) fn icon_source(name: &str) -> IconSource {
     // `IconSource::Image` holds an `Rc`, so this cache — like the rest of
     // this `Rc`-based UI tree — is confined to the render thread that
     // builds widgets, rather than a process-wide `static`.

@@ -59,6 +59,7 @@ pub struct TrayConfig {
     pub wifi: TrayVisibility,
     pub bluetooth: TrayVisibility,
     pub battery: TrayVisibility,
+    pub show_battery_percentage: bool,
     pub volume: TrayVisibility,
     pub brightness: TrayVisibility,
 }
@@ -70,6 +71,7 @@ impl Default for TrayConfig {
             wifi: TrayVisibility::default(),
             bluetooth: TrayVisibility::default(),
             battery: TrayVisibility::default(),
+            show_battery_percentage: false,
             volume: TrayVisibility::default(),
             brightness: TrayVisibility::default(),
         }

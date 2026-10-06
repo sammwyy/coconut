@@ -77,7 +77,10 @@ mod tests {
 
     #[test]
     fn panel_ids_match_the_ids_islands_open() {
-        assert_eq!(ControlCenterPanel::new(TrayConfig::default()).id(), "control_center");
+        assert_eq!(
+            ControlCenterPanel::new(TrayConfig::default()).id(),
+            "control_center"
+        );
         assert_eq!(NetworkPanel.id(), "network");
         assert_eq!(BluetoothPanel.id(), "bluetooth");
         assert_eq!(EnergyPanel.id(), "energy");
@@ -102,6 +105,14 @@ mod tests {
         tray.bluetooth = TrayVisibility::Hidden;
         let islands = islands::individual::build_islands(&tray);
         let ids: Vec<&str> = islands.iter().map(|island| island.id()).collect();
-        assert_eq!(ids, vec!["tray.wifi", "tray.brightness", "tray.volume", "tray.battery"]);
+        assert_eq!(
+            ids,
+            vec![
+                "tray.wifi",
+                "tray.brightness",
+                "tray.volume",
+                "tray.battery"
+            ]
+        );
     }
 }

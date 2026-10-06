@@ -34,7 +34,7 @@ fn dock_background(dock: &DockConfig) -> Color {
     let base = resolve_background_color(
         dock.background_source,
         dock.background_color,
-        use_theme().colors.surface,
+        coconut_plugin_kit::design::dock_surface(use_theme()),
     );
     apply_opacity(base, dock.background_opacity)
 }
@@ -43,7 +43,7 @@ fn island_background_color(dock: &DockConfig) -> Option<Color> {
     Some(resolve_background_color(
         dock.island_background_source,
         dock.island_background_color,
-        use_theme().colors.surface_elevated,
+        coconut_plugin_kit::design::island_surface(use_theme()),
     ))
 }
 
@@ -241,7 +241,11 @@ fn build_row_section(
         scale,
         island_background && !unify_background,
         island_border && !unify_background,
-        if unify_background { None } else { island_background_color },
+        if unify_background {
+            None
+        } else {
+            island_background_color
+        },
         island_background_opacity,
         |id| registry.island(id).cloned(),
         shared,
@@ -314,7 +318,11 @@ fn build_column_section(
         scale,
         island_background && !unify_background,
         island_border && !unify_background,
-        if unify_background { None } else { island_background_color },
+        if unify_background {
+            None
+        } else {
+            island_background_color
+        },
         island_background_opacity,
         |id| registry.island(id).cloned(),
         shared,
@@ -356,7 +364,8 @@ fn section_chrome(
     scale: f32,
 ) -> Flex {
     if show_background {
-        let color = background_color.unwrap_or(Color::rgba(0, 0, 0, 0));
+        let color = background_color
+            .unwrap_or_else(|| coconut_plugin_kit::design::island_surface(use_theme()));
         container = container.background(apply_opacity(color, opacity));
     }
     if show_border {
@@ -411,13 +420,13 @@ fn dock_chrome(mut widget: Flex, dock: &DockConfig) -> Flex {
         let scale = island_scale(dock);
         widget = widget.box_shadow(BoxShadow::new(
             0.0,
-            3.0 * scale,
-            18.0 * scale,
+            6.0 * scale,
+            24.0 * scale,
             0.0,
-            Color::rgba(0, 0, 0, 48),
+            Color::rgba(24, 37, 55, 36),
         ));
     }
-    widget.corner_radius(14.0 * island_scale(dock))
+    widget.corner_radius(20.0 * island_scale(dock))
 }
 
 fn apply_gap(container: Flex, gap: Gap, length: f32) -> Flex {

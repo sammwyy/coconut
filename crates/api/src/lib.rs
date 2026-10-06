@@ -7,6 +7,7 @@ pub mod brightness;
 pub mod desktop;
 pub mod network;
 pub mod power_profile;
+pub mod settings;
 pub mod volume;
 
 use std::rc::Rc;
@@ -86,6 +87,7 @@ pub struct IntegrationRegistry {
     pub network: Rc<dyn network::NetworkIntegration>,
     pub bluetooth: Rc<dyn bluetooth::BluetoothIntegration>,
     pub power_profile: Rc<dyn power_profile::PowerProfileIntegration>,
+    pub settings: Arc<dyn settings::SettingsIntegration>,
 }
 
 pub type Registry = IntegrationRegistry;

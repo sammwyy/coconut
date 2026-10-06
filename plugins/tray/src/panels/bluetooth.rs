@@ -1,9 +1,10 @@
 use crate::shared::{BluetoothDetailView, BluetoothPowered, BluetoothRevision, BluetoothScroll};
-use coconut_api::bluetooth::{BluetoothDevice, BluetoothIntegration, Fallback as BluetoothFallback};
+use coconut_api::bluetooth::{
+    BluetoothDevice, BluetoothIntegration, Fallback as BluetoothFallback,
+};
 use coconut_plugin_kit::chrome::{
     action_button, compact_switch, detail_row, icon_button, list_row, panel_header, section_label,
-    shell_border, shell_card, shell_muted, shell_panel, shell_text, ISLAND_RADIUS,
-    LIST_WIDTH,
+    shell_border, shell_card, shell_muted, shell_panel, shell_text, ISLAND_RADIUS, LIST_WIDTH,
 };
 use coconut_plugin_kit::{pixel_icon, Panel, PanelRenderContext, SharedState};
 use creamui_core::layout::{Dimension, FlexDirection, Style as LayoutStyle};

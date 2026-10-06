@@ -10,10 +10,7 @@
 pub mod grouped;
 pub mod individual;
 
-use coconut_plugin_kit::chrome::{shell_control_hover, shell_panel, shell_selected};
-use creamui_core::layout::Style as LayoutStyle;
-use creamui_core::{StateStyle, Style};
-use creamui_widgets::layout::fixed;
+use creamui_core::Style;
 
 pub(crate) fn network_icon(connected: bool, strength: Option<u8>) -> &'static str {
     if !connected {
@@ -61,20 +58,7 @@ pub(crate) fn bluetooth_icon(connected: bool, powered: bool) -> &'static str {
     }
 }
 
-/// A fixed-size dock button matching every other island's look — ported
-/// verbatim from `apps/shell/src/bar/mod.rs::island_button_style` (its
-/// `island_color`/`control_hover`/`selected_color` theme helpers are the
-/// exact same colors as `coconut_plugin_kit::chrome`'s `shell_panel`/
-/// `shell_control_hover`/`shell_selected`, just renamed during the Phase 3
-/// chrome unification).
+/// Tray buttons share the same glass chrome as the other dock islands.
 pub(crate) fn island_button_style(width: f32, height: f32, scale: f32) -> Style {
-    Style::new()
-        .layout(LayoutStyle {
-            size: fixed(width, height),
-            ..Default::default()
-        })
-        .background(shell_panel())
-        .corner_radius(16.0 * scale)
-        .hover(StateStyle::new().background(shell_control_hover()))
-        .pressed(StateStyle::new().background(shell_selected()))
+    coconut_plugin_kit::chrome::island_style(width, height, scale)
 }

@@ -16,6 +16,7 @@ fn persist(tray: &TrayConfig) {
     if let Err(error) = coconut_core::modules::save_module("tray", tray) {
         eprintln!("settings: failed to save modules/tray.toml: {error}");
     }
+    let _ = coconut_core::ipc::publish_module_config_changed();
 }
 
 /// The tray's own settings (mode, per-device visibility) live in

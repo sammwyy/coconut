@@ -6,8 +6,20 @@ use creamui_reactive::Signal;
 use creamui_theme::use_theme;
 use creamui_widgets::layout::{Align, Justify};
 use creamui_widgets::{
-    RawScrollView, RawView, ScrollController, Surface, SurfaceRole, TabColors, Text,
+    IconSource, RawScrollView, RawView, ScrollController, TabColors, Text, TextSize,
 };
+
+pub fn settings_theme(theme: creamui_theme::Theme) -> creamui_theme::Theme {
+    coconut_plugin_kit::design::coconut_theme(theme)
+}
+
+pub fn load_settings_fonts() {
+    coconut_plugin_kit::design::load_fonts();
+}
+
+pub fn icon_badge(icon: IconSource, color: creamui_theme::Color) -> BoxedWidget {
+    coconut_plugin_kit::design::icon_badge(icon, color, 24.0)
+}
 
 /// The scrollable body of a settings page. Page chrome is owned by the
 /// Settings window so every view has one consistent title bar.
@@ -16,6 +28,17 @@ pub fn section(_: &str, _: &str, body: Vec<BoxedWidget>) -> BoxedWidget {
     Box::new(jsx! {
         <Flex direction={FlexDirection::Column} gap={theme.spacing_large} children={body} />
     })
+}
+
+/// The small all-caps label placed above a settings card in the mock layout.
+pub fn section_label(label: &str) -> BoxedWidget {
+    Box::new(
+        Text::secondary(label.to_uppercase())
+            .size(TextSize::Xs)
+            .bold(true)
+            .padding_left(4.0)
+            .height(14.0),
+    )
 }
 
 /// A settings page with fixed navigation chrome and a scrollable body. The
@@ -90,6 +113,7 @@ pub fn fixed_body(
 /// A macOS-style grouped list: `rows` in a recessed card, each separated by
 /// a thin divider rather than its own border/radius.
 pub fn group(rows: Vec<BoxedWidget>) -> BoxedWidget {
+    let theme = use_theme();
     let last = rows.len().saturating_sub(1);
     let mut children = Vec::with_capacity(rows.len() * 2);
     for (index, item) in rows.into_iter().enumerate() {
@@ -99,17 +123,20 @@ pub fn group(rows: Vec<BoxedWidget>) -> BoxedWidget {
         }
     }
     Box::new(
-        Surface::new(
-            SurfaceRole::Inset,
-            creamui_core::layout::Style {
-                flex_direction: FlexDirection::Column,
-                size: creamui_core::layout::Size {
-                    width: Dimension::Percent(1.0),
-                    height: Dimension::Auto,
-                },
-                ..Default::default()
+        RawView::new(creamui_core::layout::Style {
+            flex_direction: FlexDirection::Column,
+            size: creamui_core::layout::Size {
+                width: Dimension::Percent(1.0),
+                height: Dimension::Auto,
             },
-        )
+            ..Default::default()
+        })
+        // Cards sit one elevation above the cool page canvas, just like the
+        // white/translucent cards in the concept.
+        .background(theme.colors.surface_elevated)
+        .outline(theme.colors.border, 1.0)
+        .corner_radius(16.0)
+        .box_shadow(coconut_plugin_kit::design::card_shadow())
         .with_children(children),
     )
 }
@@ -118,7 +145,7 @@ pub fn group(rows: Vec<BoxedWidget>) -> BoxedWidget {
 pub fn row(label: &str, control: BoxedWidget) -> BoxedWidget {
     let theme = use_theme();
     Box::new(jsx! {
-        <Flex direction={FlexDirection::Row} align={Align::Center} justify={Justify::Between} gap={theme.spacing_large} padding={18.0}>
+        <Flex direction={FlexDirection::Row} align={Align::Center} justify={Justify::Between} gap={theme.spacing_large} padding={16.0}>
             {Box::new(Text::new(label.to_owned())) as BoxedWidget}
             {control}
         </Flex>

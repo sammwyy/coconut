@@ -9,7 +9,10 @@ use creamui_widgets::{Slider, Switch, Text, TextInput, TextSize};
 
 pub fn build(_: Size, id: &'static str, label: &str, schema: &[ConfigField]) -> BoxedWidget {
     let table = load_table(id);
-    let rows = schema.iter().map(|field| field_row(id, field, &table)).collect();
+    let rows = schema
+        .iter()
+        .map(|field| field_row(id, field, &table))
+        .collect();
     section(label, "", vec![group(rows)])
 }
 
@@ -35,13 +38,20 @@ fn field_row(id: &'static str, field: &ConfigField, table: &toml::value::Table) 
             row(field.label, switch)
         }
         FieldKind::Number {
-            range, presentation, suffix,
+            range,
+            presentation,
+            suffix,
         } => {
             let default = field.default.as_f64().unwrap_or(0.0);
             let value = table
                 .get(field.key)
                 .and_then(toml::Value::as_float)
-                .or_else(|| table.get(field.key).and_then(toml::Value::as_integer).map(|v| v as f64))
+                .or_else(|| {
+                    table
+                        .get(field.key)
+                        .and_then(toml::Value::as_integer)
+                        .map(|v| v as f64)
+                })
                 .unwrap_or(default);
             match presentation {
                 NumberPresentation::Slider => {

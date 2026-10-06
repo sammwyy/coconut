@@ -1,11 +1,11 @@
 use crate::state::WeatherState;
-use coconut_plugin_kit::chrome::{shell_control_hover, shell_panel, shell_selected, shell_text};
+use coconut_plugin_kit::chrome::{island_style, shell_text};
 use coconut_plugin_kit::{pixel_icon, Island, IslandRenderContext};
-use creamui_core::layout::{FlexDirection, Style as LayoutStyle};
-use creamui_core::{BoxedWidget, Style, StateStyle, TextAlign};
+use creamui_core::layout::FlexDirection;
+use creamui_core::{BoxedWidget, Style, TextAlign};
 use creamui_macros::jsx;
 use creamui_reactive::Signal;
-use creamui_widgets::layout::{fixed, Align, Justify};
+use creamui_widgets::layout::{Align, Justify};
 use creamui_widgets::{RawButton, RawMarquee};
 
 const SIDE_ITEM_SIZE: f32 = 36.0;
@@ -82,25 +82,9 @@ fn weather_icon(weather: &WeatherState) -> &'static str {
 }
 
 fn island_button_style(scale: f32) -> Style {
-    Style::new()
-        .layout(LayoutStyle {
-            size: fixed(120.0 * scale, 32.0 * scale),
-            ..Default::default()
-        })
-        .background(shell_panel())
-        .corner_radius(16.0 * scale)
-        .hover(StateStyle::new().background(shell_control_hover()))
-        .pressed(StateStyle::new().background(shell_selected()))
+    island_style(120.0 * scale, 32.0 * scale, scale)
 }
 
 fn side_button_style(scale: f32) -> Style {
-    Style::new()
-        .layout(LayoutStyle {
-            size: fixed(SIDE_ITEM_SIZE * scale, SIDE_ITEM_SIZE * scale),
-            ..Default::default()
-        })
-        .background(shell_panel())
-        .corner_radius(8.0 * scale)
-        .hover(StateStyle::new().background(shell_control_hover()))
-        .pressed(StateStyle::new().background(shell_selected()))
+    island_style(SIDE_ITEM_SIZE * scale, SIDE_ITEM_SIZE * scale, scale).corner_radius(12.0 * scale)
 }

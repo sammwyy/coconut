@@ -1,5 +1,7 @@
 use crate::config::TrayConfig;
-use crate::islands::{battery_icon, bluetooth_icon, island_button_style, network_icon, volume_icon};
+use crate::islands::{
+    battery_icon, bluetooth_icon, island_button_style, network_icon, volume_icon,
+};
 use crate::shared::{BatteryRevision, BluetoothRevision, NetworkRevision, VolumeLevel};
 use coconut_api::battery::{BatteryIntegration, Fallback as BatteryFallback};
 use coconut_api::bluetooth::{BluetoothIntegration, Fallback as BluetoothFallback};
@@ -95,6 +97,44 @@ impl Island for DeviceIsland {
         let icon = self.icon_name(ctx);
         let panel_id = self.device.panel_id();
         let open_panel = ctx.open_panel.clone();
+        if matches!(self.device, Device::Battery)
+            && coconut_core::modules::load_module_value("tray")
+                .get("show_battery_percentage")
+                .and_then(|value| value.as_bool())
+                .unwrap_or(false)
+        {
+            if let Some(percent) = ctx
+                .shared
+                .get::<Rc<dyn BatteryIntegration>>()
+                .and_then(|battery| battery.percentage())
+            {
+                use creamui_core::Styled;
+                let s = ctx.scale;
+                let row = creamui_widgets::layout::Flex::row()
+                    .size(74.0 * s, 32.0 * s)
+                    .gap(6.0 * s)
+                    .align(creamui_widgets::layout::Align::Center)
+                    .justify(creamui_widgets::layout::Justify::Center)
+                    .child(coconut_plugin_kit::pixel_icon(
+                        icon,
+                        16.0 * s,
+                        coconut_plugin_kit::chrome::shell_text(),
+                    ))
+                    .child(Box::new(
+                        creamui_widgets::Text::new(format!("{percent}%"))
+                            .font_size(11.0 * s)
+                            .bold(true),
+                    ));
+                return Box::new(
+                    creamui_widgets::RawButton::new(
+                        super::island_button_style(74.0 * s, 32.0 * s, s),
+                        || {},
+                    )
+                    .with_click_position(move |point| open_panel(panel_id, point))
+                    .child(Box::new(row)),
+                );
+            }
+        }
         tray_icon_button(icon, move |point| open_panel(panel_id, point), ctx.scale)
     }
 }
@@ -151,7 +191,11 @@ impl DeviceIsland {
     }
 }
 
-fn tray_icon_button(icon: &'static str, on_click: impl Fn(Point) + 'static, scale: f32) -> BoxedWidget {
+fn tray_icon_button(
+    icon: &'static str,
+    on_click: impl Fn(Point) + 'static,
+    scale: f32,
+) -> BoxedWidget {
     let size = 32.0 * scale;
     Box::new(
         RawButton::new(island_button_style(size, size, scale), || {})

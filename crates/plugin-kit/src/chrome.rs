@@ -1,10 +1,13 @@
-use crate::icons::pixel_icon;
+use crate::{
+    design,
+    icons::{icon_source, pixel_icon},
+};
 use creamui_core::layout::{FlexDirection, Style as LayoutStyle};
 use creamui_core::{BoxedWidget, StateStyle, Style, StyleProp, Styled, TextAlign};
 use creamui_macros::jsx;
 use creamui_theme::{use_theme, Color};
 use creamui_widgets::layout::{fixed, full_width, Align, Flex, Justify};
-use creamui_widgets::{RawButton, RawSlider, RawSwitch};
+use creamui_widgets::{RawButton, RawSlider, RawSwitch, RawText};
 use std::rc::Rc;
 use std::{cell::Cell, thread_local};
 
@@ -12,7 +15,7 @@ use std::{cell::Cell, thread_local};
 pub struct IslandChrome {
     pub background: bool,
     pub border: bool,
-    /// `None` uses the theme's elevated surface color; `Some` overrides it
+    /// `None` uses the theme's floating glass color; `Some` overrides it
     /// with a user-picked custom color.
     pub background_color: Option<Color>,
     /// Applied to whichever color `background_color` resolves to.
@@ -57,13 +60,18 @@ pub fn shell_card() -> Color {
     use_theme().colors.surface
 }
 pub fn shell_panel() -> Color {
+    use_theme().colors.surface_elevated
+}
+
+/// Floating chrome is lighter than a panel's cards and obeys dock overrides.
+pub fn shell_island() -> Color {
     let chrome = island_chrome();
     if !chrome.background {
         return Color::rgba(0, 0, 0, 0);
     }
     let base = chrome
         .background_color
-        .unwrap_or(use_theme().colors.surface_elevated);
+        .unwrap_or(design::island_surface(use_theme()));
     apply_opacity(base, chrome.background_opacity)
 }
 pub fn shell_text() -> Color {
@@ -78,11 +86,15 @@ pub fn shell_accent() -> Color {
 pub fn shell_accent_hover() -> Color {
     use_theme().colors.accent_hover
 }
+pub fn shell_on_accent() -> Color {
+    use_theme().colors.selection_text
+}
 pub fn shell_control() -> Color {
-    use_theme().colors.surface_hover
+    let color = use_theme().colors.surface_elevated;
+    Color::rgba(color.r, color.g, color.b, 230)
 }
 pub fn shell_control_hover() -> Color {
-    use_theme().colors.surface_hover
+    shell_panel().mix(shell_accent(), 0.08)
 }
 pub fn shell_selected() -> Color {
     use_theme().colors.selection_background
@@ -102,7 +114,39 @@ pub fn shell_fill() -> Color {
     use_theme().colors.accent
 }
 
-pub const ISLAND_RADIUS: f32 = 12.0;
+pub const ISLAND_RADIUS: f32 = design::CARD_RADIUS;
+
+pub fn island_style(width: f32, height: f32, scale: f32) -> Style {
+    let mut style = Style::new()
+        .layout(LayoutStyle {
+            size: fixed(width, height),
+            ..Default::default()
+        })
+        .background(shell_island())
+        .border(shell_border(), 1.0)
+        .corner_radius(design::PILL_RADIUS * scale)
+        .hover(StateStyle::new().background(shell_island().mix(shell_accent(), 0.10)))
+        .pressed(StateStyle::new().background(shell_selected()));
+    if island_chrome().background {
+        style = style.box_shadow(design::island_shadow(scale));
+    }
+    style
+}
+
+pub fn icon_badge(icon: &str, size: f32) -> BoxedWidget {
+    let tone = if icon.starts_with("volume") {
+        Color::rgb(125, 119, 225)
+    } else if icon.starts_with("bright") {
+        Color::rgb(229, 160, 42)
+    } else if icon.starts_with("battery") || icon.starts_with("power") {
+        Color::rgb(45, 171, 103)
+    } else if icon.starts_with("bluetooth") {
+        Color::rgb(0, 164, 185)
+    } else {
+        shell_accent()
+    };
+    design::icon_badge(icon_source(icon), tone, size)
+}
 
 /// The content width shared by every scrollable device/network list — the
 /// panel width (380) minus its own padding and the scroll container's.
@@ -119,15 +163,15 @@ pub fn compact_switch(checked: bool, on_toggle: Rc<dyn Fn()>) -> BoxedWidget {
         checked,
         shell_fill(),
         shell_track(),
-        shell_text(),
+        Color::rgb(255, 255, 255),
         move || on_toggle(),
     )
-    .radii(10.0, 8.0)
+    .radii(12.0, 10.0)
     .thumb_inset(2.0)
     .hover_colors(shell_accent_hover(), shell_track())
     .pressed_colors(shell_fill(), shell_track());
     toggle.style = Style::new().layout(LayoutStyle {
-        size: fixed(36.0, 20.0),
+        size: fixed(40.0, 24.0),
         ..Default::default()
     });
     Box::new(toggle)
@@ -138,7 +182,7 @@ pub fn compact_switch(checked: bool, on_toggle: Rc<dyn Fn()>) -> BoxedWidget {
 pub fn toggle_row(label: &str, checked: bool, on_toggle: Rc<dyn Fn()>) -> BoxedWidget {
     Box::new(jsx! {
         <Flex direction={FlexDirection::Row} padding={14.0} gap={8.0} align={Align::Center} background={shell_panel()} border={(shell_border(), 1.0)} corner_radius={ISLAND_RADIUS}>
-            <RawText color={shell_text()} font_size={14.0} align={TextAlign::Start}>{label.to_owned()}</RawText>
+            <RawText color={shell_text()} font_size={13.0} align={TextAlign::Start}>{label.to_owned()}</RawText>
             <Flex grow={1.0} />
             {compact_switch(checked, on_toggle)}
         </Flex>
@@ -156,10 +200,9 @@ pub fn hero_card(icon: &str, title: String, caption: String) -> BoxedWidget {
         .property(StyleProp::Background(shell_panel().into()))
         .property(StyleProp::Border(creamui_core::Border::new(shell_border(), 1.0)))
         .property(StyleProp::CornerRadius(ISLAND_RADIUS))
-        .child(pixel_icon(icon, 40.0, shell_text()))
-        .child(Box::new(jsx! {
-            <RawText color={shell_text()} font_size={20.0} align={TextAlign::Center}>{title}</RawText>
-        }))
+        .box_shadow(design::card_shadow())
+        .child(icon_badge(icon, 48.0))
+        .child(Box::new(RawText::new(title, shell_text(), 22.0).bold(true)))
         .child(Box::new(jsx! {
             <RawText color={shell_muted()} font_size={13.0} align={TextAlign::Center}>{caption}</RawText>
         }));
@@ -179,7 +222,7 @@ pub fn compact_hero_card(icon: &str, value: String, caption: String) -> BoxedWid
         .property(StyleProp::CornerRadius(ISLAND_RADIUS))
         .child(Box::new(jsx! {
             <Flex direction={FlexDirection::Row} align={Align::Center} gap={8.0}>
-                {pixel_icon(icon, 22.0, shell_text())}
+                {icon_badge(icon, 32.0)}
                 <Flex grow={1.0} />
                 <RawText color={shell_text()} font_size={18.0} align={TextAlign::End}>{value}</RawText>
             </Flex>
@@ -214,7 +257,7 @@ pub fn connection_card(
             .property(StyleProp::CornerRadius(ISLAND_RADIUS))
             .child(Box::new(jsx! {
                 <Flex direction={FlexDirection::Row} align={Align::Center} gap={6.0}>
-                    {pixel_icon(icon, 16.0, shell_text())}
+                    {icon_badge(icon, 24.0)}
                     <RawText color={title_color} font_size={12.0} align={TextAlign::Start}>{title}</RawText>
                 </Flex>
             }))
@@ -255,20 +298,20 @@ pub fn fat_slider(
             value,
             shell_track(),
             shell_fill(),
-            shell_text(),
+            Color::rgb(255, 255, 255),
             on_change,
         )
-        .track(22.0, 11.0)
-        .handle(22.0, 8.0)
-        .hover_handle_color(shell_text())
-        .pressed_handle_color(shell_fill()),
+        .track(8.0, 4.0)
+        .handle(18.0, 9.0)
+        .hover_handle_color(Color::rgb(255, 255, 255))
+        .pressed_handle_color(Color::rgb(239, 249, 255)),
     );
     Box::new(jsx! {
         <Flex direction={FlexDirection::Column} gap={8.0}>
             <Flex direction={FlexDirection::Row} align={Align::Center} gap={8.0}>
                 {slider_title(icon, label, on_open)}
                 <Flex grow={1.0} />
-                <RawText color={shell_muted()} font_size={18.0}>{value_text}</RawText>
+                <RawText color={shell_muted()} font_size={13.0}>{value_text}</RawText>
             </Flex>
             {slider}
         </Flex>
@@ -278,7 +321,7 @@ pub fn fat_slider(
 fn slider_title(icon: &str, label: &str, on_open: Option<Rc<dyn Fn()>>) -> BoxedWidget {
     let content = Box::new(jsx! {
         <Flex direction={FlexDirection::Row} align={Align::Center} gap={8.0}>
-            {pixel_icon(icon, 18.0, shell_text())}
+            {icon_badge(icon, 24.0)}
             <RawText color={shell_text()} font_size={13.0}>{label.to_owned()}</RawText>
         </Flex>
     });
@@ -298,21 +341,36 @@ fn slider_title_style() -> Style {
 /// A panel's title row. With `on_back`, a back arrow is shown ahead of the
 /// title so a panel reached from the control center can return to it.
 pub fn panel_header(title: &str, on_back: Option<Rc<dyn Fn()>>) -> BoxedWidget {
-    let Some(on_back) = on_back else {
-        return Box::new(jsx! {
-            <RawText color={shell_muted()} font_size={14.0}>{title.to_owned()}</RawText>
-        });
+    let icon = match title {
+        "NETWORK" => "wifi-excellent",
+        "BLUETOOTH" => "bluetooth-on",
+        "ENERGY" => "power-plan",
+        "BRIGHTNESS" => "brightness",
+        "VOLUME" => "volume-high",
+        _ => "system",
     };
-    Box::new(jsx! {
-        <Flex direction={FlexDirection::Row} align={Align::Center} gap={8.0}>
-            {back_button(on_back)}
-            <RawText color={shell_muted()} font_size={14.0}>{title.to_owned()}</RawText>
-        </Flex>
-    })
+    let label = if title.chars().any(char::is_lowercase) {
+        title.to_owned()
+    } else {
+        let mut chars = title.chars();
+        format!(
+            "{}{}",
+            chars.next().unwrap_or_default(),
+            chars.as_str().to_lowercase()
+        )
+    };
+    let mut row = Flex::row().align(Align::Center).gap(10.0);
+    if let Some(on_back) = on_back {
+        row = row.child(back_button(on_back));
+    }
+    Box::new(
+        row.child(icon_badge(icon, 28.0))
+            .child(Box::new(RawText::new(label, shell_text(), 15.0).bold(true))),
+    )
 }
 
 fn back_button(on_back: Rc<dyn Fn()>) -> BoxedWidget {
-    icon_button("chevron-left", 20.0, on_back)
+    icon_button("chevron-left", 28.0, on_back)
 }
 
 /// A small square icon-only button, used for compact actions inside device
@@ -334,7 +392,8 @@ fn icon_button_style(size: f32) -> Style {
             size: fixed(size, size),
             ..Default::default()
         })
-        .corner_radius(6.0)
+        .background(shell_control())
+        .corner_radius(size * 0.35)
         .hover(StateStyle::new().background(shell_control_hover()))
         .pressed(StateStyle::new().background(shell_selected()))
 }
@@ -342,9 +401,7 @@ fn icon_button_style(size: f32) -> Style {
 /// A small muted uppercase-style caption used to head a section of a
 /// scrollable list (e.g. "CONNECTIONS", "WI-FI NETWORKS", "DEVICES").
 pub fn section_label(text: &str) -> BoxedWidget {
-    Box::new(jsx! {
-        <RawText color={shell_muted()} font_size={11.0} align={TextAlign::Start}>{text.to_owned()}</RawText>
-    })
+    Box::new(RawText::new(text.to_uppercase(), shell_muted(), 11.0).bold(true))
 }
 
 /// Maps a Wi-Fi signal percentage to the matching strength icon, shared by
@@ -383,7 +440,7 @@ pub fn list_row(
     let text_column = Box::new(jsx! {
         <Flex direction={FlexDirection::Column} grow={1.0} gap={2.0}>
             <RawText color={shell_text()} font_size={13.0} align={TextAlign::Start}>{title}</RawText>
-            <RawText color={shell_muted()} font_size={11.0} align={TextAlign::Start}>{subtitle}</RawText>
+            <RawText color={shell_muted()} font_size={12.0} align={TextAlign::Start}>{subtitle}</RawText>
         </Flex>
     });
     let content: BoxedWidget = Box::new(
@@ -392,7 +449,7 @@ pub fn list_row(
             .gap(10.0)
             .align(Align::Center)
             .property(StyleProp::Width(LIST_WIDTH.into()))
-            .child(pixel_icon(icon, 18.0, shell_text()))
+            .child(icon_badge(icon, 24.0))
             .child(text_column)
             .child(trailing),
     );
@@ -419,13 +476,51 @@ fn list_row_style(active: bool) -> Style {
     } else {
         shell_control_hover()
     };
-    Style::new()
-        .layout(full_width(LayoutStyle::default()))
+    design::control_style(full_width(LayoutStyle::default()))
         .background(idle)
         .border(shell_border(), 1.0)
         .corner_radius(ISLAND_RADIUS)
         .hover(StateStyle::new().background(hover))
         .pressed(StateStyle::new().background(shell_selected()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn floating_chrome_preserves_dock_overrides_without_affecting_panel_cards() {
+        creamui_reactive::with_context_scope(|| {
+            let theme = design::coconut_theme(creamui_theme::Theme::light());
+            creamui_reactive::provide_context(creamui_theme::ThemeProvider::new(theme));
+            let default = shell_island();
+            let custom = Color::rgb(73, 94, 118);
+            with_island_chrome(
+                IslandChrome {
+                    background: true,
+                    border: false,
+                    background_color: Some(custom),
+                    background_opacity: 0.5,
+                },
+                || {
+                    assert_eq!(shell_island(), Color::rgba(73, 94, 118, 128));
+                    assert_eq!(shell_border().a, 0);
+                    assert_eq!(shell_panel(), theme.colors.surface_elevated);
+                    with_island_chrome(
+                        IslandChrome {
+                            background: false,
+                            border: false,
+                            background_color: None,
+                            background_opacity: 1.0,
+                        },
+                        || assert_eq!(shell_island().a, 0),
+                    );
+                    assert_eq!(shell_island().a, 128, "nested policies restore the parent");
+                },
+            );
+            assert_eq!(shell_island(), default);
+        });
+    }
 }
 
 /// One label/value line for a detail view (a connection's IP address, a

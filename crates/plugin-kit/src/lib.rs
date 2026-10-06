@@ -12,6 +12,7 @@
 
 pub mod chrome;
 mod config;
+pub mod design;
 mod gap;
 mod icon_theme;
 mod icons;

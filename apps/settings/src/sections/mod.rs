@@ -1,9 +1,11 @@
 pub mod appearance;
 pub mod asset_packs;
+pub mod connectivity;
 pub mod desktop_icons;
 pub mod general;
 pub mod island_settings;
 pub mod islands;
+pub mod native;
 pub mod tray;
 pub mod wallpaper;
 pub mod window;

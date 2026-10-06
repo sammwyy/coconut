@@ -1,0 +1,12 @@
+[package]
+name = "coconut-integration-system"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+
+[dependencies]
+coconut-api = { path = "../../crates/api" }
+dbus = "0.9"
+serde_json = "1"
+libc = "0.2"
+toml = "0.9"

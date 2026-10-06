@@ -1,5 +1,7 @@
 use crate::state::{condition_label, format_temperature, icon_for, HourlyForecast, WeatherState};
-use coconut_plugin_kit::chrome::{shell_border, shell_muted, shell_panel, shell_text};
+use coconut_plugin_kit::chrome::{
+    shell_accent, shell_border, shell_card, shell_muted, shell_panel, shell_text,
+};
 use coconut_plugin_kit::{pixel_icon, Panel, PanelRenderContext};
 use creamui_core::layout::FlexDirection;
 use creamui_core::{BoxedWidget, Size};
@@ -38,8 +40,7 @@ impl Panel for WeatherPanel {
             .get::<Signal<WeatherState>>()
             .map(|signal| signal.get())
             .unwrap_or(WeatherState::Loading);
-        let (temperature, condition, city, location_codes, high, low, icon, hourly) = match state
-        {
+        let (temperature, condition, city, location_codes, high, low, icon, hourly) = match state {
             WeatherState::Ready(weather) => (
                 format_temperature(weather.temperature_c),
                 condition_label(&weather.condition).to_owned(),
@@ -79,15 +80,15 @@ impl Panel for WeatherPanel {
         }
 
         Box::new(jsx! {
-            <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={18.0} gap={14.0} background={shell_panel()} border={(shell_border(), 1.0)}>
+            <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={18.0} gap={14.0} background={shell_card()} border={(shell_border(), 1.0)}>
                 <Flex direction={FlexDirection::Row} gap={10.0} align={Align::Center}>
-                    {pixel_icon(icon, 52.0, shell_text())}
+                    {pixel_icon(icon, 36.0, shell_accent())}
                     <Flex direction={FlexDirection::Column} gap={3.0} shrink={0.0}>
-                        <RawText color={shell_text()} font_size={52.0}>{temperature}</RawText>
+                        <RawText color={shell_text()} font_size={38.0}>{temperature}</RawText>
                     </Flex>
                     <Flex direction={FlexDirection::Column} gap={3.0} grow={1.0}>
-                        <RawText color={shell_muted()} font_size={16.0}>{condition}</RawText>
-                        <RawText color={shell_text()} font_size={13.0}>{city}</RawText>
+                        {Box::new(creamui_widgets::RawMarquee::expanding(condition, shell_muted(), 12.0)) as BoxedWidget}
+                        {Box::new(creamui_widgets::RawMarquee::expanding(city, shell_text(), 13.0)) as BoxedWidget}
                         <RawText color={shell_muted()} font_size={11.0}>{location_codes}</RawText>
                     </Flex>
                 </Flex>
@@ -95,7 +96,7 @@ impl Panel for WeatherPanel {
                     {stat_chip("H", high)}
                     {stat_chip("L", low)}
                 </Flex>
-                <Flex direction={FlexDirection::Row} padding={8.0} background={shell_panel()} border={(shell_border(), 1.0)} corner_radius={12.0}>
+                <Flex direction={FlexDirection::Row} padding={8.0} background={shell_panel()} border={(shell_border(), 1.0)} corner_radius={16.0}>
                     {Box::new(strip) as BoxedWidget}
                 </Flex>
             </Flex>
@@ -114,11 +115,7 @@ fn stat_chip(label: &str, value: String) -> BoxedWidget {
 
 fn hour_cell(hour: &HourlyForecast) -> BoxedWidget {
     let label = chrono::DateTime::parse_from_rfc3339(&hour.time)
-        .map(|time| {
-            time.with_timezone(&chrono::Local)
-                .format("%H")
-                .to_string()
-        })
+        .map(|time| time.with_timezone(&chrono::Local).format("%H").to_string())
         .unwrap_or_else(|_| "--".into());
     Box::new(jsx! {
         <Flex direction={FlexDirection::Column} size={(44.0, 64.0)} gap={5.0} align={Align::Center} justify={Justify::Center}>

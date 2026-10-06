@@ -232,10 +232,7 @@ fn content_card(config: &Signal<ShellConfig>, kind: BarKind, bar: &DockConfig) -
                     })
                 },
             )));
-            rows.push(row(
-                &label,
-                Box::new(controls),
-            ));
+            rows.push(row(&label, Box::new(controls)));
         }
         let apply = config.clone();
         rows.push(row(

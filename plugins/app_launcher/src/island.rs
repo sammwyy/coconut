@@ -1,6 +1,6 @@
 use coconut_api::desktop::OpenWindow;
 use coconut_plugin_kit::chrome::{
-    shell_accent, shell_border, shell_control, shell_control_hover, shell_panel, shell_selected,
+    shell_accent, shell_border, shell_control, shell_control_hover, shell_island, shell_selected,
     shell_text,
 };
 use coconut_plugin_kit::{
@@ -89,8 +89,12 @@ impl Island for AppLauncherIsland {
             return side_icon_button_styled("appgrid", drawer_click, launcher_open, s);
         }
 
-        let background = if launcher_open { shell_selected() } else { shell_accent() };
-        let foreground = shell_panel();
+        let background = if launcher_open {
+            creamui_theme::use_theme().colors.accent_pressed
+        } else {
+            shell_accent()
+        };
+        let foreground = Color::rgb(255, 255, 255);
         Box::new(
             RawButton::new(square_style(background, s), || {})
                 .with_click_position(move |point| drawer_click(point))
@@ -182,8 +186,9 @@ fn window_list_widget(
         ));
     }
     let padding = 0.0;
-    let width =
-        count as f32 * TASK_SIZE * scale + count.saturating_sub(1) as f32 * 6.0 * scale + padding * 2.0;
+    let width = count as f32 * TASK_SIZE * scale
+        + count.saturating_sub(1) as f32 * 6.0 * scale
+        + padding * 2.0;
     let height = TASK_SIZE * scale + padding * 2.0;
     Box::new(
         Flex::row()
@@ -205,9 +210,9 @@ fn side_window_list(
         .padding(4.0 * scale)
         .gap(6.0 * scale)
         .align(Align::Center)
-        .background(shell_panel())
+        .background(shell_island())
         .border(shell_border(), 1.0)
-        .corner_radius(12.0 * scale);
+        .corner_radius(16.0 * scale);
     for entry in windows.into_iter().take(MAX_TASKS) {
         let id = entry.id.clone();
         let active = entry.active;
@@ -241,7 +246,11 @@ fn side_icon_button_styled(
     Box::new(
         RawButton::new(
             side_button_style(
-                if selected { shell_selected() } else { shell_control() },
+                if selected {
+                    shell_selected()
+                } else {
+                    shell_control()
+                },
                 scale,
             ),
             || {},
@@ -340,9 +349,10 @@ fn square_style(background: Color, scale: f32) -> Style {
             ..Default::default()
         })
         .background(background)
-        .corner_radius(8.0 * scale)
-        .hover(StateStyle::new().background(shell_control_hover()))
-        .pressed(StateStyle::new().background(shell_text()))
+        .border(shell_border(), 1.0)
+        .corner_radius(10.0 * scale)
+        .hover(StateStyle::new().background(creamui_theme::use_theme().colors.accent_hover))
+        .pressed(StateStyle::new().background(creamui_theme::use_theme().colors.accent_pressed))
 }
 
 fn side_button_style(background: Color, scale: f32) -> Style {
@@ -389,8 +399,8 @@ mod tests {
     fn svg_window_icons_are_decoded() {
         use super::decode_svg_icon;
         use std::path::Path;
-        let icon =
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/icons/brightness.svg");
+        let icon = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../assets/icons/settings/brightness.svg");
         assert!(decode_svg_icon(&icon).is_some());
     }
 }

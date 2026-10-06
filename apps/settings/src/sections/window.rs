@@ -10,9 +10,10 @@ use creamui_reactive::Signal;
 use creamui_theme::Color;
 use creamui_widgets::{
     Button, ButtonSize, ButtonState, ButtonVariant, ColorPicker, ColorPickerController, RawButton,
-    SegmentedControl, Select, SelectController, Switch, Text, TextInput, TextSize,
+    SegmentedControl, Select, SelectController, Switch, Text, TextArea, TextController, TextInput,
+    TextSize,
 };
-use std::rc::Rc;
+use std::{cell::RefCell, rc::Rc};
 
 const DEFAULT: &str = r#"
 [general]
@@ -62,6 +63,12 @@ side = "right"
 
 pub struct WindowState {
     config: Signal<toml::Value>,
+    confirmed: Signal<toml::Value>,
+    available: bool,
+    status: Signal<String>,
+    rules_editor: TextController,
+    app: Rc<RefCell<Option<creamui_render::AppHandle>>>,
+    busy: Signal<bool>,
     titlebar_picker: ColorPickerController,
     active_border_picker: ColorPickerController,
     inactive_border_picker: ColorPickerController,
@@ -163,16 +170,39 @@ fn save_configuration(configuration: &str) -> Result<(), String> {
 #[derive(Clone)]
 struct Writer {
     config: Signal<toml::Value>,
+    confirmed: Signal<toml::Value>,
+    available: bool,
+    status: Signal<String>,
+    app: Rc<RefCell<Option<creamui_render::AppHandle>>>,
+    busy: Signal<bool>,
 }
 
 impl WindowState {
     pub fn load() -> Self {
-        let config = load_configuration()
-            .ok()
-            .and_then(|document| toml::from_str(&document).ok())
-            .unwrap_or_else(|| toml::from_str(DEFAULT).expect("valid built-in Blair TOML"));
+        let loaded = load_configuration().and_then(|document| {
+            toml::from_str::<toml::Value>(&document).map_err(|e| e.to_string())
+        });
+        let available = loaded.is_ok();
+        let status = loaded
+            .as_ref()
+            .err()
+            .map(|error| format!("Blair settings are unavailable: {error}"))
+            .unwrap_or_default();
+        let config =
+            loaded.unwrap_or_else(|_| toml::from_str(DEFAULT).expect("valid built-in Blair TOML"));
+        let mut rules = toml::map::Map::new();
+        if let Some(value) = config.get("rules") {
+            rules.insert("rules".into(), value.clone());
+        }
+        let rules = toml::to_string_pretty(&toml::Value::Table(rules)).unwrap_or_default();
         Self {
+            confirmed: Signal::new(config.clone()),
             config: Signal::new(config),
+            available,
+            status: Signal::new(status),
+            rules_editor: TextController::new(rules),
+            app: Rc::new(RefCell::new(None)),
+            busy: Signal::new(false),
             titlebar_picker: ColorPickerController::new(),
             active_border_picker: ColorPickerController::new(),
             inactive_border_picker: ColorPickerController::new(),
@@ -181,6 +211,11 @@ impl WindowState {
     fn writer(&self) -> Writer {
         Writer {
             config: self.config.clone(),
+            confirmed: self.confirmed.clone(),
+            available: self.available,
+            status: self.status.clone(),
+            app: self.app.clone(),
+            busy: self.busy.clone(),
         }
     }
     fn hot_reload(&self) -> bool {
@@ -198,21 +233,203 @@ impl WindowState {
             )) as BoxedWidget
         })
     }
+
+    pub fn availability(&self) -> BoxedWidget {
+        Box::new(Text::secondary(self.status.get()).size(TextSize::Sm))
+    }
+    pub fn start(&self, app: creamui_render::AppHandle) {
+        *self.app.borrow_mut() = Some(app);
+    }
+    pub fn layout_control(&self) -> BoxedWidget {
+        if !self.available {
+            return Box::new(Text::secondary("Unavailable").size(TextSize::Sm));
+        }
+        let config = self.config.get();
+        let current = str_at(&config, &["window", "layout"], "floating");
+        let writer = self.writer();
+        Box::new(
+            SegmentedControl::new(usize::from(current == "tiling"), move |i| {
+                writer.update(|c| {
+                    put(
+                        c,
+                        &["window", "layout"],
+                        toml::Value::String(if i == 0 { "floating" } else { "tiling" }.into()),
+                    )
+                })
+            })
+            .option("Floating")
+            .option("Tiling"),
+        )
+    }
+    pub fn gaps_control(&self) -> BoxedWidget {
+        if !self.available {
+            return Box::new(Text::secondary("Unavailable").size(TextSize::Sm));
+        }
+        let gaps = at(&self.config.get(), &["window", "gap"])
+            .and_then(toml::Value::as_integer)
+            .unwrap_or(0);
+        let writer = self.writer();
+        Box::new(creamui_widgets::Slider::new(gaps as f32 / 64.0, move |v| {
+            writer.update(|c| {
+                put(
+                    c,
+                    &["window", "gap"],
+                    toml::Value::Integer((v * 64.0).round() as i64),
+                )
+            })
+        }))
+    }
+    pub fn effects_control(&self) -> BoxedWidget {
+        if !self.available {
+            return Box::new(Text::secondary("Unavailable").size(TextSize::Sm));
+        }
+        let enabled = bool_at(&self.config.get(), &["animations", "enabled"], true);
+        let writer = self.writer();
+        Box::new(Switch::new(enabled, move || {
+            writer.update(|c| {
+                put(
+                    c,
+                    &["animations", "enabled"],
+                    toml::Value::Boolean(!enabled),
+                )
+            })
+        }))
+    }
+    pub fn reduce_motion(&self, fallback: BoxedWidget) -> BoxedWidget {
+        if !self.available {
+            return fallback;
+        }
+        let enabled = bool_at(&self.config.get(), &["animations", "enabled"], true);
+        let writer = self.writer();
+        row(
+            "Reduce motion",
+            Box::new(Switch::new(!enabled, move || {
+                writer.update(|c| {
+                    put(
+                        c,
+                        &["animations", "enabled"],
+                        toml::Value::Boolean(!enabled),
+                    )
+                })
+            })),
+        )
+    }
+    pub fn rules(&self, _: &TextController) -> BoxedWidget {
+        if !self.available {
+            return self.availability();
+        }
+        let editor = self.rules_editor.clone();
+        let writer = self.writer();
+        section("", "", vec![Box::new(Text::secondary("Edit [[rules]] entries. Blair validates, applies and persists the document; rejected changes are rolled back.").size(TextSize::Sm)),
+            Box::new(TextArea::controlled(&self.rules_editor).layout(Style { size: creamui_core::layout::Size { width: creamui_core::layout::Dimension::Percent(1.0), height: creamui_core::layout::Dimension::Length(280.0) }, ..Default::default() }).placeholder("[[rules]]\napp_id = \"org.example.App\"\nfloating = true")),
+            Box::new(Button::new("Apply rules", move || {
+                let parsed = toml::from_str::<toml::Value>(&editor.value());
+                match parsed {
+                    Ok(toml::Value::Table(table)) if table.keys().all(|key| key == "rules") && table.get("rules").is_none_or(|v| v.is_array()) => {
+                        writer.config.update(|c| {
+                            if let Some(table_config) = c.as_table_mut() {
+                                if let Some(rules) = table.get("rules") { table_config.insert("rules".into(), rules.clone()); } else { table_config.remove("rules"); }
+                            }
+                        }); writer.save();
+                    }
+                    Ok(_) => writer.status.set("Only [[rules]] entries are accepted here".into()),
+                    Err(error) => writer.status.set(format!("Invalid rules: {error}")),
+                }
+            })), self.availability()])
+    }
 }
 impl Writer {
     fn update(&self, change: impl FnOnce(&mut toml::Value)) {
+        if !self.available {
+            return;
+        }
         self.config.update(change);
         if bool_at(&self.config.get(), &["general", "hot_reload"], true) {
             self.save();
         }
     }
     fn save(&self) {
-        let result = toml::to_string_pretty(&self.config.peek())
-            .map_err(|error| error.to_string())
-            .and_then(|contents| save_configuration(&contents));
-        if let Err(error) = result {
-            eprintln!("settings: failed to save Blair configuration: {error}");
+        if !self.available {
+            return;
         }
+        if self.busy.peek() {
+            return;
+        }
+        let Some(app) = self.app.borrow().clone() else {
+            self.status.set("The application is not running".into());
+            return;
+        };
+        let candidate = self.config.peek();
+        let baseline = self.confirmed.peek();
+        self.busy.set(true);
+        self.status.set("Applying with Blair…".into());
+        let writer = self.clone();
+        let attempted = candidate.clone();
+        app.spawn_background(
+            move || {
+                // Preserve unrelated changes made by Startup Applications or
+                // another client since this editor loaded its configuration.
+                let mut latest: toml::Value =
+                    toml::from_str(&load_configuration()?).map_err(|e| e.to_string())?;
+                merge_changes(&baseline, &attempted, &mut latest);
+                save_configuration(&toml::to_string_pretty(&latest).map_err(|e| e.to_string())?)?;
+                Ok::<_, String>(latest)
+            },
+            move |result| {
+                writer.busy.set(false);
+                match result {
+                    Err(error) => {
+                        writer.config.set(writer.confirmed.peek());
+                        writer.status.set(format!("Could not apply: {error}"));
+                    }
+                    Ok(applied) => {
+                        let pending = writer.config.peek();
+                        let mut next = applied.clone();
+                        merge_changes(&candidate, &pending, &mut next);
+                        writer.confirmed.set(applied.clone());
+                        writer.config.set(next.clone());
+                        writer.status.set("Changes applied by Blair".into());
+                        if next != applied {
+                            writer.save();
+                        }
+                    }
+                }
+            },
+        );
+    }
+}
+
+fn merge_changes(before: &toml::Value, edited: &toml::Value, latest: &mut toml::Value) {
+    if before == edited {
+        return;
+    }
+    if let (Some(before), Some(edited), Some(latest)) =
+        (before.as_table(), edited.as_table(), latest.as_table_mut())
+    {
+        for key in before
+            .keys()
+            .chain(edited.keys())
+            .collect::<std::collections::BTreeSet<_>>()
+        {
+            match (before.get(key), edited.get(key)) {
+                (Some(old), Some(new)) if old != new => {
+                    if let Some(current) = latest.get_mut(key) {
+                        merge_changes(old, new, current);
+                    } else {
+                        latest.insert(key.clone(), new.clone());
+                    }
+                }
+                (None, Some(new)) => {
+                    latest.insert(key.clone(), new.clone());
+                }
+                (Some(_), None) => {
+                    latest.remove(key);
+                }
+                _ => {}
+            }
+        }
+    } else {
+        *latest = edited.clone();
     }
 }
 
@@ -396,10 +613,20 @@ pub fn build_titlebar(_: Size, state: &WindowState) -> BoxedWidget {
         .option("None"),
     );
 
-    let titlebar_color = choice_at(&c, &["decorations", "titlebar_color"], TITLEBAR_COLORS, "blend");
+    let titlebar_color = choice_at(
+        &c,
+        &["decorations", "titlebar_color"],
+        TITLEBAR_COLORS,
+        "blend",
+    );
     let mut appearance_rows = vec![row(
         "Titlebar color",
-        choice_control(state, &["decorations", "titlebar_color"], TITLEBAR_COLORS, titlebar_color),
+        choice_control(
+            state,
+            &["decorations", "titlebar_color"],
+            TITLEBAR_COLORS,
+            titlebar_color,
+        ),
     )];
     if TITLEBAR_COLORS[titlebar_color].0 == "color" {
         appearance_rows.push(row(
@@ -473,13 +700,23 @@ pub fn build_titlebar(_: Size, state: &WindowState) -> BoxedWidget {
 
 /// `(config value, label)` pairs for single-choice settings stored as
 /// strings. Blair reads these case-insensitively.
-const TITLEBAR_COLORS: &[(&str, &str)] = &[("blend", "Blend"), ("theme", "Theme"), ("color", "Color")];
-const BORDER_COLORS: &[(&str, &str)] = &[("none", "None"), ("theme", "Theme"), ("custom", "Custom")];
+const TITLEBAR_COLORS: &[(&str, &str)] =
+    &[("blend", "Blend"), ("theme", "Theme"), ("color", "Color")];
+const BORDER_COLORS: &[(&str, &str)] =
+    &[("none", "None"), ("theme", "Theme"), ("custom", "Custom")];
 const BORDER_SIZES: &[(&str, &str)] = &[("thin", "Thin"), ("normal", "Normal"), ("bold", "Bold")];
 
 /// Index of the stored choice, or of Blair's `default` when unset.
-fn choice_at(config: &toml::Value, path: &[&str], choices: &[(&str, &str)], default: &str) -> usize {
-    let default = choices.iter().position(|(id, _)| *id == default).unwrap_or(0);
+fn choice_at(
+    config: &toml::Value,
+    path: &[&str],
+    choices: &[(&str, &str)],
+    default: &str,
+) -> usize {
+    let default = choices
+        .iter()
+        .position(|(id, _)| *id == default)
+        .unwrap_or(0);
     at(config, path)
         .and_then(toml::Value::as_str)
         .and_then(|value| {
@@ -957,9 +1194,13 @@ fn finish(
     subtitle: &str,
     mut body: Vec<BoxedWidget>,
 ) -> BoxedWidget {
+    if !state.available {
+        return state.availability();
+    }
     if let Some(apply) = state.apply() {
         body.push(apply);
     }
+    body.push(state.availability());
     section(title, subtitle, body)
 }
 /// A quiet label above a related group of controls. The surrounding page

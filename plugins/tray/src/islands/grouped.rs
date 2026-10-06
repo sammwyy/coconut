@@ -1,5 +1,7 @@
 use crate::config::TrayConfig;
-use crate::islands::{battery_icon, bluetooth_icon, island_button_style, network_icon, volume_icon};
+use crate::islands::{
+    battery_icon, bluetooth_icon, island_button_style, network_icon, volume_icon,
+};
 use crate::shared::{BatteryRevision, BluetoothRevision, NetworkRevision, VolumeLevel};
 use coconut_api::battery::{BatteryIntegration, Fallback as BatteryFallback};
 use coconut_api::bluetooth::{BluetoothIntegration, Fallback as BluetoothFallback};
@@ -8,8 +10,9 @@ use coconut_api::volume::{Fallback as VolumeFallback, VolumeIntegration};
 use coconut_plugin_kit::chrome::shell_text;
 use coconut_plugin_kit::{pixel_icon, Island, IslandRenderContext};
 use creamui_core::BoxedWidget;
+use creamui_core::Styled;
 use creamui_widgets::layout::{Align, Flex, Justify};
-use creamui_widgets::RawButton;
+use creamui_widgets::{RawButton, Text};
 use std::rc::Rc;
 
 /// The single fused tray button shown when `[modules/tray.toml] mode =
@@ -104,8 +107,25 @@ impl Island for ControlCenterIsland {
             row = row.child(pixel_icon(battery_icon_name, 16.0 * s, shell_text()));
             icon_count += 1;
         }
+        let show_percentage = coconut_core::modules::load_module_value("tray")
+            .get("show_battery_percentage")
+            .and_then(|value| value.as_bool())
+            .unwrap_or(self.tray.show_battery_percentage);
+        let percentage = if show_percentage && self.tray.battery.shows_in_bar() {
+            battery.percentage()
+        } else {
+            None
+        };
+        if let Some(percent) = percentage {
+            row = row.child(Box::new(
+                Text::new(format!("{percent}%"))
+                    .font_size(11.0 * s)
+                    .bold(true),
+            ));
+        }
         row = row.child(pixel_icon("chevron-up", 13.0 * s, shell_text()));
-        let width = control_button_width(icon_count, s);
+        let width =
+            control_button_width(icon_count, s) + if percentage.is_some() { 34.0 * s } else { 0.0 };
         row = row.size(width, 32.0 * s);
 
         let open_panel = ctx.open_panel.clone();

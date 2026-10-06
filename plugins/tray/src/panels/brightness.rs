@@ -1,8 +1,6 @@
 use crate::shared::BrightnessLevel;
 use coconut_api::brightness::{BrightnessIntegration, Fallback as BrightnessFallback};
-use coconut_plugin_kit::chrome::{
-    fat_slider, hero_card, panel_header, shell_border, shell_card,
-};
+use coconut_plugin_kit::chrome::{fat_slider, hero_card, panel_header, shell_border, shell_card};
 use coconut_plugin_kit::{Panel, PanelRenderContext, SharedState};
 use creamui_core::layout::FlexDirection;
 use creamui_core::{BoxedWidget, Size};

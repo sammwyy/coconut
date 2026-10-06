@@ -50,6 +50,7 @@ struct State {
     devices: Vec<NetworkDevice>,
     wifi_device: Option<Path<'static>>,
     wifi_networks: Vec<WifiNetwork>,
+    saved_wifi_networks: Vec<String>,
     ap_paths: HashMap<String, Path<'static>>,
     scanning: bool,
 }
@@ -149,6 +150,13 @@ impl NetworkIntegration for NetworkManager {
             .unwrap_or_default()
     }
 
+    fn saved_wifi_networks(&self) -> Vec<String> {
+        self.state
+            .lock()
+            .map(|state| state.saved_wifi_networks.clone())
+            .unwrap_or_default()
+    }
+
     fn scanning(&self) -> bool {
         self.state
             .lock()
@@ -230,6 +238,7 @@ fn run_event_bridge(
 ) -> Result<(), String> {
     let connection = SyncConnection::new_system().map_err(|error| error.to_string())?;
     refresh(&connection, &state);
+    let _ = changes.try_send(());
 
     let sender = dbus::strings::BusName::new(SERVICE).map_err(|error| error.to_string())?;
     let rule = PropertiesPropertiesChanged::match_rule(Some(&sender), None).static_clone();
@@ -353,12 +362,33 @@ fn refresh(connection: &SyncConnection, state: &Arc<Mutex<State>>) {
         devices,
         wifi_device,
         wifi_networks,
+        saved_wifi_networks: saved_wifi_names(connection),
         ap_paths,
         scanning,
     };
     if let Ok(mut current) = state.lock() {
         *current = next;
     }
+}
+
+fn saved_wifi_names(connection: &SyncConnection) -> Vec<String> {
+    let settings = connection.with_proxy(SERVICE, SETTINGS_PATH, Duration::from_secs(2));
+    let (profiles,): (Vec<Path<'static>>,) = settings
+        .method_call(SETTINGS_INTERFACE, "ListConnections", ())
+        .unwrap_or_default();
+    let mut names: Vec<String> = profiles
+        .into_iter()
+        .filter_map(|path| {
+            let profile = connection.with_proxy(SERVICE, path, Duration::from_secs(2));
+            let (settings,): (HashMap<String, PropMap>,) = profile
+                .method_call(CONNECTION_INTERFACE, "GetSettings", ())
+                .ok()?;
+            connection_ssid(&settings)
+        })
+        .collect();
+    names.sort();
+    names.dedup();
+    names
 }
 
 /// A VPN/mesh tunnel (NM-native VPN, WireGuard, or `tun`/IP-tunnel like

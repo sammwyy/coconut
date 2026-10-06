@@ -1,6 +1,8 @@
 use crate::shared::{CurrentPlayback, NextPlayback, PreviousPlayback, TogglePlayback};
 use coconut_api::audio::Playback;
-use coconut_plugin_kit::chrome::{shell_control_hover, shell_muted, shell_panel, shell_text};
+use coconut_plugin_kit::chrome::{
+    island_style, shell_card, shell_control_hover, shell_muted, shell_text,
+};
 use coconut_plugin_kit::{pixel_icon, Island, IslandRenderContext};
 use creamui_core::layout::{FlexDirection, Style as LayoutStyle};
 use creamui_core::{BoxedWidget, StateStyle, Style, Styled};
@@ -115,12 +117,15 @@ fn track_metadata(playback: Option<&Playback>, scale: f32) -> BoxedWidget {
         creamui_widgets::layout::Flex::column()
             .size(88.0 * scale, 24.0 * scale)
             .justify(Justify::Center)
-            .child(Box::new(RawMarquee::new(
-                playback.title.clone(),
-                shell_text(),
-                11.0 * scale,
-                88.0 * scale,
-            ).bold(true)))
+            .child(Box::new(
+                RawMarquee::new(
+                    playback.title.clone(),
+                    shell_text(),
+                    11.0 * scale,
+                    88.0 * scale,
+                )
+                .bold(true),
+            ))
             .child(Box::new(RawMarquee::new(
                 playback.artist.clone(),
                 shell_muted(),
@@ -137,7 +142,12 @@ fn compact_media_button(
     primary: bool,
 ) -> BoxedWidget {
     let size = if primary { 20.0 } else { 18.0 } * scale;
-    let icon_color = if primary { shell_panel() } else { shell_text() };
+    let surface = shell_card();
+    let icon_color = if primary {
+        creamui_theme::Color::rgb(surface.r, surface.g, surface.b)
+    } else {
+        shell_text()
+    };
     Box::new(
         RawButton::new(media_control_style(size, primary), || {})
             .with_click_position(move |_| on_click())
@@ -198,27 +208,11 @@ fn safe_image_data(path: &PathBuf) -> Option<ImageData> {
 }
 
 fn island_button_style(width: f32, scale: f32) -> Style {
-    Style::new()
-        .layout(LayoutStyle {
-            size: fixed(width, 32.0 * scale),
-            ..Default::default()
-        })
-        .background(shell_panel())
-        .corner_radius(16.0 * scale)
-        .hover(StateStyle::new().background(shell_control_hover()))
-        .pressed(StateStyle::new().background(shell_control_hover()))
+    island_style(width, 32.0 * scale, scale)
 }
 
 fn side_button_style(scale: f32) -> Style {
-    Style::new()
-        .layout(LayoutStyle {
-            size: fixed(SIDE_ITEM_SIZE * scale, SIDE_ITEM_SIZE * scale),
-            ..Default::default()
-        })
-        .background(shell_panel())
-        .corner_radius(8.0 * scale)
-        .hover(StateStyle::new().background(shell_control_hover()))
-        .pressed(StateStyle::new().background(shell_control_hover()))
+    island_style(SIDE_ITEM_SIZE * scale, SIDE_ITEM_SIZE * scale, scale).corner_radius(12.0 * scale)
 }
 
 fn media_control_style(size: f32, primary: bool) -> Style {
@@ -227,8 +221,20 @@ fn media_control_style(size: f32, primary: bool) -> Style {
             size: fixed(size, size),
             ..Default::default()
         })
-        .background(if primary { shell_text() } else { creamui_theme::Color::rgba(0, 0, 0, 0) })
+        .background(if primary {
+            shell_text()
+        } else {
+            creamui_theme::Color::rgba(0, 0, 0, 0)
+        })
         .corner_radius(size / 2.0)
-        .hover(StateStyle::new().background(shell_control_hover()))
-        .pressed(StateStyle::new().background(shell_control_hover()))
+        .hover(StateStyle::new().background(if primary {
+            shell_text().mix(coconut_plugin_kit::chrome::shell_accent(), 0.15)
+        } else {
+            shell_control_hover()
+        }))
+        .pressed(StateStyle::new().background(if primary {
+            shell_text().mix(coconut_plugin_kit::chrome::shell_accent(), 0.25)
+        } else {
+            shell_control_hover()
+        }))
 }

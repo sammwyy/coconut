@@ -73,6 +73,10 @@ pub trait NetworkIntegration {
     fn wifi_networks(&self) -> Vec<WifiNetwork> {
         Vec::new()
     }
+    /// Saved Wi-Fi profile names, including networks currently out of range.
+    fn saved_wifi_networks(&self) -> Vec<String> {
+        Vec::new()
+    }
     /// Whether a Wi-Fi scan is currently in flight.
     fn scanning(&self) -> bool {
         false
