@@ -1,6 +1,5 @@
 use creamui_core::RgbaImage;
 use creamui_image::{ImageData, SvgSize};
-use creamui_theme::{Color, Theme};
 use creamui_widgets::{IconImage, IconSource, Symbol};
 
 /// Rasterized versions of the custom sidebar icons in `assets/icons/settings/`,
@@ -64,16 +63,6 @@ pub fn blank() -> IconSource {
         image: RgbaImage::new(1, 1, vec![0, 0, 0, 0]).expect("1x1 transparent pixel is valid"),
         monochrome: true,
     })
-}
-
-/// A plain "+" glyph with no filled circle behind it, for the "Add panel"
-/// leaf — unlike [`IconSource::Initial`]'s usual avatar-style background.
-pub fn plus(theme: &Theme) -> IconSource {
-    IconSource::Initial {
-        letter: '+',
-        background: Color::rgba(0, 0, 0, 0),
-        text_color: theme.text_secondary,
-    }
 }
 
 fn decode(source: &[u8]) -> IconSource {

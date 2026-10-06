@@ -1,7 +1,5 @@
-//! `coconut-plugin-logo`: the dock's brand-mark island. No panel, no shared
-//! state, no per-instance config — the simplest possible plugin, migrated
-//! first in Phase 4a of the dock/island/panel refactor
-//! (`~/.claude/plans/luminous-prancing-wombat.md`).
+//! `coconut-plugin-logo`: the statusbar's compact workspace selector. It has
+//! no panel, shared state, or configuration yet.
 
 mod island;
 

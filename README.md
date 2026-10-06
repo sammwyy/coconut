@@ -8,12 +8,14 @@
 
 Coconut puts common desktop actions within immediate reach: launch an
 application, move between running windows, control media, or adjust your system
-without losing focus. Its centered dock and lightweight panels are designed to
+without losing focus. Its top statusbar and centered dockbar are designed to
 stay calm, responsive, and consistent.
 
 ## What it includes
 
-- A centered running-app dock with active-window feedback
+- A configurable statusbar and dockbar, with widgets usable in either or both
+- Island groups for visually separated widget sections
+- A centered running-app dockbar with active-window feedback
 - Application browsing, category navigation, and search
 - Now-playing information with playback controls
 - Clock and weather widgets

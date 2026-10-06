@@ -23,8 +23,8 @@ use std::path::PathBuf;
 #[serde(default)]
 pub struct ShellConfig {
     pub appearance: AppearanceConfig,
-    #[serde(rename = "dock")]
-    pub docks: Vec<DockConfig>,
+    pub statusbar: DockConfig,
+    pub dockbar: DockConfig,
     pub desktop: DesktopConfig,
 }
 
@@ -32,7 +32,45 @@ impl Default for ShellConfig {
     fn default() -> Self {
         Self {
             appearance: AppearanceConfig::default(),
-            docks: vec![DockConfig::default()],
+            statusbar: DockConfig {
+                position: DockPosition::Top,
+                edge_gap: 20.0,
+                section_gap: 8.0,
+                show_background: false,
+                show_border: false,
+                island_background_opacity: 0.72,
+                sections: vec![
+                    SectionConfig {
+                        enabled: true,
+                        gap: "10px".to_owned(),
+                        islands: vec![IslandEntry::with_id("logo")],
+                    },
+                    SectionConfig {
+                        enabled: true,
+                        gap: "10px".to_owned(),
+                        islands: vec![
+                            IslandEntry::with_id("weather"),
+                            IslandEntry::with_id("current_playing"),
+                            IslandEntry::with_id("clock"),
+                        ],
+                    },
+                    SectionConfig {
+                        enabled: true,
+                        gap: "10px".to_owned(),
+                        islands: vec![IslandEntry::with_id("control_center")],
+                    },
+                ],
+                ..DockConfig::default()
+            },
+            dockbar: DockConfig {
+                align: DockAlign::Center,
+                fill_available_space: false,
+                max_length: Some(800.0),
+                margin: 20.0,
+                thickness: 68.0,
+                background_opacity: 0.85,
+                ..DockConfig::default()
+            },
             desktop: DesktopConfig::default(),
         }
     }
@@ -48,7 +86,7 @@ const DEFAULT_SHELL_TOML: &str = r#"# Coconut configuration.
 #
 # Per-island settings (the clock's time format, tray visibility, etc.) live
 # in their own files under the "modules" directory next to this one, e.g.
-# modules/clock.toml — this file only describes which docks exist and what
+# modules/clock.toml — this file only describes the two system bars and what
 # sits in them.
 
 [appearance]
@@ -58,16 +96,16 @@ sound_theme = "freedesktop"
 # Mouse cursor theme, picked from installed themes with a "cursors" folder.
 cursor_theme = "Adwaita"
 
-[[dock]]
-# Where this dock sits on screen: "top", "bottom", "left" or "right". You
-# can declare more than one [[dock]] block to have several docks at once.
-position = "bottom"
+# Both bars accept the same options. There are always exactly two: statusbar
+# and dockbar. Each can sit on any screen edge.
+[statusbar]
+position = "top"
 # When sections do not fill the whole dock, place their group at the
 # "start", "center", or "end" of the dock.
 align = "start"
 # Insets at each end of the dock and spacing between its sections, in pixels.
-edge_gap = 16.0
-section_gap = 0.0
+edge_gap = 20.0
+section_gap = 8.0
 # Set false to keep a compact section group and use `align` above.
 fill_available_space = true
 # Optional maximum panel length in pixels; omit for the compositor default.
@@ -79,8 +117,8 @@ margin = 0.0
 thickness = 44.0
 # Dock and island chrome can be independently disabled for a transparent,
 # borderless presentation.
-show_background = true
-show_border = true
+show_background = false
+show_border = false
 show_island_background = true
 show_island_border = true
 # When true, a section's islands share one background/border instead of
@@ -95,32 +133,52 @@ background_opacity = 1.0
 # Same, but for each island's own background.
 # island_background_source = "theme"
 # island_background_color = { r = 24, g = 24, b = 24 }
-island_background_opacity = 1.0
+island_background_opacity = 0.72
 
-[[dock.section]]
+[[statusbar.section]]
 # Spacing between the islands in this section: a fixed length ("10px"), a
 # percentage of the section's length ("30%"), or "between"/"evenly".
 gap = "10px"
-[[dock.section.island]]
+[[statusbar.section.island]]
 id = "logo"
-[[dock.section.island]]
+
+[[statusbar.section]]
+gap = "10px"
+[[statusbar.section.island]]
 id = "weather"
-[[dock.section.island]]
+[[statusbar.section.island]]
 id = "current_playing"
-
-[[dock.section]]
-gap = "10px"
-[[dock.section.island]]
-id = "app_launcher"
-[[dock.section.island]]
-id = "open_windows"
-
-[[dock.section]]
-gap = "10px"
-[[dock.section.island]]
-id = "control_center"
-[[dock.section.island]]
+[[statusbar.section.island]]
 id = "clock"
+
+[[statusbar.section]]
+gap = "10px"
+[[statusbar.section.island]]
+id = "control_center"
+
+[dockbar]
+position = "bottom"
+align = "center"
+edge_gap = 16.0
+section_gap = 0.0
+fill_available_space = false
+max_length = 800.0
+margin = 20.0
+thickness = 68.0
+show_background = true
+show_border = true
+show_island_background = true
+show_island_border = true
+unify_island_background = false
+background_opacity = 0.85
+island_background_opacity = 1.0
+
+[[dockbar.section]]
+gap = "10px"
+[[dockbar.section.island]]
+id = "app_launcher"
+[[dockbar.section.island]]
+id = "open_windows"
 
 [desktop]
 # Path to a wallpaper image. Unset uses the built-in background.
@@ -146,6 +204,14 @@ id = "clock"
 "#;
 
 impl ShellConfig {
+    pub fn bars(&self) -> [&DockConfig; 2] {
+        [&self.statusbar, &self.dockbar]
+    }
+
+    pub fn bar_configs(&self) -> [DockConfig; 2] {
+        [self.statusbar.clone(), self.dockbar.clone()]
+    }
+
     /// Loads the shell configuration from disk, creating the default file on
     /// first run and falling back to in-memory defaults if the file cannot
     /// be read or contains invalid TOML (the file itself is left untouched
@@ -153,8 +219,18 @@ impl ShellConfig {
     pub fn load() -> Self {
         let path = config_file_path();
         match std::fs::read_to_string(&path) {
-            Ok(contents) => match toml::from_str(&contents) {
-                Ok(config) => config,
+            Ok(contents) => match toml::from_str::<ShellConfig>(&contents) {
+                Ok(config) => {
+                    if legacy_dock_config(&contents) {
+                        if let Err(error) = config.save() {
+                            eprintln!(
+                                "config: failed to replace legacy docks in {}: {error}",
+                                path.display()
+                            );
+                        }
+                    }
+                    config
+                }
                 Err(error) => {
                     eprintln!(
                         "config: failed to parse {}: {error}; using defaults",
@@ -188,6 +264,15 @@ impl ShellConfig {
             .map_err(|error| std::io::Error::other(error.to_string()))?;
         std::fs::write(path, contents)
     }
+}
+
+fn legacy_dock_config(contents: &str) -> bool {
+    let Ok(toml::Value::Table(table)) = toml::from_str(contents) else {
+        return false;
+    };
+    table.contains_key("dock")
+        && !table.contains_key("statusbar")
+        && !table.contains_key("dockbar")
 }
 
 fn write_default_config(path: &std::path::Path) {
@@ -241,15 +326,21 @@ mod tests {
 
     #[test]
     fn missing_keys_fall_back_to_defaults() {
-        let parsed: ShellConfig = toml::from_str("[[dock]]\nposition = \"top\"\n").unwrap();
-        assert_eq!(parsed.docks.len(), 1);
-        assert_eq!(parsed.docks[0].position, DockPosition::Top);
-        assert_eq!(parsed.docks[0].sections, DockConfig::default().sections);
+        let parsed: ShellConfig = toml::from_str("[statusbar]\nposition = \"bottom\"\n").unwrap();
+        assert_eq!(parsed.statusbar.position, DockPosition::Bottom);
+        assert_eq!(parsed.dockbar, ShellConfig::default().dockbar);
     }
 
     #[test]
     fn invalid_toml_is_rejected_rather_than_silently_accepted() {
-        let result: Result<ShellConfig, _> = toml::from_str("dock = \"not an array\"");
+        let result: Result<ShellConfig, _> = toml::from_str("statusbar = \"not a table\"");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn detects_a_legacy_dynamic_dock_file() {
+        assert!(legacy_dock_config("[[dock]]\nposition = \"bottom\"\n"));
+        assert!(!legacy_dock_config("[statusbar]\nposition = \"top\"\n"));
+        assert!(!legacy_dock_config("not valid toml"));
     }
 }

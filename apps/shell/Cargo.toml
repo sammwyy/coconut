@@ -37,7 +37,7 @@ creamui-image = { path = "../../../creamui/crates/image", features = ["webp", "j
 creamui-jsx = { path = "../../../creamui/crates/jsx" }
 creamui-macros = { path = "../../../creamui/crates/macros" }
 creamui-reactive = { path = "../../../creamui/crates/reactive" }
-creamui-render = { path = "../../../creamui/crates/render", features = ["platform-wayland", "system-theme"] }
+creamui-render = { path = "../../../creamui/crates/render", features = ["platform-wayland", "platform-blur-blair", "platform-blur-kwin", "system-theme"] }
 creamui-theme = { path = "../../../creamui/crates/theme" }
 creamui-theme-loader = { path = "../../../creamui/crates/theme-loader" }
 creamui-widgets = { path = "../../../creamui/crates/widgets" }

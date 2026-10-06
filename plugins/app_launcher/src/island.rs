@@ -89,16 +89,13 @@ impl Island for AppLauncherIsland {
             return side_icon_button_styled("appgrid", drawer_click, launcher_open, s);
         }
 
-        let background = if launcher_open {
-            shell_selected()
-        } else {
-            shell_control()
-        };
+        let background = if launcher_open { shell_selected() } else { shell_accent() };
+        let foreground = shell_panel();
         Box::new(
             RawButton::new(square_style(background, s), || {})
                 .with_click_position(move |point| drawer_click(point))
                 .child(Box::new(jsx! {
-                    <Flex size={(TASK_SIZE * s, TASK_SIZE * s)} align={Align::Center} justify={Justify::Center}>{pixel_icon("appgrid", 21.0 * s, shell_text())}</Flex>
+                    <Flex size={(TASK_SIZE * s, TASK_SIZE * s)} align={Align::Center} justify={Justify::Center}>{pixel_icon("appgrid", 19.0 * s, foreground)}</Flex>
                 })),
         )
     }
@@ -184,7 +181,7 @@ fn window_list_widget(
             .child(icon),
         ));
     }
-    let padding = 4.0 * scale;
+    let padding = 0.0;
     let width =
         count as f32 * TASK_SIZE * scale + count.saturating_sub(1) as f32 * 6.0 * scale + padding * 2.0;
     let height = TASK_SIZE * scale + padding * 2.0;
@@ -193,9 +190,6 @@ fn window_list_widget(
             .size(width, height)
             .padding(padding)
             .align(Align::Center)
-            .background(shell_panel())
-            .border(shell_border(), 1.0)
-            .corner_radius(12.0 * scale)
             .child(Box::new(strip)),
     )
 }

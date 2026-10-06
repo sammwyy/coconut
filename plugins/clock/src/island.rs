@@ -88,10 +88,10 @@ impl Widget for LiveClock {
             rect,
             &self.text,
             shell_text(),
-            13.0 * self.scale,
+            11.0 * self.scale,
             TextAlign::Center,
             None,
-            false,
+            true,
             false,
         );
     }
@@ -105,7 +105,7 @@ fn island_button_style(scale: f32) -> Style {
         })
         .background(shell_panel())
         .border(shell_border(), 1.0)
-        .corner_radius(9.0 * scale)
+        .corner_radius(16.0 * scale)
         .hover(StateStyle::new().background(shell_control_hover()))
         .pressed(StateStyle::new().background(shell_selected()))
 }

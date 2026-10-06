@@ -4,8 +4,8 @@
   `coconut settings`; changes there require restarting the shell process to
   take effect. The active CreamUI theme (`cream/active_theme.toml`) is the
   exception — the settings window itself updates live when you switch it.
-- `[bar] position = "top"` only anchors correctly on the Wayland layer-shell
-  backend (`creamui-platform`'s `WindowRole::TopPanel`/`BottomPanel`
+- `statusbar.position` and `dockbar.position` only anchor correctly on the
+  Wayland layer-shell backend (`creamui-platform`'s `WindowRole::TopPanel`/`BottomPanel`
   handling). The Windows backend does not place panel-role windows at all
   yet (pre-existing gap, not specific to the top/bottom option), so the bar
   position setting has no visible effect there.

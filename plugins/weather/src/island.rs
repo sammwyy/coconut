@@ -55,7 +55,7 @@ impl Island for WeatherIsland {
         let condition: BoxedWidget = Box::new(RawMarquee::new(
             weather.bar_condition(),
             shell_text(),
-            12.0 * s,
+            11.0 * s,
             58.0 * s,
         ));
 
@@ -65,7 +65,7 @@ impl Island for WeatherIsland {
                 .child(Box::new(jsx! {
                     <Flex direction={FlexDirection::Row} size={(120.0 * s, 32.0 * s)} padding={6.0 * s} gap={4.0 * s} align={Align::Center}>
                         {pixel_icon(icon, 14.0 * s, shell_text())}
-                        <RawText color={shell_text()} font_size={12.0 * s} width={32.0 * s} align={TextAlign::Start}>{temperature}</RawText>
+                        <RawText color={shell_text()} font_size={11.0 * s} width={32.0 * s} align={TextAlign::Start}>{temperature}</RawText>
                         {condition}
                     </Flex>
                 })),
@@ -88,7 +88,7 @@ fn island_button_style(scale: f32) -> Style {
             ..Default::default()
         })
         .background(shell_panel())
-        .corner_radius(9.0 * scale)
+        .corner_radius(16.0 * scale)
         .hover(StateStyle::new().background(shell_control_hover()))
         .pressed(StateStyle::new().background(shell_selected()))
 }

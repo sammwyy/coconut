@@ -29,8 +29,8 @@ enum Section {
     DesktopIcons,
     Panels,
     Status,
-    Dock(usize),
-    AddDock,
+    Statusbar,
+    Dockbar,
     Tray,
     Islands,
     Windows,
@@ -60,7 +60,7 @@ fn category_default(section: Section) -> Section {
     match section {
         Section::Appearance => Section::Theme,
         Section::Desktop => Section::Wallpaper,
-        Section::Panels => Section::Dock(0),
+        Section::Panels => Section::Statusbar,
         Section::Status => Section::Tray,
         Section::Windows => Section::Layout,
         Section::InputDevices => Section::Keyboard,
@@ -70,18 +70,15 @@ fn category_default(section: Section) -> Section {
     }
 }
 
-fn page_title(section: &Section, docks: &[coconut_core::DockConfig]) -> String {
+fn page_title(section: &Section) -> String {
     match section {
         Section::Theme => "Appearance".into(),
         Section::IconPack => "Icons".into(),
         Section::Sound => "Sound".into(),
         Section::Wallpaper => "Wallpaper".into(),
         Section::DesktopIcons => "Desktop icons".into(),
-        Section::Dock(index) => docks
-            .get(*index)
-            .map(|dock| sections::general::dock_label(*index, dock))
-            .unwrap_or_else(|| "Panel".into()),
-        Section::AddDock => "New panel".into(),
+        Section::Statusbar => "Statusbar".into(),
+        Section::Dockbar => "Dockbar".into(),
         Section::Tray => "Status icons".into(),
         Section::Islands => "Islands".into(),
         Section::Layout => "Window layout".into(),
@@ -109,17 +106,12 @@ fn page_title(section: &Section, docks: &[coconut_core::DockConfig]) -> String {
     }
 }
 
-fn tree(
-    accounts: &[users::Account],
-    icons: &SettingsIcons,
-    docks: &[coconut_core::DockConfig],
-) -> Vec<SidebarNode<Section>> {
+fn tree(accounts: &[users::Account], icons: &SettingsIcons) -> Vec<SidebarNode<Section>> {
     let profile_icon = std::env::var("USER")
         .ok()
         .and_then(|username| accounts.iter().find(|account| account.username == username))
         .map(users::account_icon)
         .unwrap_or(IconSource::Symbol(Symbol::Controls));
-    let theme = creamui_theme::use_theme();
     vec![
         SidebarNode::parent(
             Section::Appearance,
@@ -151,23 +143,11 @@ fn tree(
                 ),
                 SidebarNode::group(
                     Section::Panels,
-                    "Panels",
-                    docks
-                        .iter()
-                        .enumerate()
-                        .map(|(index, dock)| {
-                            SidebarNode::leaf(
-                                Section::Dock(index),
-                                icons::blank(),
-                                sections::general::dock_label(index, dock),
-                            )
-                        })
-                        .chain(std::iter::once(SidebarNode::leaf(
-                            Section::AddDock,
-                            icons::plus(&theme),
-                            "Add panel",
-                        )))
-                        .collect(),
+                    "Bars",
+                    vec![
+                        SidebarNode::leaf(Section::Statusbar, icons::blank(), "Statusbar"),
+                        SidebarNode::leaf(Section::Dockbar, icons::blank(), "Dockbar"),
+                    ],
                 ),
                 SidebarNode::group(
                     Section::Status,
@@ -186,11 +166,7 @@ fn tree(
             vec![
                 SidebarNode::leaf(Section::Layout, IconSource::Symbol(Symbol::Grid), "Layout"),
                 SidebarNode::leaf(Section::Titlebar, icons.titlebar.clone(), "Titlebar"),
-                SidebarNode::leaf(
-                    Section::WorkingArea,
-                    icons.workspaces.clone(),
-                    "Workspaces",
-                ),
+                SidebarNode::leaf(Section::WorkingArea, icons.workspaces.clone(), "Workspaces"),
                 SidebarNode::leaf(
                     Section::Focus,
                     IconSource::Symbol(Symbol::Controls),
@@ -260,8 +236,6 @@ pub fn run() {
     let wallpaper_color_picker = ColorPickerController::new();
     let desktop_icons_color_picker = ColorPickerController::new();
     let appearance_accent_picker = ColorPickerController::new();
-    let dock_background_picker = ColorPickerController::new();
-    let dock_island_background_picker = ColorPickerController::new();
     let appearance_custom_accent = Signal::new(false);
     let account_list = users::list_accounts();
     let profile = users::ProfileControllers::load(&account_list);
@@ -273,7 +247,6 @@ pub fn run() {
     let content_scroll = ScrollController::new(0.0);
     let dock_scroll = ScrollController::new(0.0);
     let dock_tab = Signal::new(sections::general::DockTab::Display);
-    let add_island_pickers = sections::general::AddIslandPickers::default();
     let islands_detail: Signal<Option<&'static str>> = Signal::new(None);
     polkit::ensure_kde_agent();
     let window: Rc<RefCell<Option<WindowHandle>>> = Rc::new(RefCell::new(None));
@@ -309,8 +282,6 @@ pub fn run() {
                         &wallpaper_color_picker,
                         &desktop_icons_color_picker,
                         &appearance_accent_picker,
-                        &dock_background_picker,
-                        &dock_island_background_picker,
                         &appearance_custom_accent,
                         &users,
                         &profile,
@@ -321,7 +292,6 @@ pub fn run() {
                         &content_scroll,
                         &dock_scroll,
                         &dock_tab,
-                        &add_island_pickers,
                         &islands_detail,
                     )
                 },
@@ -365,8 +335,6 @@ fn build(
     wallpaper_color_picker: &ColorPickerController,
     desktop_icons_color_picker: &ColorPickerController,
     appearance_accent_picker: &ColorPickerController,
-    dock_background_picker: &ColorPickerController,
-    dock_island_background_picker: &ColorPickerController,
     appearance_custom_accent: &Signal<bool>,
     users: &Signal<Vec<users::Account>>,
     profile: &users::ProfileControllers,
@@ -377,7 +345,6 @@ fn build(
     content_scroll: &ScrollController,
     dock_scroll: &ScrollController,
     dock_tab: &Signal<sections::general::DockTab>,
-    add_island_pickers: &sections::general::AddIslandPickers,
     islands_detail: &Signal<Option<&'static str>>,
 ) -> BoxedWidget {
     let theme = creamui_theme::use_theme();
@@ -403,15 +370,13 @@ fn build(
     };
     let current = view.get();
     let account_list = users.get();
-    let docks = config.get().docks;
-    let title = page_title(&current, &docks);
-    let navigation = tree(&account_list, icons, &docks);
+    let title = page_title(&current);
+    let navigation = tree(&account_list, icons);
     let select = view.clone();
     let scroll_to_top = content_scroll.clone();
     let dock_scroll_to_top = dock_scroll.clone();
     let close_islands_detail = islands_detail.clone();
     let enter_category = view.clone();
-    let add_dock_config = config.clone();
     let sidebar = nested_sidebar(
         sidebar_style,
         &navigation,
@@ -421,26 +386,14 @@ fn build(
             scroll_to_top.set(0.0);
             dock_scroll_to_top.set(0.0);
             close_islands_detail.set(None);
-            if section == Section::AddDock {
-                let mut new_index = 0;
-                common::update_config(&add_dock_config, |c| {
-                    c.docks.push(coconut_core::DockConfig {
-                        name: None,
-                        ..coconut_core::DockConfig::default()
-                    });
-                    new_index = c.docks.len() - 1;
-                });
-                select.set(Section::Dock(new_index));
-            } else {
-                select.set(section);
-            }
+            select.set(section);
         },
         move |section| {
             enter_category.set(category_default(section));
         },
     );
 
-    let content_has_own_scroll = matches!(current, Section::Dock(_) | Section::AddDock);
+    let content_has_own_scroll = matches!(current, Section::Statusbar | Section::Dockbar);
     let content = match current {
         Section::Theme => sections::appearance::build(
             size,
@@ -461,25 +414,19 @@ fn build(
         Section::DesktopIcons => {
             sections::desktop_icons::build(size, config, desktop_icons_color_picker)
         }
-        Section::Dock(index) => sections::general::build_dock_page(
+        Section::Statusbar => sections::general::build_bar_page(
             size,
             config,
             dock_scroll,
             dock_tab,
-            index,
-            dock_background_picker,
-            dock_island_background_picker,
-            add_island_pickers,
+            sections::general::BarKind::Statusbar,
         ),
-        Section::AddDock => sections::general::build_dock_page(
+        Section::Dockbar => sections::general::build_bar_page(
             size,
             config,
             dock_scroll,
             dock_tab,
-            0,
-            dock_background_picker,
-            dock_island_background_picker,
-            add_island_pickers,
+            sections::general::BarKind::Dockbar,
         ),
         Section::Tray => sections::tray::build(size, config),
         Section::Islands => sections::islands::build(size, config, islands_detail),

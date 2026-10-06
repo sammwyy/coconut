@@ -233,11 +233,8 @@ pub fn build(
     let desktop = shell.desktop;
     let theme = use_theme();
     let layout = IconLayout::from_config(&desktop.icons, theme.colors);
-    let (dock_position, dock_thickness) = shell
-        .docks
-        .first()
-        .map(|dock| (dock.position, dock.thickness.max(1.0)))
-        .unwrap_or((Default::default(), coconut_core::DEFAULT_THICKNESS));
+    let dock_position = shell.dockbar.position;
+    let dock_thickness = shell.dockbar.thickness.max(1.0);
     let work_area = usable_area(viewport, work_area.get(), dock_position, dock_thickness);
     Box::new(
         RawView::new(

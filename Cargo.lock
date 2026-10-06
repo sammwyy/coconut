@@ -254,6 +254,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3ded4057c258ba199e2d26386d3af3780957ecaee6c4ef4041c6b4b8b97c0b06"
 
 [[package]]
+name = "blair-blur-protocol"
+version = "0.1.0"
+dependencies = [
+ "wayland-backend",
+ "wayland-client",
+ "wayland-protocols",
+ "wayland-scanner",
+]
+
+[[package]]
 name = "blair-client"
 version = "0.1.0"
 dependencies = [
@@ -654,6 +664,7 @@ dependencies = [
  "creamui-core",
  "creamui-jsx",
  "creamui-macros",
+ "creamui-theme",
  "creamui-widgets",
 ]
 
@@ -985,6 +996,7 @@ dependencies = [
 name = "creamui-platform"
 version = "0.1.1"
 dependencies = [
+ "blair-blur-protocol",
  "jni",
  "libc",
  "log",
@@ -992,6 +1004,7 @@ dependencies = [
  "smithay-client-toolkit",
  "wasm-bindgen",
  "wayland-client",
+ "wayland-protocols-plasma",
  "wayland-protocols-wlr",
  "web-sys",
  "web-time",

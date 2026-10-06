@@ -10,4 +10,5 @@ coconut-plugin-kit = { path = "../../crates/plugin-kit" }
 creamui-core = { path = "../../../creamui/crates/core" }
 creamui-jsx = { path = "../../../creamui/crates/jsx" }
 creamui-macros = { path = "../../../creamui/crates/macros" }
+creamui-theme = { path = "../../../creamui/crates/theme" }
 creamui-widgets = { path = "../../../creamui/crates/widgets" }

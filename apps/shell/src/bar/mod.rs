@@ -7,7 +7,7 @@ use coconut_plugin_kit::{
     apply_opacity, parse_gap, with_island_chrome, ConfigValue, Gap, Island, IslandChrome,
     IslandConfig, IslandRenderContext, PluginRegistry, SharedState,
 };
-use creamui_core::{BoxedWidget, Point, Size, Styled};
+use creamui_core::{BoxShadow, BoxedWidget, Point, Size, Styled};
 use creamui_reactive::Signal;
 use creamui_theme::{use_theme, Color};
 use creamui_widgets::layout::{Align, Flex, Justify};
@@ -59,7 +59,7 @@ fn resolve_background_color(
 }
 
 fn dock_border() -> Color {
-    use_theme().colors.border
+    apply_opacity(use_theme().colors.border, 0.70)
 }
 
 /// Builds one dock's full widget tree: its sections, laid out along the
@@ -407,7 +407,17 @@ fn dock_chrome(mut widget: Flex, dock: &DockConfig) -> Flex {
     if dock.show_border {
         widget = widget.border(dock_border(), 1.0);
     }
-    widget
+    if dock.show_background {
+        let scale = island_scale(dock);
+        widget = widget.box_shadow(BoxShadow::new(
+            0.0,
+            3.0 * scale,
+            18.0 * scale,
+            0.0,
+            Color::rgba(0, 0, 0, 48),
+        ));
+    }
+    widget.corner_radius(14.0 * island_scale(dock))
 }
 
 fn apply_gap(container: Flex, gap: Gap, length: f32) -> Flex {

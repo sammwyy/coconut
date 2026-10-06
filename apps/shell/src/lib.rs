@@ -24,7 +24,7 @@ use coconut_plugin_tray::{
 use coconut_plugin_weather::WeatherState;
 use creamui_core::{BoxedWidget, Size};
 use creamui_reactive::Signal;
-use creamui_render::{AppBuilder, AppHandle, WindowHandle, WindowOptions};
+use creamui_render::{AppBuilder, AppHandle, BlurRegion, WindowHandle, WindowOptions};
 use creamui_theme::{Color, Theme};
 use std::rc::Rc;
 use std::{
@@ -176,12 +176,12 @@ pub fn run() {
                 app: app.clone(),
             };
             let registry = Rc::new(PluginRegistry::build(&plugins, &init_ctx));
-            warn_unknown_islands(&initial_config.docks, &registry);
+            warn_unknown_islands(&initial_config.bar_configs(), &registry);
 
             let panel_host = PanelHost::new(app.clone(), registry.clone(), shared.clone());
             panel_host.set_theme(system_theme());
 
-            if island_present(&initial_config.docks, "weather") {
+            if island_present(&initial_config.bar_configs(), "weather") {
                 refresh_weather(app.clone(), weather_state.clone());
             }
             desktop_state.start_loading(&app, initial_config.appearance.icon_theme.clone());
@@ -258,9 +258,9 @@ pub fn run() {
                 }
             }
 
-            append_docks(
+            append_bars(
                 &app,
-                &initial_config.docks,
+                &initial_config.bar_configs(),
                 &registry,
                 &shared,
                 &panel_host,
@@ -288,13 +288,9 @@ pub fn run() {
         .run();
 }
 
-/// Whether `id` is placed in any *enabled* section of any *enabled*
-/// configured dock — the dynamic-dock analog of the old
-/// `config.widgets.<id>.enabled` check. A disabled dock/section's islands
-/// don't count as present since nothing actually renders them.
-fn island_present(docks: &[DockConfig], id: &str) -> bool {
-    docks
-        .iter()
+/// Whether an island is rendered by either enabled system bar.
+fn island_present(bars: &[DockConfig], id: &str) -> bool {
+    bars.iter()
         .filter(|dock| dock.enabled)
         .flat_map(|dock| &dock.sections)
         .filter(|section| section.enabled)
@@ -302,17 +298,10 @@ fn island_present(docks: &[DockConfig], id: &str) -> bool {
         .any(|entry| entry.id == id)
 }
 
-/// (Re)creates every dock window from scratch. Closes whatever dock windows
-/// currently exist first — layer-shell roles/geometry can't be changed in
-/// place, so any change to the docks list (position, count, sections,
-/// islands) is handled by tearing down and rebuilding all of them, the same
-/// way the old single-bar `append_bar` closure recreated its one window on
-/// a position change.
-///
-/// Each dock registers its own popup-anchor geometry with `panel_host`
-/// ([`PanelHost::set_dock`]), so its popups anchor against it, not dock 0.
+/// Recreates the statusbar and dockbar windows after a bar configuration
+/// change. Their stable indexes keep popup anchors bound to the right bar.
 #[allow(clippy::too_many_arguments)]
-fn append_docks(
+fn append_bars(
     app: &AppHandle,
     docks: &[DockConfig],
     registry: &Rc<PluginRegistry>,
@@ -326,8 +315,7 @@ fn append_docks(
         window.close();
     }
     panel_host.clear_docks();
-    let enabled_docks: Vec<&DockConfig> = docks.iter().filter(|dock| dock.enabled).collect();
-    for (index, dock) in enabled_docks.into_iter().enumerate() {
+    for (index, dock) in docks.iter().enumerate().filter(|(_, dock)| dock.enabled) {
         let position = dock.position;
         let role = match position {
             DockPosition::Top => creamui_render::platform::WindowRole::TopPanel,
@@ -359,6 +347,8 @@ fn append_docks(
                 decorations: false,
                 resizable: false,
                 transparent: true,
+                blur: (dock.show_background && dock.background_opacity < 1.0)
+                    .then_some(BlurRegion::Window),
                 role,
                 theme: system_theme(),
                 ..Default::default()
@@ -423,9 +413,10 @@ fn schedule_runtime_events(
                         }
                     }
                     RuntimeEvent::ShellConfig(updated) => {
-                        let weather_was_enabled = island_present(&config.peek().docks, "weather");
-                        let docks_changed = config.peek().docks != updated.docks;
-                        warn_unknown_islands(&updated.docks, &registry);
+                        let weather_was_enabled =
+                            island_present(&config.peek().bar_configs(), "weather");
+                        let bars_changed = config.peek().bar_configs() != updated.bar_configs();
+                        warn_unknown_islands(&updated.bar_configs(), &registry);
                         let icon_theme_changed =
                             config.peek().appearance.icon_theme != updated.appearance.icon_theme;
                         config.set(updated);
@@ -436,14 +427,16 @@ fn schedule_runtime_events(
                             }
                             desktop_state.start_loading(&app, icon_theme);
                         }
-                        if !weather_was_enabled && island_present(&config.peek().docks, "weather") {
+                        if !weather_was_enabled
+                            && island_present(&config.peek().bar_configs(), "weather")
+                        {
                             refresh_weather(app.clone(), weather_state.clone());
                         }
-                        if docks_changed {
+                        if bars_changed {
                             work_area.set(None);
-                            append_docks(
+                            append_bars(
                                 &app,
-                                &config.peek().docks,
+                                &config.peek().bar_configs(),
                                 &registry,
                                 &shared,
                                 &panel_host,
@@ -454,7 +447,7 @@ fn schedule_runtime_events(
                         }
                     }
                     RuntimeEvent::UserProfileChanged => {
-                        if island_present(&config.peek().docks, "weather") {
+                        if island_present(&config.peek().bar_configs(), "weather") {
                             refresh_weather(app.clone(), weather_state.clone());
                         }
                     }

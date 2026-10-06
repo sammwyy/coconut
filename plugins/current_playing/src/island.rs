@@ -3,11 +3,11 @@ use coconut_api::audio::Playback;
 use coconut_plugin_kit::chrome::{shell_control_hover, shell_muted, shell_panel, shell_text};
 use coconut_plugin_kit::{pixel_icon, Island, IslandRenderContext};
 use creamui_core::layout::{FlexDirection, Style as LayoutStyle};
-use creamui_core::{BoxedWidget, StateStyle, Style, Styled, TextAlign};
+use creamui_core::{BoxedWidget, StateStyle, Style, Styled};
 use creamui_image::{Image, ImageData, ImageFit};
 use creamui_macros::jsx;
 use creamui_widgets::layout::{fixed, Align, Justify};
-use creamui_widgets::RawButton;
+use creamui_widgets::{RawButton, RawMarquee};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -85,17 +85,8 @@ fn compact_playback_widget(
     next: Rc<dyn Fn()>,
     scale: f32,
 ) -> BoxedWidget {
-    let duration = playback
-        .map(|item| item.position.as_str())
-        .filter(|position| !position.is_empty());
-    let width = (if duration.is_some() { 144.0 } else { 108.0 }) * scale;
-    let duration_widget: BoxedWidget = duration
-        .map(|duration| {
-            Box::new(jsx! {
-                <RawText color={shell_muted()} font_size={10.0 * scale} align={TextAlign::End}>{duration}</RawText>
-            }) as BoxedWidget
-        })
-        .unwrap_or_else(|| Box::new(creamui_widgets::layout::Flex::row().size(0.0, 0.0)));
+    let metadata = track_metadata(playback, scale);
+    let width = if playback.is_some() { 236.0 } else { 108.0 } * scale;
     let play_icon = if playback.is_some_and(|item| item.status == "Playing") {
         "player_pause"
     } else {
@@ -107,22 +98,52 @@ fn compact_playback_widget(
             .child(Box::new(jsx! {
                 <Flex direction={FlexDirection::Row} size={(width, 32.0 * scale)} padding={4.0 * scale} gap={3.0 * scale} align={Align::Center}>
                     {music_cover(playback, scale)}
-                    {compact_media_button("player_previous", previous, scale)}
-                    {compact_media_button(play_icon, toggle, scale)}
-                    {compact_media_button("player_next", next, scale)}
-                    {duration_widget}
+                    {metadata}
+                    {compact_media_button("player_previous", previous, scale, false)}
+                    {compact_media_button(play_icon, toggle, scale, true)}
+                    {compact_media_button("player_next", next, scale, false)}
                 </Flex>
             })),
     )
 }
 
-fn compact_media_button(icon: &'static str, on_click: Rc<dyn Fn()>, scale: f32) -> BoxedWidget {
+fn track_metadata(playback: Option<&Playback>, scale: f32) -> BoxedWidget {
+    let Some(playback) = playback.filter(|item| !item.title.is_empty()) else {
+        return Box::new(creamui_widgets::layout::Flex::row().size(0.0, 0.0));
+    };
     Box::new(
-        RawButton::new(media_control_style(scale), || {})
+        creamui_widgets::layout::Flex::column()
+            .size(88.0 * scale, 24.0 * scale)
+            .justify(Justify::Center)
+            .child(Box::new(RawMarquee::new(
+                playback.title.clone(),
+                shell_text(),
+                11.0 * scale,
+                88.0 * scale,
+            ).bold(true)))
+            .child(Box::new(RawMarquee::new(
+                playback.artist.clone(),
+                shell_muted(),
+                10.0 * scale,
+                88.0 * scale,
+            ))),
+    )
+}
+
+fn compact_media_button(
+    icon: &'static str,
+    on_click: Rc<dyn Fn()>,
+    scale: f32,
+    primary: bool,
+) -> BoxedWidget {
+    let size = if primary { 20.0 } else { 18.0 } * scale;
+    let icon_color = if primary { shell_panel() } else { shell_text() };
+    Box::new(
+        RawButton::new(media_control_style(size, primary), || {})
             .with_click_position(move |_| on_click())
             .child(Box::new(jsx! {
-                <Flex size={(18.0 * scale, 24.0 * scale)} align={Align::Center} justify={Justify::Center}>
-                    {pixel_icon(icon, 13.0 * scale, shell_text())}
+                <Flex size={(size, 24.0 * scale)} align={Align::Center} justify={Justify::Center}>
+                    {pixel_icon(icon, 13.0 * scale, icon_color)}
                 </Flex>
             })),
     )
@@ -183,7 +204,7 @@ fn island_button_style(width: f32, scale: f32) -> Style {
             ..Default::default()
         })
         .background(shell_panel())
-        .corner_radius(9.0 * scale)
+        .corner_radius(16.0 * scale)
         .hover(StateStyle::new().background(shell_control_hover()))
         .pressed(StateStyle::new().background(shell_control_hover()))
 }
@@ -200,13 +221,14 @@ fn side_button_style(scale: f32) -> Style {
         .pressed(StateStyle::new().background(shell_control_hover()))
 }
 
-fn media_control_style(scale: f32) -> Style {
+fn media_control_style(size: f32, primary: bool) -> Style {
     Style::new()
         .layout(LayoutStyle {
-            size: fixed(18.0 * scale, 24.0 * scale),
+            size: fixed(size, size),
             ..Default::default()
         })
-        .corner_radius(6.0 * scale)
+        .background(if primary { shell_text() } else { creamui_theme::Color::rgba(0, 0, 0, 0) })
+        .corner_radius(size / 2.0)
         .hover(StateStyle::new().background(shell_control_hover()))
         .pressed(StateStyle::new().background(shell_control_hover()))
 }

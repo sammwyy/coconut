@@ -39,7 +39,7 @@ pub fn apply_opacity(color: Color, opacity: f32) -> Color {
 
 /// Runs an island builder with the dock-specific chrome policy that its
 /// shared palette helpers should use. The policy is scoped to construction,
-/// so multiple docks can use different chrome in the same process.
+/// so the statusbar and dockbar can use different chrome in the same process.
 pub fn with_island_chrome<T>(chrome: IslandChrome, build: impl FnOnce() -> T) -> T {
     ISLAND_CHROME.with(|current| {
         let previous = current.replace(chrome);
@@ -90,7 +90,7 @@ pub fn shell_selected() -> Color {
 pub fn shell_border() -> Color {
     let theme = use_theme();
     if island_chrome().border {
-        theme.colors.border
+        apply_opacity(theme.colors.border, 0.70)
     } else {
         Color::rgba(0, 0, 0, 0)
     }

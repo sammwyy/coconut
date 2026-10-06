@@ -74,7 +74,7 @@ pub(crate) fn island_button_style(width: f32, height: f32, scale: f32) -> Style 
             ..Default::default()
         })
         .background(shell_panel())
-        .corner_radius(9.0 * scale)
+        .corner_radius(16.0 * scale)
         .hover(StateStyle::new().background(shell_control_hover()))
         .pressed(StateStyle::new().background(shell_selected()))
 }

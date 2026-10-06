@@ -16,8 +16,21 @@ struct KnownIsland {
 
 fn known_islands() -> Vec<KnownIsland> {
     vec![
-        KnownIsland { id: "weather", label: "Weather", schema: Vec::new() },
-        KnownIsland { id: "current_playing", label: "Now playing", schema: Vec::new() },
+        KnownIsland {
+            id: "logo",
+            label: "Workspaces",
+            schema: Vec::new(),
+        },
+        KnownIsland {
+            id: "weather",
+            label: "Weather",
+            schema: Vec::new(),
+        },
+        KnownIsland {
+            id: "current_playing",
+            label: "Now playing",
+            schema: Vec::new(),
+        },
         KnownIsland {
             id: "app_launcher",
             label: "App launcher",
@@ -28,44 +41,52 @@ fn known_islands() -> Vec<KnownIsland> {
             label: "Open windows",
             schema: OpenWindowsIsland.config_schema(),
         },
-        KnownIsland { id: "control_center", label: "Control center", schema: Vec::new() },
-        KnownIsland { id: "clock", label: "Clock", schema: Vec::new() },
+        KnownIsland {
+            id: "control_center",
+            label: "Control center",
+            schema: Vec::new(),
+        },
+        KnownIsland {
+            id: "clock",
+            label: "Clock",
+            schema: Vec::new(),
+        },
     ]
 }
 
-fn island_present(config: &ShellConfig, id: &str) -> bool {
-    config
-        .docks
+fn island_present(config: &ShellConfig, id: &str, statusbar: bool) -> bool {
+    let bar = if statusbar {
+        &config.statusbar
+    } else {
+        &config.dockbar
+    };
+    bar.sections
         .iter()
-        .flat_map(|dock| &dock.sections)
         .flat_map(|section| &section.islands)
         .any(|entry| entry.id == id)
 }
 
-/// Toggling an island on adds it to the first dock's first section; toggling
-/// it off removes it wherever it currently sits. A full editor for
-/// choosing which dock/section/index an island lands in — the real design
-/// from the dock/island/panel refactor plan — is a later structural-editor
-/// pass; this keeps the common "just turn it on/off" case working against
-/// the new `[[dock.section.island]]` shape.
-fn toggle_island(config: &mut ShellConfig, id: &str) {
-    let present = island_present(config, id);
+fn toggle_island(config: &mut ShellConfig, id: &str, statusbar: bool) {
+    let bar = if statusbar {
+        &mut config.statusbar
+    } else {
+        &mut config.dockbar
+    };
+    let present = bar
+        .sections
+        .iter()
+        .flat_map(|section| &section.islands)
+        .any(|entry| entry.id == id);
     if present {
-        for dock in &mut config.docks {
-            for section in &mut dock.sections {
-                section.islands.retain(|entry| entry.id != id);
-            }
+        for section in &mut bar.sections {
+            section.islands.retain(|entry| entry.id != id);
         }
         return;
     }
-    if config.docks.is_empty() {
-        config.docks.push(Default::default());
+    if bar.sections.is_empty() {
+        bar.sections.push(Default::default());
     }
-    let dock = &mut config.docks[0];
-    if dock.sections.is_empty() {
-        dock.sections.push(Default::default());
-    }
-    dock.sections[0].islands.push(IslandEntry::with_id(id));
+    bar.sections[0].islands.push(IslandEntry::with_id(id));
 }
 
 pub fn build(
@@ -90,7 +111,7 @@ pub fn build(
 
     section(
         "Islands",
-        "Choose which islands appear on your panels and set the clock format.",
+        "Choose whether each widget appears in the statusbar, dockbar, or both.",
         vec![toggles, format],
     )
 }
@@ -100,13 +121,24 @@ fn island_row(
     config: &Signal<ShellConfig>,
     detail: &Signal<Option<&'static str>>,
 ) -> BoxedWidget {
-    let checked = island_present(&config.get(), entry.id);
-    let apply = config.clone();
+    let status_checked = island_present(&config.get(), entry.id, true);
+    let dock_checked = island_present(&config.get(), entry.id, false);
+    let status_apply = config.clone();
     let id = entry.id;
-    let switch: BoxedWidget = Box::new(Switch::new(checked, move || {
-        update_config(&apply, |c| toggle_island(c, id));
+    let status_switch: BoxedWidget = Box::new(Switch::new(status_checked, move || {
+        update_config(&status_apply, |c| toggle_island(c, id, true));
     }));
-    let mut control = Flex::row().gap(10.0).align(Align::Center).child(switch);
+    let dock_apply = config.clone();
+    let dock_switch: BoxedWidget = Box::new(Switch::new(dock_checked, move || {
+        update_config(&dock_apply, |c| toggle_island(c, id, false));
+    }));
+    let mut control = Flex::row()
+        .gap(8.0)
+        .align(Align::Center)
+        .child(Box::new(creamui_widgets::Text::secondary("Status")) as BoxedWidget)
+        .child(status_switch)
+        .child(Box::new(creamui_widgets::Text::secondary("Dock")) as BoxedWidget)
+        .child(dock_switch);
     if !entry.schema.is_empty() {
         let detail = detail.clone();
         control = control.child(Box::new(Button::styled(
