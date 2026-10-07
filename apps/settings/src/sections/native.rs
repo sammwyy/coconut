@@ -2,7 +2,6 @@
 //! Service discovery and all privileged writes happen outside the UI thread.
 use crate::{
     common::{group, section, section_label, update_config},
-    icons::SettingsIcons,
     users, Section,
 };
 use coconut_api::settings::{Action, SettingsIntegration, Snapshot, Value};
@@ -1410,24 +1409,10 @@ pub(crate) fn parent(section: &Section) -> Section {
     }
 }
 
-pub fn detail_header(
-    current: &Section,
-    nav: &Signal<Section>,
-    icons: &SettingsIcons,
-    width: f32,
-) -> BoxedWidget {
+pub fn detail_header(current: &Section, nav: &Signal<Section>, width: f32) -> BoxedWidget {
     let parent = parent(current);
     let title = crate::page_title(current);
     let back = nav.clone();
-    let color = creamui_theme::use_theme().colors.accent;
-    let source = match parent {
-        Section::Hardware => icons.devices.clone(),
-        Section::Personalization => icons.paintbrush.clone(),
-        Section::Desktop => icons.wallpaper.clone(),
-        Section::Windows => icons.windows.clone(),
-        Section::Users => icons.users.clone(),
-        _ => icons.system.clone(),
-    };
     let decorations = creamui_render::use_window_decorations();
     let controls = decorations.controls;
     let right = if decorations.mode == creamui_render::WindowDecorationMode::Client {
@@ -1444,8 +1429,8 @@ pub fn detail_header(
     };
     Box::new(
         jsx! { <Flex direction={FlexDirection::Row} align={creamui_widgets::layout::Align::Center} gap={12.0} height={56.0} shrink={0.0} padding_left={left} padding_right={right}>
-            {Box::new(Button::new("‹", move || back.set(parent.clone())).width(28.0).height(28.0)) as BoxedWidget}
-            {crate::common::icon_badge(source, color)} {Box::new(Text::new(title).font_size(14.0).bold(true)) as BoxedWidget}
+            {crate::common::back_button(move || back.set(parent.clone()))}
+            {Box::new(Text::new(title).font_size(14.0).bold(true)) as BoxedWidget}
         </Flex> },
     )
 }

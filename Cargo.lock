@@ -622,6 +622,7 @@ name = "coconut-plugin-app-launcher"
 version = "0.1.0"
 dependencies = [
  "coconut-api",
+ "coconut-core",
  "coconut-plugin-kit",
  "creamui-core",
  "creamui-image",
@@ -716,6 +717,7 @@ dependencies = [
  "creamui-jsx",
  "creamui-macros",
  "creamui-reactive",
+ "creamui-theme",
  "creamui-widgets",
  "reqwest",
  "serde",

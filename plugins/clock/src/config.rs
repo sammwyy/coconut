@@ -18,7 +18,7 @@ pub struct ClockConfig {
 impl Default for ClockConfig {
     fn default() -> Self {
         Self {
-            format: "%H:%M".to_owned(),
+            format: "%I:%M %p".to_owned(),
         }
     }
 }
@@ -28,7 +28,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn defaults_to_24_hour_hour_minute() {
-        assert_eq!(ClockConfig::default().format, "%H:%M");
+    fn defaults_to_hour_minute_with_period() {
+        assert_eq!(ClockConfig::default().format, "%I:%M %p");
     }
 }

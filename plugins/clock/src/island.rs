@@ -1,6 +1,6 @@
 use crate::shared::ClockText;
 use coconut_plugin_kit::chrome::{island_style, shell_text};
-use coconut_plugin_kit::{Island, IslandRenderContext};
+use coconut_plugin_kit::{pixel_icon, Island, IslandRenderContext};
 use creamui_core::layout::{FlexDirection, Style as LayoutStyle};
 use creamui_core::{BoxedWidget, Painter, Rect, Style, TextAlign, Widget};
 use creamui_macros::jsx;
@@ -46,7 +46,8 @@ impl Island for ClockIsland {
             RawButton::new(island_button_style(s), || {})
                 .with_click_position(move |point| open("clock", point))
                 .child(Box::new(jsx! {
-                    <Flex direction={FlexDirection::Column} size={(68.0 * s, 32.0 * s)} padding={2.0 * s} justify={Justify::Center} align={Align::Center}>
+                    <Flex direction={FlexDirection::Row} size={(96.0 * s, 32.0 * s)} padding={10.0 * s} gap={4.0 * s} justify={Justify::Center} align={Align::Center}>
+                        {pixel_icon("clock-face", 12.0 * s, shell_text())}
                         {clock}
                     </Flex>
                 })),
@@ -96,7 +97,7 @@ impl Widget for LiveClock {
 }
 
 fn island_button_style(scale: f32) -> Style {
-    island_style(68.0 * scale, 32.0 * scale, scale)
+    island_style(96.0 * scale, 32.0 * scale, scale)
 }
 
 fn side_button_style(scale: f32) -> Style {

@@ -13,6 +13,7 @@ creamui-core = { path = "../../../creamui/crates/core" }
 creamui-jsx = { path = "../../../creamui/crates/jsx" }
 creamui-macros = { path = "../../../creamui/crates/macros" }
 creamui-reactive = { path = "../../../creamui/crates/reactive" }
+creamui-theme = { path = "../../../creamui/crates/theme" }
 creamui-widgets = { path = "../../../creamui/crates/widgets" }
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "gzip", "json", "rustls-tls"] }
 serde = { version = "1", features = ["derive"] }

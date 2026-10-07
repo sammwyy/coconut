@@ -107,6 +107,15 @@ pub fn shell_border() -> Color {
         Color::rgba(0, 0, 0, 0)
     }
 }
+pub fn shell_island_border() -> Color {
+    if !island_chrome().border {
+        Color::rgba(0, 0, 0, 0)
+    } else if use_theme().colors.surface.r > 128 {
+        Color::rgba(255, 255, 255, 140)
+    } else {
+        shell_border()
+    }
+}
 pub fn shell_track() -> Color {
     use_theme().colors.border_strong
 }
@@ -123,9 +132,9 @@ pub fn island_style(width: f32, height: f32, scale: f32) -> Style {
             ..Default::default()
         })
         .background(shell_island())
-        .border(shell_border(), 1.0)
+        .border(shell_island_border(), 1.0)
         .corner_radius(design::PILL_RADIUS * scale)
-        .hover(StateStyle::new().background(shell_island().mix(shell_accent(), 0.10)))
+        .hover(StateStyle::new().background(shell_island().mix(shell_control(), 0.18)))
         .pressed(StateStyle::new().background(shell_selected()));
     if island_chrome().background {
         style = style.box_shadow(design::island_shadow(scale));

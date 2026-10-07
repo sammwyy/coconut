@@ -43,7 +43,10 @@ impl Default for ShellConfig {
                     SectionConfig {
                         enabled: true,
                         gap: "10px".to_owned(),
-                        islands: vec![IslandEntry::with_id("logo")],
+                        islands: vec![
+                            IslandEntry::with_id("logo"),
+                            IslandEntry::with_id("open_windows"),
+                        ],
                     },
                     SectionConfig {
                         enabled: true,
@@ -67,8 +70,8 @@ impl Default for ShellConfig {
                 fill_available_space: false,
                 max_length: Some(800.0),
                 margin: 20.0,
-                thickness: 68.0,
-                background_opacity: 0.85,
+                thickness: 76.0,
+                background_opacity: 1.0,
                 ..DockConfig::default()
             },
             desktop: DesktopConfig::default(),
@@ -141,6 +144,8 @@ island_background_opacity = 0.72
 gap = "10px"
 [[statusbar.section.island]]
 id = "logo"
+[[statusbar.section.island]]
+id = "open_windows"
 
 [[statusbar.section]]
 gap = "10px"
@@ -164,13 +169,13 @@ section_gap = 0.0
 fill_available_space = false
 max_length = 800.0
 margin = 20.0
-thickness = 68.0
+thickness = 76.0
 show_background = true
 show_border = true
 show_island_background = true
 show_island_border = true
 unify_island_background = false
-background_opacity = 0.85
+background_opacity = 1.0
 island_background_opacity = 1.0
 
 [[dockbar.section]]

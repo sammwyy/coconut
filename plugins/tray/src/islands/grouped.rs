@@ -83,28 +83,24 @@ impl Island for ControlCenterIsland {
 
         let mut icon_count = 0;
         let mut row = Flex::row()
-            .padding(4.0 * s)
-            .gap(7.0 * s)
+            .padding(10.0 * s)
+            .gap(11.0 * s)
             .justify(Justify::Center)
             .align(Align::Center);
         if self.tray.wifi.shows_in_bar() {
-            row = row.child(pixel_icon(network_icon_name, 16.0 * s, shell_text()));
+            row = row.child(pixel_icon(network_icon_name, 13.0 * s, shell_text()));
             icon_count += 1;
         }
         if self.tray.brightness.shows_in_bar() {
-            row = row.child(pixel_icon("brightness", 16.0 * s, shell_text()));
+            row = row.child(pixel_icon("brightness", 13.0 * s, shell_text()));
             icon_count += 1;
         }
         if self.tray.volume.shows_in_bar() {
-            row = row.child(pixel_icon(volume_icon_name, 16.0 * s, shell_text()));
+            row = row.child(pixel_icon(volume_icon_name, 13.0 * s, shell_text()));
             icon_count += 1;
         }
         if self.tray.bluetooth.shows_in_bar() {
-            row = row.child(pixel_icon(bluetooth_icon_name, 16.0 * s, shell_text()));
-            icon_count += 1;
-        }
-        if self.tray.battery.shows_in_bar() {
-            row = row.child(pixel_icon(battery_icon_name, 16.0 * s, shell_text()));
+            row = row.child(pixel_icon(bluetooth_icon_name, 13.0 * s, shell_text()));
             icon_count += 1;
         }
         let show_percentage = coconut_core::modules::load_module_value("tray")
@@ -116,24 +112,40 @@ impl Island for ControlCenterIsland {
         } else {
             None
         };
-        if let Some(percent) = percentage {
-            row = row.child(Box::new(
-                Text::new(format!("{percent}%"))
-                    .font_size(11.0 * s)
-                    .bold(true),
-            ));
-        }
-        row = row.child(pixel_icon("chevron-up", 13.0 * s, shell_text()));
-        let width =
-            control_button_width(icon_count, s) + if percentage.is_some() { 34.0 * s } else { 0.0 };
+        row = row.child(pixel_icon("system", 13.0 * s, shell_text()));
+        let width = control_button_width(icon_count, s);
         row = row.size(width, 32.0 * s);
 
         let open_panel = ctx.open_panel.clone();
-        Box::new(
+        let control: BoxedWidget = Box::new(
             RawButton::new(island_button_style(width, 32.0 * s, s), || {})
                 .with_click_position(move |point| open_panel("control_center", point))
                 .child(Box::new(row)),
-        )
+        );
+        let mut group = Flex::row().gap(8.0 * s).align(Align::Center);
+        if self.tray.battery.shows_in_bar() {
+            let battery_width = if percentage.is_some() { 72.0 } else { 36.0 } * s;
+            let mut battery_row = Flex::row()
+                .size(battery_width, 32.0 * s)
+                .gap(6.0 * s)
+                .align(Align::Center)
+                .justify(Justify::Center)
+                .child(pixel_icon(battery_icon_name, 13.0 * s, shell_text()));
+            if let Some(percent) = percentage {
+                battery_row = battery_row.child(Box::new(
+                    Text::new(format!("{percent}%"))
+                        .font_size(11.0 * s)
+                        .bold(true),
+                ));
+            }
+            let open = ctx.open_panel.clone();
+            group = group.child(Box::new(
+                RawButton::new(island_button_style(battery_width, 32.0 * s, s), || {})
+                    .with_click_position(move |point| open("energy", point))
+                    .child(Box::new(battery_row)),
+            ));
+        }
+        Box::new(group.child(control))
     }
 }
 
@@ -141,12 +153,12 @@ impl Island for ControlCenterIsland {
 /// chevron. Ported verbatim from
 /// `apps/shell/src/bar/mod.rs::control_button_width`.
 fn control_button_width(icon_count: usize, scale: f32) -> f32 {
-    const ICON_WIDTH: f32 = 16.0;
-    const CHEVRON_WIDTH: f32 = 13.0;
-    const GAP: f32 = 7.0;
-    const PADDING: f32 = 8.0;
+    const ICON_WIDTH: f32 = 13.0;
+    const SETTINGS_WIDTH: f32 = 13.0;
+    const GAP: f32 = 11.0;
+    const PADDING: f32 = 22.0;
     let icons = icon_count as f32;
-    (PADDING + icons * ICON_WIDTH + (icons + 1.0) * GAP + CHEVRON_WIDTH) * scale
+    (PADDING + icons * ICON_WIDTH + icons * GAP + SETTINGS_WIDTH) * scale
 }
 
 #[cfg(test)]

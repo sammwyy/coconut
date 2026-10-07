@@ -7,7 +7,7 @@ use coconut_plugin_kit::{
     apply_opacity, parse_gap, with_island_chrome, ConfigValue, Gap, Island, IslandChrome,
     IslandConfig, IslandRenderContext, PluginRegistry, SharedState,
 };
-use creamui_core::{BoxShadow, BoxedWidget, Point, Size, Styled};
+use creamui_core::{BoxShadow, BoxedWidget, Point, Size, StyleProp, Styled};
 use creamui_reactive::Signal;
 use creamui_theme::{use_theme, Color};
 use creamui_widgets::layout::{Align, Flex, Justify};
@@ -59,7 +59,12 @@ fn resolve_background_color(
 }
 
 fn dock_border() -> Color {
-    apply_opacity(use_theme().colors.border, 0.70)
+    let theme = use_theme();
+    if theme.colors.surface.r > 128 {
+        Color::rgba(255, 255, 255, 140)
+    } else {
+        apply_opacity(theme.colors.border, 0.70)
+    }
 }
 
 /// Builds one dock's full widget tree: its sections, laid out along the
@@ -72,17 +77,33 @@ pub fn build_dock(
     shared: &SharedState,
     open_panel: &Rc<dyn Fn(&'static str, Point)>,
 ) -> BoxedWidget {
+    build_dock_with_lookup(
+        viewport,
+        dock,
+        &|id| registry.island(id).cloned(),
+        shared,
+        open_panel,
+    )
+}
+
+pub(super) fn build_dock_with_lookup(
+    viewport: Size,
+    dock: &DockConfig,
+    lookup: &dyn Fn(&str) -> Option<Rc<dyn Island>>,
+    shared: &SharedState,
+    open_panel: &Rc<dyn Fn(&'static str, Point)>,
+) -> BoxedWidget {
     if dock.position.is_vertical() {
-        build_vertical_dock(viewport, dock, registry, shared, open_panel)
+        build_vertical_dock(viewport, dock, lookup, shared, open_panel)
     } else {
-        build_horizontal_dock(viewport, dock, registry, shared, open_panel)
+        build_horizontal_dock(viewport, dock, lookup, shared, open_panel)
     }
 }
 
 fn build_horizontal_dock(
     viewport: Size,
     dock: &DockConfig,
-    registry: &PluginRegistry,
+    lookup: &dyn Fn(&str) -> Option<Rc<dyn Island>>,
     shared: &SharedState,
     open_panel: &Rc<dyn Fn(&'static str, Point)>,
 ) -> BoxedWidget {
@@ -124,7 +145,7 @@ fn build_horizontal_dock(
             dock.unify_island_background,
             island_color,
             dock.island_background_opacity,
-            registry,
+            lookup,
             shared,
             open_panel,
         ));
@@ -143,7 +164,7 @@ fn build_horizontal_dock(
 fn build_vertical_dock(
     viewport: Size,
     dock: &DockConfig,
-    registry: &PluginRegistry,
+    lookup: &dyn Fn(&str) -> Option<Rc<dyn Island>>,
     shared: &SharedState,
     open_panel: &Rc<dyn Fn(&'static str, Point)>,
 ) -> BoxedWidget {
@@ -185,7 +206,7 @@ fn build_vertical_dock(
             dock.unify_island_background,
             island_color,
             dock.island_background_opacity,
-            registry,
+            lookup,
             shared,
             open_panel,
         ));
@@ -218,7 +239,7 @@ fn build_row_section(
     unify_background: bool,
     island_background_color: Option<Color>,
     island_background_opacity: f32,
-    registry: &PluginRegistry,
+    lookup: &dyn Fn(&str) -> Option<Rc<dyn Island>>,
     shared: &SharedState,
     open_panel: &Rc<dyn Fn(&'static str, Point)>,
 ) -> BoxedWidget {
@@ -232,7 +253,7 @@ fn build_row_section(
         row = row.width(width);
     }
     if is_first {
-        row = row.child(Box::new(Flex::row().size(edge_gap, thickness)));
+        row = row.property(StyleProp::PaddingLeft(edge_gap.into()));
     }
 
     let islands = build_islands(
@@ -247,7 +268,7 @@ fn build_row_section(
             island_background_color
         },
         island_background_opacity,
-        |id| registry.island(id).cloned(),
+        lookup,
         shared,
         open_panel,
     );
@@ -273,7 +294,7 @@ fn build_row_section(
     }
 
     if is_last {
-        row = row.child(Box::new(Flex::row().size(edge_gap, thickness)));
+        row = row.property(StyleProp::PaddingRight(edge_gap.into()));
     }
     Box::new(row)
 }
@@ -294,7 +315,7 @@ fn build_column_section(
     unify_background: bool,
     island_background_color: Option<Color>,
     island_background_opacity: f32,
-    registry: &PluginRegistry,
+    lookup: &dyn Fn(&str) -> Option<Rc<dyn Island>>,
     shared: &SharedState,
     open_panel: &Rc<dyn Fn(&'static str, Point)>,
 ) -> BoxedWidget {
@@ -309,7 +330,7 @@ fn build_column_section(
         column = column.height(height);
     }
     if is_first {
-        column = column.child(Box::new(Flex::column().size(thickness, edge_gap)));
+        column = column.property(StyleProp::PaddingTop(edge_gap.into()));
     }
 
     let islands = build_islands(
@@ -324,7 +345,7 @@ fn build_column_section(
             island_background_color
         },
         island_background_opacity,
-        |id| registry.island(id).cloned(),
+        lookup,
         shared,
         open_panel,
     );
@@ -350,7 +371,7 @@ fn build_column_section(
     }
 
     if is_last {
-        column = column.child(Box::new(Flex::column().size(thickness, edge_gap)));
+        column = column.property(StyleProp::PaddingBottom(edge_gap.into()));
     }
     Box::new(column)
 }
@@ -426,7 +447,7 @@ fn dock_chrome(mut widget: Flex, dock: &DockConfig) -> Flex {
             Color::rgba(24, 37, 55, 36),
         ));
     }
-    widget.corner_radius(20.0 * island_scale(dock))
+    widget.corner_radius(16.0 * island_scale(dock))
 }
 
 fn apply_gap(container: Flex, gap: Gap, length: f32) -> Flex {

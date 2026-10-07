@@ -1,4 +1,7 @@
-use coconut_plugin_kit::chrome::{shell_accent, shell_border, shell_island, shell_muted};
+use coconut_plugin_kit::chrome::{
+    shell_island, shell_island_border as shell_border, shell_muted, shell_text,
+};
+use coconut_plugin_kit::design;
 use coconut_plugin_kit::{Island, IslandRenderContext};
 use creamui_core::layout::FlexDirection;
 use creamui_core::{BoxedWidget, Styled};
@@ -15,25 +18,31 @@ impl Island for LogoIsland {
 
     fn build(&self, ctx: &IslandRenderContext) -> BoxedWidget {
         let s = ctx.scale;
-        Box::new(jsx! {
-            <Flex direction={FlexDirection::Row} size={(122.0 * s, 32.0 * s)} padding={4.0 * s} gap={2.0 * s} align={Align::Center} background={shell_island()} border={(shell_border(), 1.0)} corner_radius={16.0 * s}>
+        let row = jsx! {
+            <Flex direction={FlexDirection::Row} size={(124.0 * s, 32.0 * s)} padding={4.0 * s} gap={2.0 * s} align={Align::Center} background={shell_island()} border={(shell_border(), 1.0)} corner_radius={16.0 * s}>
                 {workspace_chip("1", true, s)}
                 {workspace_chip("2", false, s)}
                 {workspace_chip("3", false, s)}
                 {workspace_chip("4", false, s)}
             </Flex>
+        };
+        Box::new(if shell_island().a > 0 {
+            row.box_shadow(design::island_shadow(s))
+        } else {
+            row
         })
     }
 }
 
 fn workspace_chip(label: &str, active: bool, scale: f32) -> BoxedWidget {
     let background = if active {
-        shell_accent()
+        shell_text()
     } else {
         Color::rgba(0, 0, 0, 0)
     };
     let color = if active {
-        Color::rgb(255, 255, 255)
+        let surface = creamui_theme::use_theme().colors.surface;
+        Color::rgb(surface.r, surface.g, surface.b)
     } else {
         shell_muted()
     };

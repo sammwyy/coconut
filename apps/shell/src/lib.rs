@@ -10,7 +10,7 @@ use coconut_api::audio::{AudioIntegration, Playback};
 use coconut_api::desktop::{DesktopIntegration, DesktopWorkArea, OpenWindow, WindowChangeListener};
 use coconut_core::{ipc::RuntimeEvent, DockConfig, DockPosition, ShellConfig, UserProfile};
 use coconut_plugin_app_drawer::AppCatalog;
-use coconut_plugin_app_launcher::{LauncherOpenSignal, WindowListState};
+use coconut_plugin_app_launcher::{LauncherOpenSignal, WindowIconResolver, WindowListState};
 use coconut_plugin_clock::{ClockConfig, ClockText};
 use coconut_plugin_current_playing::{
     CurrentPlayback, NextPlayback, PreviousPlayback, SeekPlayback, TogglePlayback,
@@ -55,6 +55,9 @@ pub fn run() {
 
     let shared = SharedState::default();
     shared.insert(bar::ModuleConfigRevision(Signal::new(0)));
+    shared.insert(WindowIconResolver(Signal::new(
+        coconut_plugin_kit::IconResolver::new(initial_config.appearance.icon_theme.clone()),
+    )));
 
     let windows = Signal::new(integrations.desktop.windows());
     let launcher_open = Signal::new(false);
@@ -422,6 +425,11 @@ fn schedule_runtime_events(
                         config.set(updated);
                         if icon_theme_changed {
                             let icon_theme = config.peek().appearance.icon_theme.clone();
+                            if let Some(resolver) = shared.get::<WindowIconResolver>() {
+                                resolver
+                                    .0
+                                    .set(coconut_plugin_kit::IconResolver::new(icon_theme.clone()));
+                            }
                             if let Some(catalog) = shared.get::<AppCatalog>() {
                                 catalog.start_loading(&app, icon_theme.clone());
                             }

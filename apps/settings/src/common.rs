@@ -6,7 +6,8 @@ use creamui_reactive::Signal;
 use creamui_theme::use_theme;
 use creamui_widgets::layout::{Align, Justify};
 use creamui_widgets::{
-    IconSource, RawScrollView, RawView, ScrollController, TabColors, Text, TextSize,
+    Icon, IconSource, RawButton, RawScrollView, RawView, ScrollController, Symbol, TabColors, Text,
+    TextSize,
 };
 
 pub fn settings_theme(theme: creamui_theme::Theme) -> creamui_theme::Theme {
@@ -19,6 +20,30 @@ pub fn load_settings_fonts() {
 
 pub fn icon_badge(icon: IconSource, color: creamui_theme::Color) -> BoxedWidget {
     coconut_plugin_kit::design::icon_badge(icon, color, 24.0)
+}
+
+pub fn back_button(on_click: impl Fn() + 'static) -> BoxedWidget {
+    let theme = use_theme();
+    Box::new(
+        RawButton::new(
+            creamui_core::layout::Style {
+                size: creamui_widgets::layout::fixed(28.0, 28.0),
+                flex_shrink: 0.0,
+                align_items: Some(creamui_core::layout::AlignItems::Center),
+                justify_content: Some(creamui_core::layout::JustifyContent::Center),
+                ..Default::default()
+            },
+            on_click,
+        )
+        .corner_radius(8.0)
+        .hover_style(creamui_core::StateStyle::new().background(theme.colors.surface_hover))
+        .pressed_style(
+            creamui_core::StateStyle::new().background(theme.colors.selection_background),
+        )
+        .child(Box::new(
+            Icon::new(Symbol::ChevronLeft, theme.colors.text_primary).size(20.0),
+        )),
+    )
 }
 
 /// The scrollable body of a settings page. Page chrome is owned by the

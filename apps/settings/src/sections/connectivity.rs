@@ -159,7 +159,7 @@ fn bluetooth_card(
     group(rows)
 }
 
-pub fn detail_header(state: &State, icons: &SettingsIcons, window_width: f32) -> BoxedWidget {
+pub fn detail_header(state: &State, window_width: f32) -> BoxedWidget {
     let label = match state.view.get() {
         View::Wifi(ssid) => ssid,
         View::KnownNetworks => "Known networks".into(),
@@ -172,7 +172,6 @@ pub fn detail_header(state: &State, icons: &SettingsIcons, window_width: f32) ->
         View::Overview => "Connectivity".into(),
     };
     let back = state.view.clone();
-    let theme = creamui_theme::use_theme();
     let decorations = creamui_render::use_window_decorations();
     let controls = decorations.controls;
     let right_padding = match decorations.mode {
@@ -196,8 +195,7 @@ pub fn detail_header(state: &State, icons: &SettingsIcons, window_width: f32) ->
     };
     Box::new(jsx! {
         <Flex direction={FlexDirection::Row} align={creamui_widgets::layout::Align::Center} gap={12.0} style={Style { flex_direction: FlexDirection::Row, flex_shrink: 0.0, size: creamui_core::layout::Size { width: Dimension::Percent(1.0), height: Dimension::Length(56.0) }, align_items: Some(creamui_core::layout::AlignItems::Center), padding: creamui_core::layout::Rect { left: LengthPercentage::Length(left_padding), right: LengthPercentage::Length(right_padding), top: LengthPercentage::Length(0.0), bottom: LengthPercentage::Length(0.0) }, ..Default::default() }}>
-            {Box::new(RawButton::new(Style { size: creamui_core::layout::Size { width: Dimension::Length(28.0), height: Dimension::Length(28.0) }, align_items: Some(creamui_core::layout::AlignItems::Center), justify_content: Some(creamui_core::layout::JustifyContent::Center), ..Default::default() }, move || back.set(View::Overview)).background(theme.colors.surface_hover).corner_radius(8.0).hover_style(creamui_core::StateStyle::new().background(theme.colors.selection_background)).child(Box::new(Icon::new(Symbol::ChevronLeft, theme.colors.text_secondary).size(20.0)) as BoxedWidget)) as BoxedWidget}
-            {crate::common::icon_badge(icons.status.clone(), theme.colors.accent)}
+            {crate::common::back_button(move || back.set(View::Overview))}
             {Box::new(Text::new(label).font_size(14.0).bold(true)) as BoxedWidget}
         </Flex>
     })

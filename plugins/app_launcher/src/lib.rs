@@ -8,7 +8,9 @@
 
 mod island;
 
-pub use island::{AppLauncherIsland, LauncherOpenSignal, OpenWindowsIsland, WindowListState};
+pub use island::{
+    AppLauncherIsland, LauncherOpenSignal, OpenWindowsIsland, WindowIconResolver, WindowListState,
+};
 
 use coconut_plugin_kit::{Island, Plugin, PluginInitContext};
 use std::rc::Rc;

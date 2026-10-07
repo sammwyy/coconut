@@ -78,7 +78,7 @@ pub fn island_surface(theme: Theme) -> Color {
         color.g,
         color.b,
         if color.r > 128 {
-            112
+            164
         } else if color.r <= 16 {
             234
         } else {
@@ -94,7 +94,7 @@ pub fn dock_surface(theme: Theme) -> Color {
         color.g,
         color.b,
         if color.r > 128 {
-            166
+            214
         } else if color.r <= 16 {
             244
         } else {

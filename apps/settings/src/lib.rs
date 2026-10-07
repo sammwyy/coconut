@@ -1045,7 +1045,7 @@ fn build(
     });
     let panel_content: BoxedWidget = if content_has_own_scroll {
         let header = if native_detail {
-            sections::native::detail_header(&current, view, icons, size.width)
+            sections::native::detail_header(&current, view, size.width)
         } else {
             page_header
         };
@@ -1120,9 +1120,9 @@ fn build(
         );
         if connectivity_detail || native_detail {
             let header = if connectivity_detail {
-                sections::connectivity::detail_header(connectivity, icons, size.width)
+                sections::connectivity::detail_header(connectivity, size.width)
             } else {
-                sections::native::detail_header(&current, view, icons, size.width)
+                sections::native::detail_header(&current, view, size.width)
             };
             Box::new(jsx! {
                 <Flex direction={FlexDirection::Column} grow={1.0} gap={0.0}>

@@ -71,7 +71,7 @@ impl Default for TrayConfig {
             wifi: TrayVisibility::default(),
             bluetooth: TrayVisibility::default(),
             battery: TrayVisibility::default(),
-            show_battery_percentage: false,
+            show_battery_percentage: true,
             volume: TrayVisibility::default(),
             brightness: TrayVisibility::default(),
         }

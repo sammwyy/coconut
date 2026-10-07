@@ -1,5 +1,7 @@
 # TODO
 
+- Implement native notification history and unread counts for the statusbar
+  notification capsule in the shell design.
 - `shell.toml` is only read at startup, including when edited through
   `coconut settings`; changes there require restarting the shell process to
   take effect. The active CreamUI theme (`cream/active_theme.toml`) is the

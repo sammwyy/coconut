@@ -1,14 +1,16 @@
 use coconut_api::desktop::OpenWindow;
+use coconut_core::DockPosition;
 use coconut_plugin_kit::chrome::{
-    shell_accent, shell_border, shell_control, shell_control_hover, shell_island, shell_selected,
-    shell_text,
+    island_style, shell_control, shell_control_hover, shell_island,
+    shell_island_border as shell_border, shell_selected, shell_text,
 };
 use coconut_plugin_kit::{
-    pixel_icon, ConfigField, ConfigValue, Island, IslandRenderContext, NumberRange,
+    design, pixel_icon, ConfigField, ConfigValue, IconRequest, IconResolver, Island,
+    IslandRenderContext, NumberRange,
 };
 use creamui_core::layout::{FlexDirection, Style as LayoutStyle};
-use creamui_core::{BoxedWidget, Point, StateStyle, Style, Styled, TextAlign};
-use creamui_image::{Image, ImageData, ImageFit};
+use creamui_core::{BoxedWidget, Point, StateStyle, Style, Styled};
+use creamui_image::{Image, ImageData, ImageFit, SvgSize};
 use creamui_macros::jsx;
 use creamui_reactive::Signal;
 use creamui_theme::Color;
@@ -19,8 +21,8 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::{Mutex, OnceLock};
 
-const TASK_SIZE: f32 = 32.0;
-const TASK_ICON_SIZE: f32 = 24.0;
+const TASK_SIZE: f32 = 28.0;
+const TASK_HEIGHT: f32 = 36.0;
 const MAX_TASKS: usize = 10;
 const SIDE_ITEM_SIZE: f32 = 36.0;
 
@@ -58,6 +60,9 @@ impl Default for WindowListState {
 #[derive(Clone)]
 pub struct LauncherOpenSignal(pub Signal<bool>);
 
+#[derive(Clone)]
+pub struct WindowIconResolver(pub Signal<IconResolver>);
+
 impl Default for LauncherOpenSignal {
     fn default() -> Self {
         Self(Signal::new(false))
@@ -89,19 +94,36 @@ impl Island for AppLauncherIsland {
             return side_icon_button_styled("appgrid", drawer_click, launcher_open, s);
         }
 
-        let background = if launcher_open {
-            creamui_theme::use_theme().colors.accent_pressed
-        } else {
-            shell_accent()
-        };
-        let foreground = Color::rgb(255, 255, 255);
-        Box::new(
-            RawButton::new(square_style(background, s), || {})
+        let background = creamui_core::LinearGradient::new(
+            180.0,
+            Color::rgb(155, 179, 188),
+            Color::rgb(76, 105, 120),
+        );
+        let launcher: BoxedWidget = Box::new(
+            RawButton::new(square_style(s), || {})
                 .with_click_position(move |point| drawer_click(point))
                 .child(Box::new(jsx! {
-                    <Flex size={(TASK_SIZE * s, TASK_SIZE * s)} align={Align::Center} justify={Justify::Center}>{pixel_icon("appgrid", 19.0 * s, foreground)}</Flex>
+                    <Flex direction={FlexDirection::Column} size={(TASK_SIZE * s, TASK_HEIGHT * s)} gap={3.0 * s} align={Align::Center} justify={Justify::Center}>
+                        <Flex size={(TASK_SIZE * s, TASK_SIZE * s)} background={background} border={(shell_border(), 1.0)} corner_radius={8.0 * s} box_shadow={design::card_shadow()} align={Align::Center} justify={Justify::Center}>{pixel_icon("appgrid", 17.0 * s, Color::rgb(255, 255, 255))}</Flex>
+                        <Flex size={(2.5 * s, 2.5 * s)} background={if launcher_open { shell_text() } else { Color::rgba(0, 0, 0, 0) }} corner_radius={1.25 * s} />
+                    </Flex>
                 })),
-        )
+        );
+        if window_list_state(ctx).windows.get().is_empty() {
+            launcher
+        } else {
+            Box::new(
+                Flex::row()
+                    .align(Align::Center)
+                    .gap(6.0 * s)
+                    .child(launcher)
+                    .child(Box::new(
+                        Flex::column()
+                            .size(1.0 * s, TASK_SIZE * s)
+                            .background(coconut_plugin_kit::apply_opacity(shell_text(), 0.12)),
+                    )),
+            )
+        }
     }
 }
 
@@ -116,7 +138,8 @@ impl Island for OpenWindowsIsland {
     fn config_schema(&self) -> Vec<ConfigField> {
         vec![
             ConfigField::slider(ICON_SCALE_KEY, "Icon size", 100.0, ICON_SCALE_RANGE, "%"),
-            ConfigField::toggle(SHOW_BACKGROUND_KEY, "Icon background", true),
+            ConfigField::toggle(SHOW_BACKGROUND_KEY, "Icon background", false),
+            ConfigField::toggle("compact", "Compact statusbar icons", false),
         ]
     }
 
@@ -135,9 +158,18 @@ impl Island for OpenWindowsIsland {
             .config
             .get(SHOW_BACKGROUND_KEY)
             .and_then(ConfigValue::as_bool)
-            .unwrap_or(true);
+            .unwrap_or(false);
         let window_state = window_list_state(ctx);
         let windows = window_state.windows.get();
+        let compact = ctx
+            .config
+            .get("compact")
+            .and_then(ConfigValue::as_bool)
+            .unwrap_or(ctx.position == DockPosition::Top);
+        let resolver = ctx
+            .shared
+            .get::<WindowIconResolver>()
+            .map(|resolver| resolver.0.get());
 
         if ctx.position.is_vertical() {
             return side_window_list(
@@ -146,6 +178,7 @@ impl Island for OpenWindowsIsland {
                 window_state.refresh,
                 scale,
                 show_background,
+                resolver.as_ref(),
             );
         }
         window_list_widget(
@@ -154,6 +187,8 @@ impl Island for OpenWindowsIsland {
             window_state.refresh,
             scale,
             show_background,
+            compact,
+            resolver.as_ref(),
         )
     }
 }
@@ -168,32 +203,30 @@ fn window_list_widget(
     refresh_windows: Rc<dyn Fn()>,
     scale: f32,
     show_background: bool,
+    compact: bool,
+    resolver: Option<&IconResolver>,
 ) -> BoxedWidget {
     let count = windows.len().min(MAX_TASKS);
     let mut strip = Flex::row().gap(6.0 * scale).align(Align::Center);
     for entry in windows.into_iter().take(MAX_TASKS) {
         let id = entry.id.clone();
-        let selected = entry.active;
         let activate = activate_window.clone();
         let refresh = refresh_windows.clone();
-        let icon = task_icon(&entry, selected, scale);
+        let icon = task_icon(&entry, scale, compact, resolver);
         strip = strip.child(Box::new(
-            RawButton::new(window_style(selected, scale, show_background), move || {
+            RawButton::new(window_style(scale, show_background, compact), move || {
                 activate(id.clone());
                 refresh();
             })
             .child(icon),
         ));
     }
-    let padding = 0.0;
-    let width = count as f32 * TASK_SIZE * scale
-        + count.saturating_sub(1) as f32 * 6.0 * scale
-        + padding * 2.0;
-    let height = TASK_SIZE * scale + padding * 2.0;
+    let width = count as f32 * if compact { 46.0 } else { TASK_SIZE } * scale
+        + count.saturating_sub(1) as f32 * 6.0 * scale;
+    let height = if compact { 32.0 } else { TASK_HEIGHT } * scale;
     Box::new(
         Flex::row()
             .size(width, height)
-            .padding(padding)
             .align(Align::Center)
             .child(Box::new(strip)),
     )
@@ -205,6 +238,7 @@ fn side_window_list(
     refresh_windows: Rc<dyn Fn()>,
     scale: f32,
     show_background: bool,
+    resolver: Option<&IconResolver>,
 ) -> BoxedWidget {
     let mut column = Flex::column()
         .padding(4.0 * scale)
@@ -215,15 +249,14 @@ fn side_window_list(
         .corner_radius(16.0 * scale);
     for entry in windows.into_iter().take(MAX_TASKS) {
         let id = entry.id.clone();
-        let active = entry.active;
         let activate = activate_window.clone();
         let refresh = refresh_windows.clone();
         column = column.child(Box::new(
-            RawButton::new(window_style(active, scale, show_background), move || {
+            RawButton::new(window_style(scale, show_background, false), move || {
                 activate(id.clone());
                 refresh();
             })
-            .child(task_icon(&entry, active, scale)),
+            .child(task_icon(&entry, scale, false, resolver)),
         ));
     }
     Box::new(column)
@@ -260,39 +293,65 @@ fn side_icon_button_styled(
     )
 }
 
-fn task_icon(window: &OpenWindow, active: bool, scale: f32) -> BoxedWidget {
-    let indicator_width = (if active { 10.0 } else { 3.0 }) * scale;
-    let indicator_color = if active {
-        shell_accent()
+fn task_icon(
+    window: &OpenWindow,
+    scale: f32,
+    compact: bool,
+    resolver: Option<&IconResolver>,
+) -> BoxedWidget {
+    if compact {
+        return Box::new(
+            Flex::row()
+                .size(46.0 * scale, 32.0 * scale)
+                .align(Align::Center)
+                .justify(Justify::Center)
+                .child(app_icon(window, 24.0 * scale, resolver)),
+        );
+    }
+    let indicator_color = if window.active {
+        shell_text()
     } else {
         Color::rgba(0, 0, 0, 0)
     };
     let task_size = TASK_SIZE * scale;
     Box::new(jsx! {
-        <Flex direction={FlexDirection::Column} size={(task_size, task_size)} gap={1.0 * scale} align={Align::Center} justify={Justify::Center}>
-            <Flex size={(TASK_ICON_SIZE * scale, TASK_ICON_SIZE * scale)} align={Align::Center} justify={Justify::Center}>{app_icon(window, scale)}</Flex>
-            <Flex size={(indicator_width, 3.0 * scale)} background={indicator_color} corner_radius={1.5 * scale} />
+        <Flex direction={FlexDirection::Column} size={(task_size, TASK_HEIGHT * scale)} gap={3.0 * scale} align={Align::Center} justify={Justify::Center}>
+            {app_icon(window, task_size, resolver)}
+            <Flex size={(2.5 * scale, 2.5 * scale)} background={indicator_color} corner_radius={1.25 * scale} />
         </Flex>
     })
 }
 
-fn app_icon(window: &OpenWindow, scale: f32) -> BoxedWidget {
-    let icon_size = TASK_ICON_SIZE * scale;
-    if let Some(data) = window.icon_path.as_ref().and_then(cached_icon_data) {
-        return Box::new(
-            Image::new(data)
-                .layout(LayoutStyle {
-                    size: fixed(22.0 * scale, 22.0 * scale),
-                    ..Default::default()
+fn app_icon(window: &OpenWindow, size: f32, resolver: Option<&IconResolver>) -> BoxedWidget {
+    let data = if window.app_name.is_empty() {
+        None
+    } else {
+        resolver.and_then(|resolver| {
+            resolver
+                .resolve(IconRequest {
+                    names: vec![
+                        window.app_name.clone(),
+                        window.app_name.to_ascii_lowercase(),
+                    ],
+                    size: size.ceil() as u32,
+                    scale: 1,
                 })
-                .fit(ImageFit::Contain),
-        );
+                .and_then(|path| cached_icon_data(&path))
+        })
     }
-    Box::new(jsx! {
-        <Flex size={(icon_size, icon_size)} align={Align::Center} justify={Justify::Center} background={shell_control()} corner_radius={7.0 * scale}>
-            <RawText color={shell_text()} font_size={11.0 * scale} align={TextAlign::Center}>{fallback_icon(&window.app_name)}</RawText>
-        </Flex>
-    })
+    .or_else(|| window.icon_path.as_ref().and_then(cached_icon_data))
+    .unwrap_or_else(|| fallback_icon_data(window));
+    Box::new(
+        Image::new(data)
+            .layout(LayoutStyle {
+                size: fixed(size, size),
+                flex_shrink: 0.0,
+                ..Default::default()
+            })
+            .fit(ImageFit::Contain)
+            .corner_radius(size * 0.27)
+            .box_shadow(design::card_shadow()),
+    )
 }
 
 /// Retains decoded window icons across rebuilds (clock ticks, playback
@@ -333,26 +392,80 @@ fn decode_svg_icon(path: &Path) -> Option<ImageData> {
     ImageData::from_bytes(&pixmap.encode_png().ok()?).ok()
 }
 
-fn fallback_icon(app_name: &str) -> String {
-    app_name
-        .chars()
-        .next()
-        .unwrap_or('•')
-        .to_uppercase()
-        .to_string()
+fn fallback_icon_kind(window: &OpenWindow) -> &'static str {
+    let name = format!("{} {}", window.app_name, window.title).to_lowercase();
+    if [
+        "settings",
+        "systemsettings",
+        "preferencias",
+        "configuración",
+    ]
+    .iter()
+    .any(|key| name.contains(key))
+    {
+        "settings"
+    } else if ["dolphin", "nautilus", "thunar", "files", "archivos"]
+        .iter()
+        .any(|key| name.contains(key))
+    {
+        "files"
+    } else if ["spotify", "music", "rhythmbox", "elisa", "música"]
+        .iter()
+        .any(|key| name.contains(key))
+    {
+        "music"
+    } else if ["notes", "notas", "gedit", "kate", "text editor"]
+        .iter()
+        .any(|key| name.contains(key))
+    {
+        "notes"
+    } else if ["calendar", "calendario", "korganizer"]
+        .iter()
+        .any(|key| name.contains(key))
+    {
+        "calendar"
+    } else if ["weather", "clima"].iter().any(|key| name.contains(key)) {
+        "weather"
+    } else {
+        "generic"
+    }
 }
 
-fn square_style(background: Color, scale: f32) -> Style {
+fn fallback_icon_data(window: &OpenWindow) -> ImageData {
+    thread_local! {
+        static ICONS: std::cell::RefCell<HashMap<&'static str, ImageData>> = std::cell::RefCell::new(HashMap::new());
+    }
+    let kind = fallback_icon_kind(window);
+    ICONS.with(|icons| {
+        icons
+            .borrow_mut()
+            .entry(kind)
+            .or_insert_with(|| {
+                let bytes: &[u8] = match kind {
+                    "settings" => include_bytes!("../../../assets/icons/apps/app-settings.svg"),
+                    "files" => include_bytes!("../../../assets/icons/apps/app-files.svg"),
+                    "music" => include_bytes!("../../../assets/icons/apps/app-music.svg"),
+                    "notes" => include_bytes!("../../../assets/icons/apps/app-notes.svg"),
+                    "calendar" => include_bytes!("../../../assets/icons/apps/app-calendar.svg"),
+                    "weather" => include_bytes!("../../../assets/icons/apps/app-weather.svg"),
+                    _ => include_bytes!("../../../assets/icons/apps/app-generic.svg"),
+                };
+                ImageData::from_svg(bytes, SvgSize::Max(128))
+                    .expect("bundled application icon must decode")
+            })
+            .clone()
+    })
+}
+
+fn square_style(scale: f32) -> Style {
     Style::new()
         .layout(LayoutStyle {
-            size: fixed(TASK_SIZE * scale, TASK_SIZE * scale),
+            size: fixed(TASK_SIZE * scale, TASK_HEIGHT * scale),
             ..Default::default()
         })
-        .background(background)
-        .border(shell_border(), 1.0)
         .corner_radius(10.0 * scale)
-        .hover(StateStyle::new().background(creamui_theme::use_theme().colors.accent_hover))
-        .pressed(StateStyle::new().background(creamui_theme::use_theme().colors.accent_pressed))
+        .hover(StateStyle::new().background(shell_control_hover()))
+        .pressed(StateStyle::new().background(shell_selected()))
 }
 
 fn side_button_style(background: Color, scale: f32) -> Style {
@@ -367,20 +480,20 @@ fn side_button_style(background: Color, scale: f32) -> Style {
         .pressed(StateStyle::new().background(shell_text()))
 }
 
-fn window_style(active: bool, scale: f32, show_background: bool) -> Style {
-    let background = if active {
-        shell_selected()
-    } else if show_background {
-        shell_control()
-    } else {
-        Color::rgba(0, 0, 0, 0)
-    };
+fn window_style(scale: f32, show_background: bool, compact: bool) -> Style {
+    if compact {
+        return island_style(46.0 * scale, 32.0 * scale, scale);
+    }
     Style::new()
         .layout(LayoutStyle {
-            size: fixed(TASK_SIZE * scale, TASK_SIZE * scale),
+            size: fixed(TASK_SIZE * scale, TASK_HEIGHT * scale),
             ..Default::default()
         })
-        .background(background)
+        .background(if show_background {
+            shell_island()
+        } else {
+            Color::rgba(0, 0, 0, 0)
+        })
         .corner_radius(10.0 * scale)
         .hover(StateStyle::new().background(shell_control_hover()))
         .pressed(StateStyle::new().background(shell_selected()))
@@ -388,11 +501,32 @@ fn window_style(active: bool, scale: f32, show_background: bool) -> Style {
 
 #[cfg(test)]
 mod tests {
-    use super::fallback_icon;
+    use super::{fallback_icon_data, fallback_icon_kind};
+    use coconut_api::desktop::OpenWindow;
 
     #[test]
-    fn fallback_uses_the_app_initial() {
-        assert_eq!(fallback_icon("firefox"), "F");
+    fn unnamed_windows_use_the_title_for_a_decodable_icon() {
+        for (title, kind) in [
+            ("Coconut Settings", "settings"),
+            ("Files", "files"),
+            ("Music", "music"),
+            ("Notes", "notes"),
+            ("Calendar", "calendar"),
+            ("Weather", "weather"),
+            ("Untitled", "generic"),
+        ] {
+            let window = OpenWindow {
+                id: "1".into(),
+                app_name: String::new(),
+                title: title.into(),
+                icon_path: None,
+                active: true,
+            };
+            assert_eq!(fallback_icon_kind(&window), kind);
+            let data = fallback_icon_data(&window);
+            assert_eq!(data.width(), 128);
+            assert_eq!(data.height(), 128);
+        }
     }
 
     #[test]

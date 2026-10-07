@@ -6,7 +6,7 @@ use creamui_core::{BoxedWidget, Style, TextAlign};
 use creamui_macros::jsx;
 use creamui_reactive::Signal;
 use creamui_widgets::layout::{Align, Justify};
-use creamui_widgets::{RawButton, RawMarquee};
+use creamui_widgets::RawButton;
 
 const SIDE_ITEM_SIZE: f32 = 36.0;
 
@@ -51,22 +51,19 @@ impl Island for WeatherIsland {
             .map(|signal| signal.get())
             .unwrap_or(WeatherState::Loading);
         let icon = weather_icon(&weather);
-        let temperature = weather.bar_temperature();
-        let condition: BoxedWidget = Box::new(RawMarquee::new(
-            weather.bar_condition(),
-            shell_text(),
-            11.0 * s,
-            58.0 * s,
-        ));
+        let temperature = if matches!(&weather, WeatherState::Ready(_)) {
+            format!("{}C", weather.bar_temperature())
+        } else {
+            weather.bar_temperature()
+        };
 
         Box::new(
             RawButton::new(island_button_style(s), || {})
                 .with_click_position(move |point| open("weather", point))
                 .child(Box::new(jsx! {
-                    <Flex direction={FlexDirection::Row} size={(120.0 * s, 32.0 * s)} padding={6.0 * s} gap={4.0 * s} align={Align::Center}>
-                        {pixel_icon(icon, 14.0 * s, shell_text())}
-                        <RawText color={shell_text()} font_size={11.0 * s} width={32.0 * s} align={TextAlign::Start}>{temperature}</RawText>
-                        {condition}
+                    <Flex direction={FlexDirection::Row} size={(76.0 * s, 32.0 * s)} padding={10.0 * s} gap={6.0 * s} align={Align::Center} justify={Justify::Center}>
+                        {pixel_icon(icon, 14.0 * s, creamui_theme::use_theme().colors.warning)}
+                        <RawText color={shell_text()} font_size={11.0 * s} bold={true} align={TextAlign::Start}>{temperature}</RawText>
                     </Flex>
                 })),
         )
@@ -82,7 +79,7 @@ fn weather_icon(weather: &WeatherState) -> &'static str {
 }
 
 fn island_button_style(scale: f32) -> Style {
-    island_style(120.0 * scale, 32.0 * scale, scale)
+    island_style(76.0 * scale, 32.0 * scale, scale)
 }
 
 fn side_button_style(scale: f32) -> Style {

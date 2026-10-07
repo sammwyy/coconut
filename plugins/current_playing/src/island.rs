@@ -88,7 +88,7 @@ fn compact_playback_widget(
     scale: f32,
 ) -> BoxedWidget {
     let metadata = track_metadata(playback, scale);
-    let width = if playback.is_some() { 236.0 } else { 108.0 } * scale;
+    let width = if playback.is_some() { 268.0 } else { 108.0 } * scale;
     let play_icon = if playback.is_some_and(|item| item.status == "Playing") {
         "player_pause"
     } else {
@@ -98,9 +98,10 @@ fn compact_playback_widget(
         RawButton::new(island_button_style(width, scale), || {})
             .with_click_position(move |point| open("current_playing", point))
             .child(Box::new(jsx! {
-                <Flex direction={FlexDirection::Row} size={(width, 32.0 * scale)} padding={4.0 * scale} gap={3.0 * scale} align={Align::Center}>
+                <Flex direction={FlexDirection::Row} size={(width, 32.0 * scale)} padding={6.0 * scale} gap={6.0 * scale} align={Align::Center}>
                     {music_cover(playback, scale)}
                     {metadata}
+                    <Flex size={(1.0 * scale, 14.0 * scale)} background={coconut_plugin_kit::chrome::shell_border()} />
                     {compact_media_button("player_previous", previous, scale, false)}
                     {compact_media_button(play_icon, toggle, scale, true)}
                     {compact_media_button("player_next", next, scale, false)}
@@ -114,23 +115,24 @@ fn track_metadata(playback: Option<&Playback>, scale: f32) -> BoxedWidget {
         return Box::new(creamui_widgets::layout::Flex::row().size(0.0, 0.0));
     };
     Box::new(
-        creamui_widgets::layout::Flex::column()
-            .size(88.0 * scale, 24.0 * scale)
-            .justify(Justify::Center)
+        creamui_widgets::layout::Flex::row()
+            .size(148.0 * scale, 24.0 * scale)
+            .gap(8.0 * scale)
+            .align(Align::Center)
             .child(Box::new(
                 RawMarquee::new(
                     playback.title.clone(),
                     shell_text(),
                     11.0 * scale,
-                    88.0 * scale,
+                    66.0 * scale,
                 )
                 .bold(true),
             ))
             .child(Box::new(RawMarquee::new(
                 playback.artist.clone(),
                 shell_muted(),
-                10.0 * scale,
-                88.0 * scale,
+                11.0 * scale,
+                74.0 * scale,
             ))),
     )
 }
@@ -152,7 +154,7 @@ fn compact_media_button(
         RawButton::new(media_control_style(size, primary), || {})
             .with_click_position(move |_| on_click())
             .child(Box::new(jsx! {
-                <Flex size={(size, 24.0 * scale)} align={Align::Center} justify={Justify::Center}>
+                <Flex size={(size, size)} align={Align::Center} justify={Justify::Center}>
                     {pixel_icon(icon, 13.0 * scale, icon_color)}
                 </Flex>
             })),
@@ -160,7 +162,7 @@ fn compact_media_button(
 }
 
 fn music_cover(playback: Option<&Playback>, scale: f32) -> BoxedWidget {
-    let size = 24.0 * scale;
+    let size = 20.0 * scale;
     let Some(data) = playback
         .and_then(|item| item.art_url.as_ref())
         .and_then(safe_image_data)
@@ -169,7 +171,11 @@ fn music_cover(playback: Option<&Playback>, scale: f32) -> BoxedWidget {
             .and_then(|item| item.app_icon.as_ref())
             .and_then(safe_image_data)
         else {
-            return Box::new(jsx! { <Flex size={(size, size)} /> });
+            return Box::new(jsx! {
+                <Flex size={(size, size)} background={shell_card()} corner_radius={4.0 * scale} align={Align::Center} justify={Justify::Center}>
+                    {pixel_icon("music-note", 14.0 * scale, shell_muted())}
+                </Flex>
+            });
         };
         return Box::new(
             Image::new(data)
@@ -177,7 +183,8 @@ fn music_cover(playback: Option<&Playback>, scale: f32) -> BoxedWidget {
                     size: fixed(size, size),
                     ..Default::default()
                 })
-                .fit(ImageFit::Contain),
+                .fit(ImageFit::Contain)
+                .corner_radius(4.0 * scale),
         );
     };
     Box::new(
@@ -186,7 +193,8 @@ fn music_cover(playback: Option<&Playback>, scale: f32) -> BoxedWidget {
                 size: fixed(size, size),
                 ..Default::default()
             })
-            .fit(ImageFit::Cover),
+            .fit(ImageFit::Cover)
+            .corner_radius(4.0 * scale),
     )
 }
 
