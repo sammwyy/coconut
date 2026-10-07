@@ -1,6 +1,6 @@
 use coconut_api::desktop::DesktopWorkArea;
 use coconut_core::{ClickAction, DesktopIconsConfig, IconShape, ShellConfig, WallpaperMode};
-use coconut_plugin_kit::{build_icon_index, load_icon, pixel_icon, resolve_icon};
+use coconut_plugin_kit::{pixel_icon, IconRequest, IconResolver};
 use creamui_core::layout::{
     Dimension, FlexDirection, LengthPercentageAuto, Position, Rect as LayoutRect,
     Size as LayoutSize, Style as LayoutStyle,
@@ -61,6 +61,7 @@ struct IconLayout {
     background: bool,
     background_color: Color,
     foreground: Color,
+    label_color: Color,
     hover: Color,
     pressed: Color,
     border: Color,
@@ -69,7 +70,7 @@ struct IconLayout {
 }
 
 impl IconLayout {
-    fn from_config(config: &DesktopIconsConfig, colors: ColorScheme) -> Self {
+    fn from_config(config: &DesktopIconsConfig, colors: ColorScheme, label_color: Color) -> Self {
         let icon_box = config.size.max(24.0);
         let scale = icon_box / BASE_ICON;
         let padding = config.padding.clamp(0.0, icon_box / 2.0 - 4.0).max(0.0);
@@ -110,6 +111,7 @@ impl IconLayout {
                 config.background_color.b,
             ),
             foreground: colors.text_primary,
+            label_color,
             hover: colors.surface_hover,
             pressed: colors.accent_pressed,
             border: colors.border,
@@ -232,7 +234,12 @@ pub fn build(
     let shell = config.get();
     let desktop = shell.desktop;
     let theme = use_theme();
-    let layout = IconLayout::from_config(&desktop.icons, theme.colors);
+    // Labels need to contrast with what is actually behind the desktop, not
+    // with the active application theme. This also keeps them readable when a
+    // light theme is used with a dark wallpaper (and vice versa).
+    let wallpaper = configured_wallpaper(desktop.wallpaper.clone());
+    let label_color = desktop_label_color(&desktop, wallpaper.as_ref(), theme.colors.surface);
+    let layout = IconLayout::from_config(&desktop.icons, theme.colors, label_color);
     let dock_position = shell.dockbar.position;
     let dock_thickness = shell.dockbar.thickness.max(1.0);
     let work_area = usable_area(viewport, work_area.get(), dock_position, dock_thickness);
@@ -246,14 +253,17 @@ pub fn build(
                 .background(theme.colors.surface),
         )
         .with_children(vec![
-            wallpaper_layer(desktop),
+            wallpaper_layer(desktop, wallpaper),
             widget_layer(),
             icon_layer(viewport, state, layout, work_area),
         ]),
     )
 }
 
-fn wallpaper_layer(config: coconut_core::DesktopConfig) -> BoxedWidget {
+fn wallpaper_layer(
+    config: coconut_core::DesktopConfig,
+    wallpaper: Option<ImageData>,
+) -> BoxedWidget {
     if config.wallpaper_mode == WallpaperMode::SolidColor {
         return Box::new(RawView::new(fill_layout()).background(Color::rgb(
             config.solid_color.r,
@@ -261,11 +271,84 @@ fn wallpaper_layer(config: coconut_core::DesktopConfig) -> BoxedWidget {
             config.solid_color.b,
         )));
     }
-    configured_wallpaper(config.wallpaper)
+    wallpaper
         .map(|data| {
             Box::new(Image::new(data).layout(fill_layout()).fit(ImageFit::Cover)) as BoxedWidget
         })
         .unwrap_or_else(|| Box::new(RawView::new(fill_layout())))
+}
+
+/// Returns a legible label color from the rendered desktop background.
+///
+/// Wallpaper pixels are premultiplied RGBA, so the RGB channels are first
+/// composited over the fallback surface before calculating luminance. Sampling
+/// caps the work for large photographs while still representing the whole
+/// image. A solid desktop has an exact background color, of course.
+fn desktop_label_color(
+    config: &coconut_core::DesktopConfig,
+    wallpaper: Option<&ImageData>,
+    fallback: Color,
+) -> Color {
+    let background = if config.wallpaper_mode == WallpaperMode::SolidColor {
+        Color::rgb(
+            config.solid_color.r,
+            config.solid_color.g,
+            config.solid_color.b,
+        )
+    } else {
+        wallpaper
+            .map(|image| average_wallpaper_color(image, fallback))
+            .unwrap_or(fallback)
+    };
+
+    // Pick the higher-contrast endpoint. Their contrast ratios cross at
+    // roughly 0.179 relative luminance, rather than at a perceptual 50% grey.
+    if relative_luminance(background) < 0.179 {
+        Color::rgb(255, 255, 255)
+    } else {
+        Color::rgb(0, 0, 0)
+    }
+}
+
+fn average_wallpaper_color(image: &ImageData, fallback: Color) -> Color {
+    let pixels = image.pixels();
+    let pixel_count = (image.width() as usize).saturating_mul(image.height() as usize);
+    // At most 16k evenly distributed samples; this is called during widget
+    // rebuilds and wallpapers may be several megapixels.
+    let stride = (pixel_count / 16_384).max(1);
+    let mut red = 0.0;
+    let mut green = 0.0;
+    let mut blue = 0.0;
+    let mut samples = 0usize;
+
+    for pixel in pixels.chunks_exact(4).step_by(stride) {
+        let alpha = pixel[3] as f32 / 255.0;
+        red += pixel[0] as f32 + fallback.r as f32 * (1.0 - alpha);
+        green += pixel[1] as f32 + fallback.g as f32 * (1.0 - alpha);
+        blue += pixel[2] as f32 + fallback.b as f32 * (1.0 - alpha);
+        samples += 1;
+    }
+
+    if samples == 0 {
+        return fallback;
+    }
+    Color::rgb(
+        (red / samples as f32).round() as u8,
+        (green / samples as f32).round() as u8,
+        (blue / samples as f32).round() as u8,
+    )
+}
+
+fn relative_luminance(color: Color) -> f32 {
+    fn linear(channel: u8) -> f32 {
+        let channel = channel as f32 / 255.0;
+        if channel <= 0.04045 {
+            channel / 12.92
+        } else {
+            ((channel + 0.055) / 1.055).powf(2.4)
+        }
+    }
+    0.2126 * linear(color.r) + 0.7152 * linear(color.g) + 0.0722 * linear(color.b)
 }
 
 fn widget_layer() -> BoxedWidget {
@@ -427,7 +510,7 @@ fn icon_content(entry: &DesktopEntry, layout: &IconLayout, selected: bool) -> Bo
             <Flex size={(layout.icon_box, layout.icon_box)} align={Align::Center} justify={Justify::Center} background={fill} border={border} corner_radius={layout.corner_radius}>
                 {icon}
             </Flex>
-            <RawText color={layout.foreground} font_size={layout.label_font} width={layout.icon_box}>{label}</RawText>
+            <RawText color={layout.label_color} font_size={layout.label_font} width={layout.icon_box}>{label}</RawText>
         </Flex>
     })
 }
@@ -482,19 +565,19 @@ fn configured_wallpaper(wallpaper: Option<PathBuf>) -> Option<ImageData> {
 }
 
 fn load_entries(icon_theme: &str) -> Vec<DesktopEntry> {
-    let icon_index = build_icon_index(icon_theme);
+    let icons = IconResolver::new(icon_theme);
     let mut entries: Vec<_> = fs::read_dir(desktop_directory())
         .ok()
         .into_iter()
         .flatten()
         .flatten()
-        .filter_map(|entry| desktop_entry(entry.path(), &icon_index))
+        .filter_map(|entry| desktop_entry(entry.path(), &icons))
         .collect();
     entries.sort_by_key(|entry| entry.label.to_ascii_lowercase());
     entries
 }
 
-fn desktop_entry(path: PathBuf, icon_index: &HashMap<String, PathBuf>) -> Option<DesktopEntry> {
+fn desktop_entry(path: PathBuf, icons: &IconResolver) -> Option<DesktopEntry> {
     let name = path.file_name()?.to_str()?;
     if name.starts_with('.') {
         return None;
@@ -502,7 +585,7 @@ fn desktop_entry(path: PathBuf, icon_index: &HashMap<String, PathBuf>) -> Option
     if path.is_dir() {
         return Some(DesktopEntry {
             label: name.to_owned(),
-            icon: None,
+            icon: load_best_icon(icons, &folder_icon_names(&path), ICON_RASTER_SIZE),
             kind: EntryKind::Folder,
             target: DesktopTarget::Path(path),
         });
@@ -511,17 +594,17 @@ fn desktop_entry(path: PathBuf, icon_index: &HashMap<String, PathBuf>) -> Option
         .extension()
         .is_some_and(|extension| extension == "desktop")
     {
-        return launcher_entry(&path, icon_index);
+        return launcher_entry(&path, icons);
     }
     Some(DesktopEntry {
         label: name.to_owned(),
-        icon: None,
+        icon: load_best_icon(icons, &file_icon_names(&path), ICON_RASTER_SIZE),
         kind: EntryKind::File,
         target: DesktopTarget::Path(path),
     })
 }
 
-fn launcher_entry(path: &Path, icon_index: &HashMap<String, PathBuf>) -> Option<DesktopEntry> {
+fn launcher_entry(path: &Path, icons: &IconResolver) -> Option<DesktopEntry> {
     let contents = fs::read_to_string(path).ok()?;
     let mut fields = HashMap::new();
     let mut in_desktop_entry = false;
@@ -544,8 +627,7 @@ fn launcher_entry(path: &Path, icon_index: &HashMap<String, PathBuf>) -> Option<
     let (program, args) = args.split_first()?;
     let icon = fields
         .get("Icon")
-        .and_then(|name| resolve_icon(name, icon_index))
-        .and_then(|path| load_icon(&path, ICON_RASTER_SIZE));
+        .and_then(|name| icons.load(IconRequest::named(*name, ICON_RASTER_SIZE)));
     Some(DesktopEntry {
         label: fields
             .get("Name[en_US]")
@@ -560,6 +642,89 @@ fn launcher_entry(path: &Path, icon_index: &HashMap<String, PathBuf>) -> Option<
             terminal: fields.get("Terminal") == Some(&"true"),
         },
     })
+}
+
+fn load_best_icon(icons: &IconResolver, names: &[String], size: u32) -> Option<ImageData> {
+    icons.load(IconRequest {
+        names: names.to_vec(),
+        size,
+        scale: 1,
+    })
+}
+
+fn folder_icon_names(path: &Path) -> Vec<String> {
+    let mut names = Vec::new();
+    if let Some(home) = std::env::var_os("HOME").map(PathBuf::from) {
+        if path == home {
+            names.push("user-home".into());
+        }
+    }
+    for (key, icon) in [
+        ("DESKTOP", "user-desktop"),
+        ("DOCUMENTS", "folder-documents"),
+        ("DOWNLOAD", "folder-download"),
+        ("MUSIC", "folder-music"),
+        ("PICTURES", "folder-pictures"),
+        ("PUBLICSHARE", "folder-publicshare"),
+        ("TEMPLATES", "folder-templates"),
+        ("VIDEOS", "folder-videos"),
+    ] {
+        if xdg_user_dir(key).as_deref() == Some(path) {
+            names.push(icon.into());
+            break;
+        }
+    }
+    names.push("folder".into());
+    names
+}
+
+fn file_icon_names(path: &Path) -> Vec<String> {
+    let mime = mime_type(path);
+    let mut names = Vec::new();
+    if let Some(mime) = mime.as_deref() {
+        names.push(mime.replace('/', "-"));
+        let generic = match mime.split_once('/').map(|(top, _)| top) {
+            Some("text") => "text-x-generic",
+            Some("image") => "image-x-generic",
+            Some("audio") => "audio-x-generic",
+            Some("video") => "video-x-generic",
+            Some("font") => "font-x-generic",
+            Some("application") if is_executable(path) => "application-x-executable",
+            _ => "application-octet-stream",
+        };
+        names.push(generic.into());
+    }
+    if is_executable(path) {
+        names.push("application-x-executable".into());
+    }
+    names.push("text-x-generic".into());
+    names
+}
+
+fn mime_type(path: &Path) -> Option<String> {
+    let output = Command::new("xdg-mime")
+        .args(["query", "filetype"])
+        .arg(path)
+        .output()
+        .ok()?;
+    output
+        .status
+        .success()
+        .then(|| String::from_utf8_lossy(&output.stdout).trim().to_owned())
+        .filter(|mime| mime.contains('/'))
+}
+
+#[cfg(unix)]
+fn is_executable(path: &Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    fs::metadata(path)
+        .map(|metadata| metadata.permissions().mode() & 0o111 != 0)
+        .unwrap_or(false)
+}
+
+#[cfg(not(unix))]
+fn is_executable(_: &Path) -> bool {
+    false
 }
 
 fn parse_exec(value: &str) -> Vec<String> {
@@ -606,13 +771,17 @@ fn desktop_directory() -> PathBuf {
 }
 
 fn desktop_directory_from_config() -> Option<PathBuf> {
+    xdg_user_dir("DESKTOP")
+}
+
+fn xdg_user_dir(name: &str) -> Option<PathBuf> {
     let config = std::env::var_os("XDG_CONFIG_HOME")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")))?;
     let contents = fs::read_to_string(config.join("user-dirs.dirs")).ok()?;
     let value = contents
         .lines()
-        .find_map(|line| line.strip_prefix("XDG_DESKTOP_DIR="))?
+        .find_map(|line| line.strip_prefix(&format!("XDG_{name}_DIR=")))?
         .trim()
         .trim_matches('"');
     let home = std::env::var_os("HOME").map(PathBuf::from)?;
@@ -730,7 +899,8 @@ fn icon_position_in_area(
                 area.x + GRID_INSET,
                 area.x + grid_limit_x(area.width, layout),
             ),
-        y: (GRID_INSET
+        y: (area.y
+            + GRID_INSET
             + ((position.y - area.y - GRID_INSET) / layout.grid_cell_y).round()
                 * layout.grid_cell_y)
             .clamp(
@@ -798,7 +968,11 @@ mod tests {
     use super::*;
 
     fn test_layout() -> IconLayout {
-        IconLayout::from_config(&DesktopIconsConfig::default(), ColorScheme::default())
+        IconLayout::from_config(
+            &DesktopIconsConfig::default(),
+            ColorScheme::default(),
+            Color::rgb(255, 255, 255),
+        )
     }
 
     #[test]
@@ -852,5 +1026,56 @@ mod tests {
         let (_, resting_height) = layout.tile_size(false);
         let (_, selected_height) = layout.tile_size(true);
         assert!(selected_height > resting_height);
+    }
+
+    #[test]
+    fn dropped_icons_snap_to_the_grid_inside_a_top_offset_work_area() {
+        let layout = test_layout();
+        let viewport = Size {
+            width: 1920.0,
+            height: 1080.0,
+        };
+        let area = Rect {
+            x: 0.0,
+            y: 48.0,
+            width: viewport.width,
+            height: viewport.height - 48.0,
+        };
+        let position = icon_position_in_area(
+            Point {
+                x: GRID_INSET + layout.grid_cell_x * 2.2,
+                y: area.y + GRID_INSET + layout.grid_cell_y * 3.3,
+            },
+            viewport,
+            &layout,
+            area,
+        );
+        assert_eq!(position.x, GRID_INSET + layout.grid_cell_x * 2.0);
+        assert_eq!(position.y, area.y + GRID_INSET + layout.grid_cell_y * 3.0);
+    }
+
+    #[test]
+    fn labels_switch_for_dark_and_light_solid_backgrounds() {
+        let mut desktop = coconut_core::DesktopConfig::default();
+        desktop.wallpaper_mode = WallpaperMode::SolidColor;
+        desktop.solid_color = coconut_core::DesktopColor {
+            r: 20,
+            g: 20,
+            b: 20,
+        };
+        assert_eq!(
+            desktop_label_color(&desktop, None, Color::rgb(255, 255, 255)).r,
+            255
+        );
+
+        desktop.solid_color = coconut_core::DesktopColor {
+            r: 235,
+            g: 235,
+            b: 235,
+        };
+        assert_eq!(
+            desktop_label_color(&desktop, None, Color::rgb(0, 0, 0)).r,
+            0
+        );
     }
 }

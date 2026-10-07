@@ -33,7 +33,7 @@ use coconut_plugin_kit::chrome::{
     shell_accent, shell_border, shell_card, shell_control, shell_control_hover, shell_muted,
     shell_on_accent, shell_panel, shell_selected, shell_text, ISLAND_RADIUS,
 };
-use coconut_plugin_kit::{build_icon_index, load_icon, resolve_icon, xdg_data_directories};
+use coconut_plugin_kit::{xdg_data_directories, IconRequest, IconResolver};
 use coconut_plugin_kit::{Panel, PanelRenderContext};
 use creamui_core::layout::{AlignItems, FlexDirection, JustifyContent, Style as LayoutStyle};
 use creamui_core::{BoxedWidget, Size, StateStyle, Style, Styled};
@@ -445,13 +445,12 @@ fn load_windows_apps() -> Vec<AppEntry> {
 }
 
 fn resolve_icons(mut apps: Vec<AppEntry>, icon_theme: &str) -> Vec<AppEntry> {
-    let icon_index = build_icon_index(icon_theme);
+    let icons = IconResolver::new(icon_theme);
     for app in &mut apps {
         app.icon = app
             .icon_name
             .as_deref()
-            .and_then(|name| resolve_icon(name, &icon_index))
-            .and_then(|path| load_icon(&path, 48));
+            .and_then(|name| icons.load(IconRequest::named(name, 48)));
     }
     apps
 }

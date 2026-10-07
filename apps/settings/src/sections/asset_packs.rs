@@ -1,5 +1,6 @@
 use crate::common::{section, update_config};
 use coconut_core::ShellConfig;
+use coconut_plugin_kit::installed_icon_themes;
 use creamui_core::layout::FlexDirection;
 use creamui_core::{BoxedWidget, Size, Style};
 use creamui_macros::jsx;
@@ -19,7 +20,7 @@ pub fn icon_packs(_: Size, config: &Signal<ShellConfig>) -> BoxedWidget {
     packs(
         "Icons",
         "Choose the icon style used by your apps and desktop.",
-        list_packs("icons"),
+        installed_icon_themes(),
         &selected,
         config,
         |shell| &mut shell.appearance.icon_theme,

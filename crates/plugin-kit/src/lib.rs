@@ -27,7 +27,9 @@ mod state;
 pub use chrome::{apply_opacity, with_island_chrome, IslandChrome};
 pub use config::{ConfigValue, IslandConfig};
 pub use gap::{parse_gap, Gap};
-pub use icon_theme::{build_icon_index, load_icon, resolve_icon, xdg_data_directories};
+pub use icon_theme::{
+    installed_icon_themes, load_icon, xdg_data_directories, IconRequest, IconResolver,
+};
 pub use icons::pixel_icon;
 pub use island::{Island, IslandRenderContext};
 pub use panel::{Panel, PanelRenderContext};
