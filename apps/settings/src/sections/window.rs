@@ -2,7 +2,7 @@
 //! and persists its own configuration.
 use crate::common::{group, row, section};
 use blair_client::BlairClient;
-use blair_protocol::{ShortcutArgument, ShortcutBinding, ShortcutCommand};
+use coconut_core::{ShellShortcut, ShortcutAction, ShortcutConfig};
 use creamui_core::layout::{FlexDirection, Style};
 use creamui_core::{BoxedWidget, Key, KeyInput, Size, Styled, Widget};
 use creamui_macros::jsx;
@@ -74,37 +74,31 @@ pub struct WindowState {
     inactive_border_picker: ColorPickerController,
 }
 
-/// Editable persistent shortcuts. Blair remains the authority: this state is
-/// populated and committed through `blair-client`, never by editing its TOML.
 pub struct ShortcutState {
-    bindings: Signal<Vec<ShortcutBinding>>,
+    bindings: Signal<Vec<ShellShortcut>>,
     capturing: Signal<Option<usize>>,
     status: Signal<String>,
 }
 
 impl ShortcutState {
     pub fn load() -> Self {
-        let (bindings, status) = match load_shortcuts() {
-            Ok(bindings) => (bindings, String::new()),
-            Err(error) => (
-                Vec::new(),
-                format!("Window settings are unavailable: {error}"),
-            ),
-        };
+        let bindings = ShortcutConfig::load().shortcuts;
         Self {
             bindings: Signal::new(bindings),
             capturing: Signal::new(None),
-            status: Signal::new(status),
+            status: Signal::new(String::new()),
         }
     }
 
     fn save(&self) {
-        let bindings = self.bindings.get();
-        match save_shortcuts(&bindings) {
-            Ok(true) => self.status.set("Shortcuts saved".to_owned()),
-            Ok(false) => self
+        match (ShortcutConfig {
+            shortcuts: self.bindings.get(),
+        })
+        .save()
+        {
+            Ok(()) => self
                 .status
-                .set("These shortcuts could not be saved".to_owned()),
+                .set("Shortcuts saved. Restart Coconut to apply them.".to_owned()),
             Err(error) => self.status.set(format!("Could not save: {error}")),
         }
     }
@@ -115,30 +109,6 @@ fn blair_runtime() -> Result<tokio::runtime::Runtime, String> {
         .enable_all()
         .build()
         .map_err(|error| error.to_string())
-}
-
-fn load_shortcuts() -> Result<Vec<ShortcutBinding>, String> {
-    let runtime = blair_runtime()?;
-    runtime.block_on(async {
-        BlairClient::connect()
-            .await
-            .map_err(|error| error.to_string())?
-            .configured_shortcuts()
-            .await
-            .map_err(|error| error.to_string())
-    })
-}
-
-fn save_shortcuts(bindings: &[ShortcutBinding]) -> Result<bool, String> {
-    let runtime = blair_runtime()?;
-    runtime.block_on(async {
-        BlairClient::connect()
-            .await
-            .map_err(|error| error.to_string())?
-            .set_configured_shortcuts(bindings)
-            .await
-            .map_err(|error| error.to_string())
-    })
 }
 
 fn load_configuration() -> Result<String, String> {
@@ -983,10 +953,9 @@ pub fn build_shortcuts(_: Size, state: &ShortcutState) -> BoxedWidget {
         ButtonState::Normal,
         move || {
             add_state.update(|bindings| {
-                bindings.push(ShortcutBinding {
+                bindings.push(ShellShortcut {
                     accelerator: String::new(),
-                    command: ShortcutCommand::Close,
-                    argument: None,
+                    action: ShortcutAction::OpenLauncher,
                 });
             });
         },
@@ -1004,13 +973,21 @@ pub fn build_shortcuts(_: Size, state: &ShortcutState) -> BoxedWidget {
         ButtonState::Normal,
         move || save_state.save(),
     )) as BoxedWidget);
+    let reset_state = state.clone_handles();
+    body.push(Box::new(Button::styled(
+        ButtonVariant::Secondary,
+        ButtonSize::Md,
+        "Restore defaults",
+        ButtonState::Normal,
+        move || reset_state.bindings.set(ShellShortcut::defaults()),
+    )) as BoxedWidget);
     let status = state.status.get();
     if !status.is_empty() {
         body.push(Box::new(Text::secondary(status).size(TextSize::Sm)) as BoxedWidget);
     }
     section(
         "Shortcuts",
-        "Record shortcuts and choose what they do.",
+        "Saved in Coconut's shortcuts.toml and applied by the active compositor backend.",
         body,
     )
 }
@@ -1025,7 +1002,7 @@ impl ShortcutState {
     }
 }
 
-fn shortcut_editor(index: usize, binding: ShortcutBinding, state: &ShortcutState) -> BoxedWidget {
+fn shortcut_editor(index: usize, binding: ShellShortcut, state: &ShortcutState) -> BoxedWidget {
     let capture = state.capturing.get() == Some(index);
     let bindings = state.bindings.clone();
     let capturing = state.capturing.clone();
@@ -1045,49 +1022,26 @@ fn shortcut_editor(index: usize, binding: ShortcutBinding, state: &ShortcutState
         },
     );
 
-    let selected = ShortcutCommand::ALL
+    let selected = ShortcutAction::ALL
         .iter()
-        .position(|command| *command == binding.command)
+        .position(|action| *action == binding.action)
         .unwrap_or(0);
     let controller = SelectController::new(selected);
     let command_state = state.bindings.clone();
-    let labels: Vec<&str> = ShortcutCommand::ALL
+    let labels: Vec<&str> = ShortcutAction::ALL
         .iter()
-        .map(|command| command.label())
+        .map(|action| action.label())
         .collect();
     let command: BoxedWidget = Box::new(Select::controlled(&labels, controller).on_select(
         move |selected| {
-            let command = ShortcutCommand::ALL[selected];
+            let action = ShortcutAction::ALL[selected];
             command_state.update(|items| {
                 let binding = &mut items[index];
-                binding.command = command;
-                binding.argument = match command.argument() {
-                    ShortcutArgument::None => None,
-                    ShortcutArgument::Workspace => Some("1".to_owned()),
-                    ShortcutArgument::Command => Some(String::new()),
-                };
+                binding.action = action;
             });
         },
     ));
     let mut rows = vec![row("Shortcut", recorder), row("Action", command)];
-    if binding.command.argument() != ShortcutArgument::None {
-        let argument_state = state.bindings.clone();
-        let placeholder = match binding.command.argument() {
-            ShortcutArgument::Workspace => "Workspace number",
-            ShortcutArgument::Command => "Command to run",
-            ShortcutArgument::None => unreachable!(),
-        };
-        let value = binding.argument.unwrap_or_default();
-        rows.push(row(
-            "Argument",
-            Box::new(
-                TextInput::new(value, move |value| {
-                    argument_state.update(|items| items[index].argument = Some(value));
-                })
-                .placeholder(placeholder),
-            ) as BoxedWidget,
-        ));
-    }
     let clear_state = state.bindings.clone();
     let remove_state = state.bindings.clone();
     rows.push(row(

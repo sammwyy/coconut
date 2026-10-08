@@ -103,6 +103,17 @@ impl DesktopIntegration for BlairDbus {
         });
     }
 
+    fn close_window(&self, id: &str) {
+        let Ok(id) = id.parse::<u64>() else { return };
+        thread::spawn(move || {
+            let Ok(connection) = SyncConnection::new_session() else {
+                return;
+            };
+            let proxy = connection.with_proxy(SERVICE, PATH, Duration::from_secs(2));
+            let _: Result<(bool,), _> = proxy.method_call(INTERFACE, "CloseWindow", (id,));
+        });
+    }
+
     fn window_changes(&self) -> Option<WindowChangeListener> {
         Some(self.changes.clone())
     }

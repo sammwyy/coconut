@@ -5,13 +5,17 @@ mod desktop;
 mod plugins;
 mod popups;
 mod process;
+mod shortcuts;
 
 use crate::bar::build_dock;
 use crate::plugins::all_plugins;
 use chrono::Local;
 use coconut_api::audio::{AudioIntegration, Playback};
 use coconut_api::desktop::{DesktopIntegration, DesktopWorkArea, OpenWindow, WindowChangeListener};
-use coconut_core::{ipc::RuntimeEvent, DockConfig, DockPosition, ShellConfig, UserProfile};
+use coconut_core::{
+    ipc::RuntimeEvent, DockConfig, DockPosition, ShellConfig, ShortcutAction, ShortcutConfig,
+    UserProfile,
+};
 use coconut_plugin_app_drawer::AppCatalog;
 use coconut_plugin_app_launcher::{LauncherOpenSignal, WindowIconResolver, WindowListState};
 use coconut_plugin_clock::{ClockConfig, ClockText};
@@ -25,7 +29,7 @@ use coconut_plugin_tray::{
     NetworkRevision, PowerProfileRevision, ToggleKeepAwake, VolumeLevel, WifiEnabled,
 };
 use coconut_plugin_weather::WeatherState;
-use creamui_core::{BoxedWidget, Size};
+use creamui_core::{BoxedWidget, Point, Size};
 use creamui_reactive::Signal;
 use creamui_render::{AppBuilder, AppHandle, BlurRegion, WindowHandle, WindowOptions};
 use creamui_theme::{Color, Theme};
@@ -190,10 +194,7 @@ pub fn run() {
                 network_revision.clone(),
                 bluetooth_revision.clone(),
             );
-            popups.watch_battery(
-                integrations.battery.clone(),
-                battery_revision.clone(),
-            );
+            popups.watch_battery(integrations.battery.clone(), battery_revision.clone());
             let plugins = all_plugins();
             let init_ctx = PluginInitContext {
                 shared: shared.clone(),
@@ -204,6 +205,18 @@ pub fn run() {
 
             let panel_host = PanelHost::new(app.clone(), registry.clone(), shared.clone());
             panel_host.set_theme(system_theme());
+            let shortcut_listener =
+                shortcuts::ShortcutListener::start(&ShortcutConfig::load().shortcuts);
+            schedule_shortcuts(
+                app.clone(),
+                shortcut_listener,
+                integrations.desktop.clone(),
+                integrations.volume.clone(),
+                integrations.brightness.clone(),
+                volume_level.clone(),
+                brightness_level.clone(),
+                panel_host.clone(),
+            );
 
             if island_present(&initial_config.bar_configs(), "weather") {
                 refresh_weather(app.clone(), weather_state.clone());
@@ -532,6 +545,98 @@ fn schedule_window_events(
     };
     wait_for_window_event(app, backend, windows, work_area, listener);
     true
+}
+
+#[allow(clippy::too_many_arguments)]
+fn schedule_shortcuts(
+    app: AppHandle,
+    listener: Option<shortcuts::ShortcutListener>,
+    desktop: Rc<dyn DesktopIntegration>,
+    volume: Rc<dyn coconut_api::volume::VolumeIntegration>,
+    brightness: Rc<dyn coconut_api::brightness::BrightnessIntegration>,
+    volume_level: Signal<f32>,
+    brightness_level: Signal<f32>,
+    panel_host: Rc<PanelHost>,
+) {
+    let Some(listener) = listener else { return };
+    let bindings = ShortcutConfig::load().shortcuts;
+    let next_app = app.clone();
+    let next_listener = listener.clone();
+    let next_desktop = desktop.clone();
+    let next_volume = volume.clone();
+    let next_brightness = brightness.clone();
+    let next_volume_level = volume_level.clone();
+    let next_brightness_level = brightness_level.clone();
+    let next_panel_host = panel_host.clone();
+    app.spawn_background(
+        move || listener.next(),
+        move |index| {
+            let Some(action) =
+                index.and_then(|index| bindings.get(index).map(|binding| binding.action))
+            else {
+                return;
+            };
+            match action {
+                ShortcutAction::OpenLauncher => panel_host.open(0, "app_drawer", Point::default()),
+                ShortcutAction::MinimizeFocused => {
+                    if let Some(window) = desktop.windows().into_iter().find(|window| window.active)
+                    {
+                        desktop.activate_window(&window.id);
+                    }
+                }
+                ShortcutAction::CloseFocused => {
+                    if let Some(window) = desktop.windows().into_iter().find(|window| window.active)
+                    {
+                        desktop.close_window(&window.id);
+                    }
+                }
+                ShortcutAction::NextWindow | ShortcutAction::PreviousWindow => {
+                    let windows = desktop.windows();
+                    if let Some(active) = windows.iter().position(|window| window.active) {
+                        let offset = if action == ShortcutAction::NextWindow {
+                            1
+                        } else {
+                            windows.len().saturating_sub(1)
+                        };
+                        if let Some(window) = windows.get((active + offset) % windows.len().max(1))
+                        {
+                            desktop.activate_window(&window.id);
+                        }
+                    }
+                }
+                ShortcutAction::VolumeUp | ShortcutAction::VolumeDown => {
+                    let delta = if action == ShortcutAction::VolumeUp {
+                        0.05
+                    } else {
+                        -0.05
+                    };
+                    let next = (volume.level() + delta).clamp(0.0, 1.0);
+                    volume.set_level(next);
+                    volume_level.set(next);
+                }
+                ShortcutAction::BrightnessUp | ShortcutAction::BrightnessDown => {
+                    let delta = if action == ShortcutAction::BrightnessUp {
+                        0.05
+                    } else {
+                        -0.05
+                    };
+                    let next = (brightness.level() + delta).clamp(0.0, 1.0);
+                    brightness.set_level(next);
+                    brightness_level.set(next);
+                }
+            }
+            schedule_shortcuts(
+                next_app,
+                Some(next_listener),
+                next_desktop,
+                next_volume,
+                next_brightness,
+                next_volume_level,
+                next_brightness_level,
+                next_panel_host,
+            );
+        },
+    );
 }
 
 fn wait_for_window_event(

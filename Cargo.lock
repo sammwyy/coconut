@@ -784,9 +784,12 @@ dependencies = [
 name = "coconut-shell"
 version = "0.1.0"
 dependencies = [
+ "blair-client",
+ "blair-protocol",
  "chrono",
  "coconut-api",
  "coconut-core",
+ "coconut-integration-kwin",
  "coconut-plugin-app-drawer",
  "coconut-plugin-app-launcher",
  "coconut-plugin-clock",
@@ -808,6 +811,7 @@ dependencies = [
  "creamui-theme-loader",
  "creamui-widgets",
  "serde",
+ "tokio",
  "toml 0.9.12+spec-1.1.0",
 ]
 

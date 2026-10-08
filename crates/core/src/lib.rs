@@ -6,6 +6,7 @@ pub mod ipc;
 pub mod modules;
 mod popups;
 mod profile;
+mod shortcuts;
 
 pub use appearance::AppearanceConfig;
 pub use desktop::{
@@ -17,6 +18,7 @@ pub use dock::{
 };
 pub use popups::{PopupAlign, PopupConfig, PopupEdge};
 pub use profile::UserProfile;
+pub use shortcuts::{ShellShortcut, ShortcutAction, ShortcutConfig};
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;

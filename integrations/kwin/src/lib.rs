@@ -3,7 +3,7 @@ use creamui_render::WindowHandle;
 use dbus::{
     blocking::{Connection as DbusConnection, SyncConnection},
     channel::MatchingReceiver,
-    message::MatchRule,
+    message::{MatchRule, MessageType},
 };
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -19,6 +19,97 @@ use std::sync::{
 };
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
+
+const GLOBAL_ACCEL: &str = "org.kde.kglobalaccel";
+const GLOBAL_ACCEL_PATH: &str = "/kglobalaccel";
+const GLOBAL_ACCEL_INTERFACE: &str = "org.kde.KGlobalAccel";
+const COCONUT_COMPONENT: &str = "org.coconut.Shell";
+
+pub fn register_global_shortcuts(bindings: Vec<(String, String)>) -> Option<Receiver<String>> {
+    let (sender, receiver) = mpsc::channel();
+    thread::spawn(move || {
+        let Ok(connection) = SyncConnection::new_session() else {
+            return;
+        };
+        let proxy = connection.with_proxy(GLOBAL_ACCEL, GLOBAL_ACCEL_PATH, Duration::from_secs(2));
+        for (id, accelerator) in &bindings {
+            let action = vec![
+                COCONUT_COMPONENT.to_owned(),
+                id.clone(),
+                "Coconut".to_owned(),
+                id.clone(),
+            ];
+            let _: Result<(), _> =
+                proxy.method_call(GLOBAL_ACCEL_INTERFACE, "doRegister", (action.clone(),));
+            let Some(key) = qt_key(accelerator) else {
+                continue;
+            };
+            let _: Result<(Vec<i32>,), _> = proxy.method_call(
+                GLOBAL_ACCEL_INTERFACE,
+                "setShortcut",
+                (action, vec![key], 4u32),
+            );
+        }
+        let Ok((path,)) = proxy.method_call::<(dbus::Path<'static>,), _, _, _>(
+            GLOBAL_ACCEL_INTERFACE,
+            "getComponent",
+            (COCONUT_COMPONENT,),
+        ) else {
+            return;
+        };
+        let rule = MatchRule::new()
+            .with_type(MessageType::Signal)
+            .with_interface("org.kde.kglobalaccel.Component")
+            .with_path(path.clone());
+        let _ = connection.add_match_no_cb(&rule.match_str());
+        let _receiver = connection.start_receive(
+            rule.static_clone(),
+            Box::new(move |message, _| {
+                if message
+                    .member()
+                    .is_some_and(|member| member == "globalShortcutPressed")
+                {
+                    let (_, action, _) = message.get3::<String, String, i64>();
+                    if let Some(action) = action {
+                        let _ = sender.send(action);
+                    }
+                }
+                true
+            }),
+        );
+        loop {
+            if connection.process(Duration::from_millis(250)).is_err() {
+                break;
+            }
+        }
+    });
+    Some(receiver)
+}
+
+fn qt_key(value: &str) -> Option<i32> {
+    let mut parts = value.split('+');
+    let mut modifiers = 0i32;
+    let key = loop {
+        match parts.next()? {
+            "Shift" => modifiers |= 0x0200_0000,
+            "Ctrl" | "Control" => modifiers |= 0x0400_0000,
+            "Alt" => modifiers |= 0x0800_0000,
+            "Super" | "Meta" => modifiers |= 0x1000_0000,
+            key => break key,
+        }
+    };
+    let code = match key {
+        "Tab" => 0x0100_0001,
+        "F4" => 0x0100_0033,
+        "XF86AudioLowerVolume" => 0x0100_0070,
+        "XF86AudioRaiseVolume" => 0x0100_0072,
+        "XF86MonBrightnessUp" => 0x0100_00B2,
+        "XF86MonBrightnessDown" => 0x0100_00B3,
+        key if key.len() == 1 => key.as_bytes()[0].to_ascii_uppercase() as i32,
+        _ => return None,
+    };
+    Some(modifiers | code)
+}
 
 /// KWin Wayland exposes its window-control interface over the user D-Bus.
 /// kdotool is a small D-Bus client for that interface; using it avoids the X11
@@ -92,6 +183,13 @@ impl DesktopIntegration for KWinDbus {
         let id = id.to_owned();
         thread::spawn(move || {
             let _ = kdotool(&[command, &id]);
+        });
+    }
+
+    fn close_window(&self, id: &str) {
+        let id = id.to_owned();
+        thread::spawn(move || {
+            let _ = kdotool(&["windowclose", &id]);
         });
     }
 

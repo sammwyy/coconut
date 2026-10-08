@@ -42,6 +42,10 @@ creamui-theme = { path = "../../../creamui/crates/theme" }
 creamui-theme-loader = { path = "../../../creamui/crates/theme-loader" }
 creamui-widgets = { path = "../../../creamui/crates/widgets" }
 serde = { version = "1", features = ["derive"] }
+blair-client = { path = "../../../blair/crates/client" }
+blair-protocol = { path = "../../../blair/crates/protocol" }
+coconut-integration-kwin = { path = "../../integrations/kwin" }
+tokio = { version = "1", features = ["rt", "macros"] }
 
 [target.'cfg(not(target_os = "windows"))'.dependencies]
 coconut-registry = { path = "../../crates/registry" }

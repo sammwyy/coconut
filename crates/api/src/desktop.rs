@@ -26,6 +26,7 @@ pub trait DesktopIntegration {
     fn prepare_window(&self, window: &WindowHandle);
     fn windows(&self) -> Vec<OpenWindow>;
     fn activate_window(&self, id: &str);
+    fn close_window(&self, _id: &str) {}
     fn window_changes(&self) -> Option<WindowChangeListener> {
         None
     }
