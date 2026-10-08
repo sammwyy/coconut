@@ -48,16 +48,29 @@ pub struct ShellShortcut {
     pub action: ShortcutAction,
 }
 
+/// A user-defined shortcut launches one program with an optional single
+/// argument. Keeping it separate from `ShellShortcut` makes the desktop's
+/// built-in actions impossible to delete from the settings UI.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CustomShortcut {
+    pub accelerator: String,
+    pub command: String,
+    #[serde(default)]
+    pub argument: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ShortcutConfig {
     pub shortcuts: Vec<ShellShortcut>,
+    pub custom_shortcuts: Vec<CustomShortcut>,
 }
 
 impl Default for ShortcutConfig {
     fn default() -> Self {
         Self {
             shortcuts: ShellShortcut::defaults(),
+            custom_shortcuts: Vec::new(),
         }
     }
 }

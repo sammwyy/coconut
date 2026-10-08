@@ -18,7 +18,7 @@ pub use dock::{
 };
 pub use popups::{PopupAlign, PopupConfig, PopupEdge};
 pub use profile::UserProfile;
-pub use shortcuts::{ShellShortcut, ShortcutAction, ShortcutConfig};
+pub use shortcuts::{CustomShortcut, ShellShortcut, ShortcutAction, ShortcutConfig};
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;

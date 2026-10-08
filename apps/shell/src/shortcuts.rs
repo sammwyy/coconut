@@ -1,5 +1,4 @@
 use blair_client::BlairClient;
-use coconut_core::ShellShortcut;
 use std::sync::{
     mpsc::{self, Receiver},
     Arc, Mutex,
@@ -11,7 +10,7 @@ pub struct ShortcutListener {
 }
 
 impl ShortcutListener {
-    pub fn start(bindings: &[ShellShortcut]) -> Option<Self> {
+    pub fn start(bindings: &[String]) -> Option<Self> {
         let bindings = bindings.to_vec();
         if std::env::var("XDG_CURRENT_DESKTOP")
             .is_ok_and(|desktop| desktop.to_ascii_lowercase().contains("kde"))
@@ -19,7 +18,7 @@ impl ShortcutListener {
             let bindings = bindings
                 .into_iter()
                 .enumerate()
-                .map(|(index, binding)| (index.to_string(), binding.accelerator))
+                .map(|(index, accelerator)| (index.to_string(), accelerator))
                 .collect();
             return coconut_integration_kwin::register_global_shortcuts(bindings).map(|events| {
                 Self {
@@ -40,10 +39,14 @@ impl ShortcutListener {
                     return;
                 };
                 for (index, binding) in bindings.iter().enumerate() {
-                    if !binding.accelerator.is_empty() {
-                        let _ = client
-                            .bind_shortcut(&index.to_string(), &binding.accelerator)
-                            .await;
+                    if !binding.is_empty() {
+                        match client.bind_shortcut(&index.to_string(), binding).await {
+                            Ok(true) => {}
+                            Ok(false) => eprintln!("shortcuts: Blair rejected `{binding}`"),
+                            Err(error) => {
+                                eprintln!("shortcuts: could not bind `{binding}`: {error}")
+                            }
+                        }
                     }
                 }
                 let Ok(mut events) = client.events().await else {

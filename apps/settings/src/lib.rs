@@ -147,7 +147,7 @@ fn page_description(section: &Section) -> &'static str {
         Section::Personalization => "Make the desktop feel like yours.",
         Section::Desktop => "Panels, widgets, status controls and desktop icons.",
         Section::Windows => "How windows open, arrange and behave.",
-        Section::ShortcutsCategory => "Keyboard shortcuts for the desktop and applications.",
+        Section::ShortcutsCategory => "Keyboard shortcuts for the system and apps.",
         Section::Applications => "Installed apps, defaults and startup items.",
         Section::Users => "People who use this device and their accounts.",
         Section::Privacy => "Control what apps can access and how you sign in.",
@@ -1030,6 +1030,7 @@ fn build(
         Section::Hardware => creamui_theme::Color::rgb(0, 173, 188),
         Section::Personalization => creamui_theme::Color::rgb(193, 99, 190),
         Section::Desktop | Section::Windows => creamui_theme::Color::rgb(83, 132, 232),
+        Section::ShortcutsCategory | Section::Shortcuts => creamui_theme::Color::rgb(207, 91, 36),
         _ => theme.colors.accent,
     };
     let page_header: BoxedWidget = Box::new(jsx! {

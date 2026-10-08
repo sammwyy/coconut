@@ -1,16 +1,16 @@
 //! Blair settings edited through its D-Bus client. Blair validates, applies,
 //! and persists its own configuration.
-use crate::common::{group, row, section};
+use crate::common::{group, row, section, section_label};
 use blair_client::BlairClient;
-use coconut_core::{ShellShortcut, ShortcutAction, ShortcutConfig};
+use coconut_core::{CustomShortcut, ShellShortcut, ShortcutAction, ShortcutConfig};
 use creamui_core::layout::{FlexDirection, Style};
 use creamui_core::{BoxedWidget, Key, KeyInput, Size, Styled, Widget};
 use creamui_macros::jsx;
 use creamui_reactive::Signal;
 use creamui_theme::Color;
 use creamui_widgets::{
-    Button, ButtonSize, ButtonState, ButtonVariant, ColorPicker, ColorPickerController, RawButton,
-    SegmentedControl, Select, SelectController, Switch, Text, TextArea, TextController, TextInput,
+    Button, ButtonSize, ButtonState, ButtonVariant, ColorPicker, ColorPickerController, Icon,
+    IconSource, RawButton, SegmentedControl, Switch, Text, TextArea, TextController, TextInput,
     TextSize,
 };
 use std::{cell::RefCell, rc::Rc};
@@ -38,7 +38,7 @@ duration = 150
 sensitivity = 0.0
 [input.touchpad]
 tap = true
-natural_scroll = true
+natural_scroll = false
 disable_while_typing = true
 [workspaces]
 count = 10
@@ -76,29 +76,41 @@ pub struct WindowState {
 
 pub struct ShortcutState {
     bindings: Signal<Vec<ShellShortcut>>,
-    capturing: Signal<Option<usize>>,
+    custom_bindings: Signal<Vec<CustomShortcut>>,
+    capturing: Signal<Option<ShortcutCapture>>,
     status: Signal<String>,
+    saved: Signal<ShortcutConfig>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ShortcutCapture {
+    BuiltIn(usize),
+    Custom(usize),
 }
 
 impl ShortcutState {
     pub fn load() -> Self {
-        let bindings = ShortcutConfig::load().shortcuts;
+        let config = ShortcutConfig::load();
         Self {
-            bindings: Signal::new(bindings),
+            saved: Signal::new(config.clone()),
+            bindings: Signal::new(config.shortcuts),
+            custom_bindings: Signal::new(config.custom_shortcuts),
             capturing: Signal::new(None),
             status: Signal::new(String::new()),
         }
     }
 
     fn save(&self) {
-        match (ShortcutConfig {
+        let config = ShortcutConfig {
             shortcuts: self.bindings.get(),
-        })
-        .save()
-        {
-            Ok(()) => self
-                .status
-                .set("Shortcuts saved. Restart Coconut to apply them.".to_owned()),
+            custom_shortcuts: self.custom_bindings.get(),
+        };
+        match config.save() {
+            Ok(()) => {
+                self.saved.set(config);
+                self.status
+                    .set("Shortcuts saved. Restart Coconut to apply them.".to_owned());
+            }
             Err(error) => self.status.set(format!("Could not save: {error}")),
         }
     }
@@ -896,7 +908,7 @@ pub fn build_touchpad(_: Size, state: &WindowState) -> BoxedWidget {
     ]
     .into_iter()
     .map(|(label, key)| {
-        let value = bool_at(&c, &["input", "touchpad", key], true);
+        let value = bool_at(&c, &["input", "touchpad", key], key != "natural_scroll");
         let writer = state.writer();
         row(
             label,
@@ -943,141 +955,283 @@ pub fn build_focus(_: Size, state: &WindowState) -> BoxedWidget {
 }
 
 pub fn build_shortcuts(_: Size, state: &ShortcutState) -> BoxedWidget {
-    let bindings = state.bindings.get();
-    let mut body = Vec::new();
-    let add_state = state.bindings.clone();
-    body.push(Box::new(Button::styled(
-        ButtonVariant::Primary,
-        ButtonSize::Sm,
-        "Add shortcut",
-        ButtonState::Normal,
-        move || {
-            add_state.update(|bindings| {
-                bindings.push(ShellShortcut {
-                    accelerator: String::new(),
-                    action: ShortcutAction::OpenLauncher,
-                });
-            });
-        },
-    )) as BoxedWidget);
+    let mut body = vec![
+        shortcut_group("System", built_in_shortcuts(state)),
+        shortcut_group("Custom", custom_shortcuts(state)),
+    ];
 
-    for (index, binding) in bindings.into_iter().enumerate() {
-        body.push(shortcut_editor(index, binding, state));
-    }
-
-    let save_state = state.clone_handles();
-    body.push(Box::new(Button::styled(
-        ButtonVariant::Primary,
-        ButtonSize::Md,
-        "Save shortcuts",
-        ButtonState::Normal,
-        move || save_state.save(),
-    )) as BoxedWidget);
     let reset_state = state.clone_handles();
-    body.push(Box::new(Button::styled(
+    let reset: BoxedWidget = Box::new(Button::styled(
         ButtonVariant::Secondary,
-        ButtonSize::Md,
+        ButtonSize::Sm,
         "Restore defaults",
         ButtonState::Normal,
-        move || reset_state.bindings.set(ShellShortcut::defaults()),
-    )) as BoxedWidget);
+        move || {
+            reset_state.capturing.set(None);
+            reset_state.bindings.set(ShellShortcut::defaults());
+        },
+    ));
+    let saved = state.saved.get();
+    let mut actions = vec![reset];
+    if state.bindings.get() != saved.shortcuts
+        || state.custom_bindings.get() != saved.custom_shortcuts
+    {
+        let save_state = state.clone_handles();
+        actions.push(Box::new(Button::styled(
+            ButtonVariant::Primary,
+            ButtonSize::Sm,
+            "Save shortcuts",
+            ButtonState::Normal,
+            move || save_state.save(),
+        )) as BoxedWidget);
+    }
+    body.push(Box::new(jsx! {
+        <Flex direction={FlexDirection::Row} justify={creamui_widgets::layout::Justify::End} gap={8.0} children={actions} />
+    }) as BoxedWidget);
     let status = state.status.get();
     if !status.is_empty() {
         body.push(Box::new(Text::secondary(status).size(TextSize::Sm)) as BoxedWidget);
     }
-    section(
-        "Shortcuts",
-        "Saved in Coconut's shortcuts.toml and applied by the active compositor backend.",
-        body,
-    )
+    Box::new(jsx! {
+        <Flex direction={FlexDirection::Column} gap={28.0} children={body} />
+    })
 }
 
 impl ShortcutState {
     fn clone_handles(&self) -> Self {
         Self {
             bindings: self.bindings.clone(),
+            custom_bindings: self.custom_bindings.clone(),
             capturing: self.capturing.clone(),
             status: self.status.clone(),
+            saved: self.saved.clone(),
         }
     }
 }
 
-fn shortcut_editor(index: usize, binding: ShellShortcut, state: &ShortcutState) -> BoxedWidget {
-    let capture = state.capturing.get() == Some(index);
+fn shortcut_group(label: &str, card: BoxedWidget) -> BoxedWidget {
+    Box::new(jsx! {
+        <Flex direction={FlexDirection::Column} gap={8.0}>
+            {section_label(label)}
+            {card}
+        </Flex>
+    })
+}
+
+fn built_in_shortcuts(state: &ShortcutState) -> BoxedWidget {
+    let rows = state
+        .bindings
+        .get()
+        .into_iter()
+        .enumerate()
+        .map(|(index, binding)| built_in_shortcut_editor(index, binding, state))
+        .collect();
+    group(rows)
+}
+
+fn built_in_shortcut_editor(
+    index: usize,
+    binding: ShellShortcut,
+    state: &ShortcutState,
+) -> BoxedWidget {
+    let capture = state.capturing.get() == Some(ShortcutCapture::BuiltIn(index));
     let bindings = state.bindings.clone();
     let capturing = state.capturing.clone();
     let start_capture = capturing.clone();
+    let label = shortcut_label(&binding.accelerator);
     let recorder = shortcut_recorder(
         if capture {
             "Press shortcut…"
         } else if binding.accelerator.is_empty() {
             "Record shortcut"
         } else {
-            &binding.accelerator
+            &label
         },
-        move || start_capture.set(Some(index)),
+        capture,
+        move || start_capture.set(Some(ShortcutCapture::BuiltIn(index))),
         move |accelerator| {
             bindings.update(|items| items[index].accelerator = accelerator);
             capturing.set(None);
         },
     );
 
-    let selected = ShortcutAction::ALL
-        .iter()
-        .position(|action| *action == binding.action)
-        .unwrap_or(0);
-    let controller = SelectController::new(selected);
-    let command_state = state.bindings.clone();
-    let labels: Vec<&str> = ShortcutAction::ALL
-        .iter()
-        .map(|action| action.label())
-        .collect();
-    let command: BoxedWidget = Box::new(Select::controlled(&labels, controller).on_select(
-        move |selected| {
-            let action = ShortcutAction::ALL[selected];
-            command_state.update(|items| {
-                let binding = &mut items[index];
-                binding.action = action;
-            });
+    Box::new(jsx! {
+        <Flex direction={FlexDirection::Row} align={creamui_widgets::layout::Align::Center} gap={12.0} padding={"10.5px 16px"}>
+            {shortcut_badge(shortcut_icon(binding.action))}
+            <Flex grow={1.0}>{Box::new(Text::new(binding.action.label()).font_size(13.0)) as BoxedWidget}</Flex>
+            <Flex shrink={0.0}>{recorder}</Flex>
+        </Flex>
+    })
+}
+
+fn shortcut_badge(icon: IconSource) -> BoxedWidget {
+    let color = Color::rgb(207, 91, 36);
+    Box::new(jsx! {
+        <Flex size={(24.0, 24.0)} shrink={0.0} align={creamui_widgets::layout::Align::Center} justify={creamui_widgets::layout::Justify::Center} corner_radius={8.0} background={creamui_core::LinearGradient::new(180.0, color.mix(Color::rgb(255, 255, 255), 0.22), color)}>
+            {Box::new(Icon::new(icon, Color::rgb(255, 255, 255)).size(14.0)) as BoxedWidget}
+        </Flex>
+    })
+}
+
+fn shortcut_icon(action: ShortcutAction) -> IconSource {
+    use ShortcutAction::*;
+    let paths = match action {
+        OpenLauncher => r#"<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/>"#,
+        MinimizeFocused => {
+            r#"<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 16h8"/>"#
+        }
+        NextWindow | PreviousWindow => {
+            r#"<path d="m12 3 10 5-10 5L2 8Zm-10 9 10 5 10-5M2 16l10 5 10-5"/>"#
+        }
+        CloseFocused => {
+            r#"<rect x="3" y="4" width="18" height="16" rx="2"/><path d="m9 9 6 6m0-6-6 6"/>"#
+        }
+        VolumeUp | VolumeDown => {
+            r#"<path d="M11 4 6 8H2v8h4l5 4ZM15 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/>"#
+        }
+        BrightnessUp | BrightnessDown => {
+            r#"<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/>"#
+        }
+    };
+    crate::icons::outline(paths)
+}
+
+fn shortcut_label(accelerator: &str) -> String {
+    accelerator
+        .split('+')
+        .map(|key| match key {
+            "XF86AudioRaiseVolume" => "Volume up",
+            "XF86AudioLowerVolume" => "Volume down",
+            "XF86MonBrightnessUp" => "Brightness up",
+            "XF86MonBrightnessDown" => "Brightness down",
+            "Return" => "Enter",
+            key => key,
+        })
+        .collect::<Vec<_>>()
+        .join(" + ")
+}
+
+fn custom_shortcuts(state: &ShortcutState) -> BoxedWidget {
+    let bindings = state.custom_bindings.get();
+    let detail = if bindings.is_empty() {
+        "None yet".to_owned()
+    } else {
+        format!("{} configured", bindings.len())
+    };
+    let mut rows = vec![];
+    let add = state.custom_bindings.clone();
+    let capturing = state.capturing.clone();
+    rows.push(Box::new(jsx! {
+        <Flex direction={FlexDirection::Row} align={creamui_widgets::layout::Align::Center} gap={12.0} padding={"12px 16px"}>
+            {shortcut_badge(crate::icons::outline(r#"<path d="M9 7V4.5A2.5 2.5 0 1 0 6.5 7H17.5A2.5 2.5 0 1 0 15 4.5V19.5A2.5 2.5 0 1 0 17.5 17H6.5A2.5 2.5 0 1 0 9 19.5Z"/>"#))}
+            <Flex direction={FlexDirection::Column} grow={1.0} gap={2.0}>
+                {Box::new(Text::new("Custom shortcuts").font_size(13.0)) as BoxedWidget}
+                {Box::new(Text::secondary(detail).font_size(12.0)) as BoxedWidget}
+            </Flex>
+            {Box::new(Button::styled(ButtonVariant::Primary, ButtonSize::Sm, "Add shortcut", ButtonState::Normal, move || {
+                capturing.set(None);
+                add.update(|items| items.push(CustomShortcut {
+                    accelerator: String::new(), command: String::new(), argument: String::new(),
+                }));
+            }).height(32.0).corner_radius(12.0).padding_left(14.0).padding_right(14.0)) as BoxedWidget}
+        </Flex>
+    }) as BoxedWidget);
+    rows.extend(
+        bindings
+            .into_iter()
+            .enumerate()
+            .map(|(index, binding)| custom_shortcut_editor(index, binding, state)),
+    );
+    group(rows)
+}
+
+fn custom_shortcut_editor(
+    index: usize,
+    binding: CustomShortcut,
+    state: &ShortcutState,
+) -> BoxedWidget {
+    let capture = state.capturing.get() == Some(ShortcutCapture::Custom(index));
+    let bindings = state.custom_bindings.clone();
+    let capturing = state.capturing.clone();
+    let start_capture = capturing.clone();
+    let label = shortcut_label(&binding.accelerator);
+    let recorder = shortcut_recorder(
+        if capture {
+            "Press shortcut…"
+        } else if binding.accelerator.is_empty() {
+            "Record shortcut"
+        } else {
+            &label
         },
-    ));
-    let mut rows = vec![row("Shortcut", recorder), row("Action", command)];
-    let clear_state = state.bindings.clone();
-    let remove_state = state.bindings.clone();
-    rows.push(row(
-        "",
-        Box::new(creamui_macros::jsx! {
-            <Flex direction={creamui_core::layout::FlexDirection::Row} gap={8.0}>
-                {Box::new(Button::styled(ButtonVariant::Secondary, ButtonSize::Sm, "Clear", ButtonState::Normal, move || {
-                    clear_state.update(|items| items[index].accelerator.clear());
-                })) as BoxedWidget}
+        capture,
+        move || start_capture.set(Some(ShortcutCapture::Custom(index))),
+        move |accelerator| {
+            bindings.update(|items| items[index].accelerator = accelerator);
+            capturing.set(None);
+        },
+    );
+    let command_bindings = state.custom_bindings.clone();
+    let command: BoxedWidget = Box::new(
+        TextInput::new(binding.command, move |value| {
+            command_bindings.update(|items| items[index].command = value);
+        })
+        .placeholder("Command"),
+    );
+    let argument_bindings = state.custom_bindings.clone();
+    let argument: BoxedWidget = Box::new(
+        TextInput::new(binding.argument, move |value| {
+            argument_bindings.update(|items| items[index].argument = value);
+        })
+        .placeholder("Argument (optional)"),
+    );
+    let remove = state.custom_bindings.clone();
+    let capturing = state.capturing.clone();
+    Box::new(jsx! {
+        <Flex direction={FlexDirection::Column} gap={12.0} padding={16.0}>
+            <Flex direction={FlexDirection::Row} align={creamui_widgets::layout::Align::Center} gap={12.0}>
+                <Flex grow={1.0}>{Box::new(Text::new(format!("Shortcut {}", index + 1)).font_size(13.0).bold(true)) as BoxedWidget}</Flex>
+                <Flex shrink={0.0}>{recorder}</Flex>
+            </Flex>
+            {command}
+            {argument}
+            <Flex direction={FlexDirection::Row} justify={creamui_widgets::layout::Justify::End}>
                 {Box::new(Button::styled(ButtonVariant::Destructive, ButtonSize::Sm, "Remove", ButtonState::Normal, move || {
-                    remove_state.update(|items| { if index < items.len() { items.remove(index); } });
+                    capturing.set(None);
+                    remove.update(|items| { if index < items.len() { items.remove(index); } });
                 })) as BoxedWidget}
             </Flex>
-        }) as BoxedWidget,
-    ));
-    group(rows)
+        </Flex>
+    })
 }
 
 fn shortcut_recorder(
     label: &str,
+    capturing: bool,
     on_click: impl Fn() + 'static,
     on_record: impl Fn(String) + 'static,
 ) -> BoxedWidget {
     let theme = creamui_theme::use_theme();
     let style = Style {
         size: creamui_core::layout::Size {
-            width: creamui_core::layout::Dimension::Length(200.0),
+            width: creamui_core::layout::Dimension::Auto,
             height: creamui_core::layout::Dimension::Length(34.0),
         },
+        align_items: Some(creamui_core::layout::AlignItems::Center),
+        justify_content: Some(creamui_core::layout::JustifyContent::Center),
         ..Default::default()
     };
     let button = RawButton::new(style, on_click)
-        .background(theme.surface_elevated)
-        .border(theme.border_strong, 1.0)
-        .corner_radius(theme.button_radius)
-        .child(Box::new(Text::new(label.to_owned()).size(TextSize::Sm)) as BoxedWidget);
+        .padding_left(8.0)
+        .padding_right(8.0)
+        .background(if capturing {
+            theme.colors.selection_background
+        } else {
+            Color::rgba(0, 0, 0, 0)
+        })
+        .corner_radius(8.0)
+        .hover_style(creamui_core::StateStyle::new().background(theme.colors.surface_hover))
+        .focus_style(creamui_core::StateStyle::new().outline(theme.colors.accent, 1.0))
+        .child(Box::new(Text::secondary(label.to_owned()).font_size(12.0)) as BoxedWidget);
     Box::new(ShortcutRecorder {
         inner: button,
         on_record: Rc::new(on_record),
@@ -1245,4 +1399,112 @@ fn put(v: &mut toml::Value, path: &[&str], value: toml::Value) {
             .expect("Blair setting table");
     }
     table.insert(path[path.len() - 1].into(), value);
+}
+
+#[cfg(test)]
+mod shortcut_tests {
+    use super::*;
+    use creamui_core::{Modifiers, Point, Renderer};
+    use creamui_render::SceneRecorder;
+    use creamui_theme::{Theme, ThemeProvider};
+
+    fn frame(content: BoxedWidget, size: Size) -> BoxedWidget {
+        Box::new(jsx! {
+            <Flex direction={FlexDirection::Column} size={(size.width, size.height)}>
+                {content}
+            </Flex>
+        })
+    }
+
+    #[test]
+    fn shortcut_cards_keep_recording_and_custom_actions_usable() {
+        creamui_reactive::with_context_scope(|| {
+            crate::common::load_settings_fonts();
+            let theme = crate::common::settings_theme(Theme::light());
+            creamui_reactive::provide_context(ThemeProvider::new(theme));
+            let config = ShortcutConfig::default();
+            let state = ShortcutState {
+                saved: Signal::new(config.clone()),
+                bindings: Signal::new(config.shortcuts),
+                custom_bindings: Signal::new(config.custom_shortcuts),
+                capturing: Signal::new(None),
+                status: Signal::new(String::new()),
+            };
+            let size = Size {
+                width: 688.0,
+                height: 1000.0,
+            };
+            let mut renderer = Renderer::new();
+            let mut recorder = SceneRecorder::new();
+            recorder.begin(688, 1000, 1.0, Color::rgba(0, 0, 0, 0), theme.colors);
+            let scene = renderer.render(
+                frame(build_shortcuts(size, &state), size),
+                size,
+                &mut recorder,
+            );
+            let point = Point { x: 650.0, y: 50.0 };
+            scene
+                .hit_test(point)
+                .expect("right-aligned accelerator is clickable")();
+            assert!(state.capturing.peek() == Some(ShortcutCapture::BuiltIn(0)));
+
+            // Updating the recording prompt preserves keyboard focus.
+            let focus = scene
+                .focus_id_at(scene.focus_hit_test(point).unwrap())
+                .unwrap();
+            recorder.begin(688, 1000, 1.0, Color::rgba(0, 0, 0, 0), theme.colors);
+            let scene = renderer.render(
+                frame(build_shortcuts(size, &state), size),
+                size,
+                &mut recorder,
+            );
+            let index = scene.focus_index(focus).expect("recorder retains focus");
+            scene.on_key_at(index).unwrap()(KeyInput {
+                key: Key::Char('k'),
+                modifiers: Modifiers {
+                    ctrl: true,
+                    alt: true,
+                    ..Default::default()
+                },
+            });
+            assert_eq!(state.bindings.peek()[0].accelerator, "Ctrl+Alt+K");
+            assert_eq!(state.bindings.peek()[1], state.saved.peek().shortcuts[1]);
+            assert!(state.capturing.peek().is_none());
+
+            recorder.begin(688, 1000, 1.0, Color::rgba(0, 0, 0, 0), theme.colors);
+            let scene = renderer.render(frame(custom_shortcuts(&state), size), size, &mut recorder);
+            scene
+                .hit_test(Point { x: 650.0, y: 28.0 })
+                .expect("add shortcut")();
+            assert_eq!(state.custom_bindings.peek().len(), 1);
+
+            // The stacked editor remains usable at a narrower content width.
+            let small = Size {
+                width: 400.0,
+                height: 500.0,
+            };
+            recorder.begin(400, 500, 1.0, Color::rgba(0, 0, 0, 0), theme.colors);
+            let scene = renderer.render(
+                frame(
+                    custom_shortcut_editor(0, state.custom_bindings.peek()[0].clone(), &state),
+                    small,
+                ),
+                small,
+                &mut recorder,
+            );
+            scene
+                .hit_test(Point { x: 350.0, y: 33.0 })
+                .expect("custom recorder")();
+            assert!(state.capturing.peek() == Some(ShortcutCapture::Custom(0)));
+            // Recorder, command, argument, then the remove button.
+            scene
+                .on_key_at(3)
+                .expect("remove button supports keyboard activation")(KeyInput {
+                key: Key::Enter,
+                modifiers: Modifiers::default(),
+            });
+            assert!(state.custom_bindings.peek().is_empty());
+            assert!(state.capturing.peek().is_none());
+        });
+    }
 }

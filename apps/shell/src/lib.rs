@@ -205,8 +205,19 @@ pub fn run() {
 
             let panel_host = PanelHost::new(app.clone(), registry.clone(), shared.clone());
             panel_host.set_theme(system_theme());
-            let shortcut_listener =
-                shortcuts::ShortcutListener::start(&ShortcutConfig::load().shortcuts);
+            let shortcut_config = ShortcutConfig::load();
+            let shortcut_accelerators = shortcut_config
+                .shortcuts
+                .iter()
+                .map(|shortcut| shortcut.accelerator.clone())
+                .chain(
+                    shortcut_config
+                        .custom_shortcuts
+                        .iter()
+                        .map(|shortcut| shortcut.accelerator.clone()),
+                )
+                .collect::<Vec<_>>();
+            let shortcut_listener = shortcuts::ShortcutListener::start(&shortcut_accelerators);
             schedule_shortcuts(
                 app.clone(),
                 shortcut_listener,
@@ -559,7 +570,9 @@ fn schedule_shortcuts(
     panel_host: Rc<PanelHost>,
 ) {
     let Some(listener) = listener else { return };
-    let bindings = ShortcutConfig::load().shortcuts;
+    let shortcut_config = ShortcutConfig::load();
+    let bindings = shortcut_config.shortcuts;
+    let custom_shortcuts = shortcut_config.custom_shortcuts;
     let next_app = app.clone();
     let next_listener = listener.clone();
     let next_desktop = desktop.clone();
@@ -571,9 +584,33 @@ fn schedule_shortcuts(
     app.spawn_background(
         move || listener.next(),
         move |index| {
-            let Some(action) =
-                index.and_then(|index| bindings.get(index).map(|binding| binding.action))
-            else {
+            let Some(index) = index else {
+                return;
+            };
+            if index >= bindings.len() {
+                let Some(shortcut) = custom_shortcuts.get(index - bindings.len()) else {
+                    return;
+                };
+                if !shortcut.command.trim().is_empty() {
+                    let mut command = std::process::Command::new(&shortcut.command);
+                    if !shortcut.argument.trim().is_empty() {
+                        command.arg(&shortcut.argument);
+                    }
+                    let _ = command.spawn();
+                }
+                schedule_shortcuts(
+                    next_app,
+                    Some(next_listener),
+                    next_desktop,
+                    next_volume,
+                    next_brightness,
+                    next_volume_level,
+                    next_brightness_level,
+                    next_panel_host,
+                );
+                return;
+            }
+            let Some(action) = bindings.get(index).map(|binding| binding.action) else {
                 return;
             };
             match action {
