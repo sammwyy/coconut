@@ -59,6 +59,7 @@ drag_margin = 0
 [decorations.buttons]
 layout = ["minimize", "maximize", "close"]
 side = "right"
+style = "normal"
 "#;
 
 pub struct WindowState {
@@ -598,8 +599,21 @@ pub fn build_titlebar(_: Size, state: &WindowState) -> BoxedWidget {
         })
     }));
 
+    let button_style = choice_at(
+        &c,
+        &["decorations", "buttons", "style"],
+        BUTTON_STYLES,
+        "normal",
+    );
+    let button_style_control = choice_control(
+        state,
+        &["decorations", "buttons", "style"],
+        BUTTON_STYLES,
+        button_style,
+    );
+
     let mode = str_at(&c, &["decorations", "mode"], "auto");
-    let selected = ["auto", "server", "client", "none"]
+    let selected = ["auto", "server", "hybrid", "client", "none"]
         .iter()
         .position(|value| *value == mode)
         .unwrap_or(0);
@@ -610,12 +624,13 @@ pub fn build_titlebar(_: Size, state: &WindowState) -> BoxedWidget {
                 put(
                     c,
                     &["decorations", "mode"],
-                    toml::Value::String(["auto", "server", "client", "none"][i].into()),
+                    toml::Value::String(["auto", "server", "hybrid", "client", "none"][i].into()),
                 )
             })
         })
         .option("Auto")
         .option("Server")
+        .option("Hybrid")
         .option("Client")
         .option("None"),
     );
@@ -688,14 +703,15 @@ pub fn build_titlebar(_: Size, state: &WindowState) -> BoxedWidget {
         "Titlebar",
         "Choose whether apps or the system draw titlebars. App titlebars can look different from one app to another.",
         vec![
-            setting_group("Titlebar source", "Auto chooses the best option for each app.", vec![row("Use titlebar", mode_control)]),
+            setting_group("Titlebar source", "Auto chooses the best option for each app. Hybrid draws server controls over the app's top-right corner.", vec![row("Use titlebar", mode_control)]),
             setting_group(
                 "Look",
-                "Blend matches each app's own header color. Title text and buttons adjust their color automatically for contrast. Window and popup corners follow Appearance.",
+                "Auto uses the most repeated color on the app edge. Gradient blends six averaged edge zones across the bar; Blend copies the complete edge. Theme uses a blurred surface. Title text and buttons adjust automatically for contrast.",
                 appearance_rows,
             ),
             setting_group("System titlebar", "These options apply when the system draws the titlebar.", vec![
                 row("Buttons on", side_control),
+                row("Control style", button_style_control),
                 row("Center title", centered_control),
                 row("Show app icon", show_icon_control),
                 integer_field(state, "Titlebar height", &["decorations", "titlebar_height"], 0, Some(96)),
@@ -707,11 +723,18 @@ pub fn build_titlebar(_: Size, state: &WindowState) -> BoxedWidget {
 
 /// `(config value, label)` pairs for single-choice settings stored as
 /// strings. Blair reads these case-insensitively.
-const TITLEBAR_COLORS: &[(&str, &str)] =
-    &[("blend", "Blend"), ("theme", "Theme"), ("color", "Color")];
+const TITLEBAR_COLORS: &[(&str, &str)] = &[
+    ("auto", "Auto"),
+    ("gradient", "Gradient"),
+    ("blend", "Blend"),
+    ("theme", "Theme"),
+    ("color", "Color"),
+];
 const BORDER_COLORS: &[(&str, &str)] =
     &[("none", "None"), ("theme", "Theme"), ("custom", "Custom")];
 const BORDER_SIZES: &[(&str, &str)] = &[("thin", "Thin"), ("normal", "Normal"), ("bold", "Bold")];
+const BUTTON_STYLES: &[(&str, &str)] =
+    &[("normal", "Normal"), ("traffic_lights", "Traffic lights")];
 
 /// Index of the stored choice, or of Blair's `default` when unset.
 fn choice_at(
