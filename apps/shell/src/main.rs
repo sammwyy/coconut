@@ -8,7 +8,7 @@ fn main() {
         Some("settings") => open_settings(),
         Some(other) => {
             eprintln!("coconut: unknown command \"{other}\"");
-            eprintln!("usage: coconut [shell|settings]");
+            eprintln!("usage: coconut [shell|settings [route]]");
             std::process::exit(1);
         }
     }
@@ -16,7 +16,10 @@ fn main() {
 
 fn open_settings() {
     let program = settings_program();
-    match Command::new(&program).status() {
+    match Command::new(&program)
+        .args(std::env::args_os().skip(2))
+        .status()
+    {
         Ok(status) if status.success() => {}
         Ok(status) => std::process::exit(status.code().unwrap_or(1)),
         Err(error) => {

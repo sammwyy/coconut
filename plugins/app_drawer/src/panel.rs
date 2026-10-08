@@ -664,7 +664,7 @@ fn account_button(program: PathBuf) -> BoxedWidget {
     let mut style = small_button_style();
     style.layout.size = fixed(64.0, 32.0);
     Box::new(
-        RawButton::new(style, move || open_settings(program.clone()))
+        RawButton::new(style, move || open_settings(program.clone(), "/users/me"))
             .child(Box::new(
                 jsx! { <RawText color={shell_text()} font_size={11.0}>{"Account"}</RawText> },
             ) as BoxedWidget),
@@ -696,7 +696,7 @@ fn footer_actions(on_close: Rc<dyn Fn()>) -> BoxedWidget {
 fn settings_button(program: PathBuf) -> BoxedWidget {
     Box::new(
         RawButton::new(settings_button_style(), move || {
-            open_settings(program.clone())
+            open_settings(program.clone(), "/connectivity")
         })
         .child(Box::new(Icon::new(Symbol::Sliders, shell_muted()).size(18.0)) as BoxedWidget),
     )
@@ -722,9 +722,10 @@ fn settings_program() -> Option<PathBuf> {
     })
 }
 
-fn open_settings(program: PathBuf) {
+fn open_settings(program: PathBuf, route: &'static str) {
     thread::spawn(move || {
         let mut command = Command::new(program);
+        command.arg(route);
         let _ = crate::process::spawn_detached(&mut command);
     });
 }
