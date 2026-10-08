@@ -594,7 +594,11 @@ fn status_card(status: &StatusUpdate, width: f32) -> BoxedWidget {
             .background(shell_card())
             .border(shell_border(), 1.0)
             .corner_radius(18.0)
-            .child(pixel_icon(status.icon, 24.0, use_theme().colors.text_primary))
+            .child(pixel_icon(
+                status.icon,
+                24.0,
+                use_theme().colors.text_primary,
+            ))
             .child(Box::new(
                 ProgressBar::new(if status.label == "Muted" {
                     0.0
@@ -612,7 +616,10 @@ fn status_card(status: &StatusUpdate, width: f32) -> BoxedWidget {
                     flex_shrink: 0.0,
                     ..Default::default()
                 })
-                .child(Box::new(Text::secondary(format!("{:.0}%", status.level * 100.0)))),
+                .child(Box::new(Text::secondary(format!(
+                    "{:.0}%",
+                    status.level * 100.0
+                )))),
             )),
     )
 }
@@ -740,9 +747,9 @@ fn compact_notification_card(
         Some(NotificationIcon::Bundled(name)) => {
             pixel_icon(name, 32.0, use_theme().colors.text_primary)
         }
-        Some(NotificationIcon::Image(source)) => Box::new(
-            Icon::new(source.clone(), use_theme().colors.text_primary).size(32.0),
-        ),
+        Some(NotificationIcon::Image(source)) => {
+            Box::new(Icon::new(source.clone(), use_theme().colors.text_primary).size(32.0))
+        }
         None => Box::new(
             Icon::new(
                 IconSource::Initial {

@@ -70,6 +70,9 @@ impl NetworkManager {
 
     fn new() -> Self {
         let state = Arc::new(Mutex::new(State::default()));
+        if let Ok(connection) = SyncConnection::new_system() {
+            refresh_enabled(&connection, &state);
+        }
         let cache = state.clone();
         let (changes, bridge) = spawn_event_bridge(move |change_tx, shutdown_rx| {
             if let Err(error) = run_event_bridge(cache, change_tx, shutdown_rx) {
@@ -368,6 +371,17 @@ fn refresh(connection: &SyncConnection, state: &Arc<Mutex<State>>) {
     };
     if let Ok(mut current) = state.lock() {
         *current = next;
+    }
+}
+
+fn refresh_enabled(connection: &SyncConnection, state: &Arc<Mutex<State>>) {
+    let root = connection.with_proxy(SERVICE, ROOT_PATH, Duration::from_secs(2));
+    let enabled = root
+        .get::<bool>(SERVICE, "WirelessEnabled")
+        .unwrap_or(false);
+
+    if let Ok(mut current) = state.lock() {
+        current.enabled = enabled;
     }
 }
 

@@ -275,7 +275,13 @@ pub fn run() {
                 playback_state.clone(),
             );
             schedule_clock_refresh(app.clone(), clock_text.clone(), clock_format.clone());
-            schedule_change_events(app.clone(), network_changes, network_revision.clone());
+            schedule_network_events(
+                app.clone(),
+                integrations.network.clone(),
+                network_changes,
+                wifi_enabled.clone(),
+                network_revision.clone(),
+            );
             schedule_change_events(app.clone(), bluetooth_changes, bluetooth_revision.clone());
             schedule_change_events(app.clone(), battery_changes, battery_revision.clone());
             schedule_change_events(
@@ -726,6 +732,69 @@ fn schedule_change_events(
         Some(listener) => wait_for_change_event(app, listener, revision),
         None => schedule_poll_refresh(app, revision),
     }
+}
+
+fn schedule_network_events(
+    app: AppHandle,
+    backend: Rc<dyn coconut_api::network::NetworkIntegration>,
+    listener: Option<coconut_api::ChangeListener>,
+    enabled: Signal<bool>,
+    revision: Signal<()>,
+) {
+    match listener {
+        Some(listener) => wait_for_network_event(app, backend, listener, enabled, revision),
+        None => schedule_network_poll(app, backend, enabled, revision),
+    }
+}
+
+fn wait_for_network_event(
+    app: AppHandle,
+    backend: Rc<dyn coconut_api::network::NetworkIntegration>,
+    listener: coconut_api::ChangeListener,
+    enabled: Signal<bool>,
+    revision: Signal<()>,
+) {
+    let next_app = app.clone();
+    let next_backend = backend.clone();
+    let next_listener = listener.clone();
+    let next_enabled = enabled.clone();
+    let next_revision = revision.clone();
+    app.spawn_background(
+        move || listener.wait(),
+        move |changed| {
+            if changed {
+                enabled.set(backend.enabled());
+                revision.set(());
+                wait_for_network_event(
+                    next_app,
+                    next_backend,
+                    next_listener,
+                    next_enabled,
+                    next_revision,
+                );
+            }
+        },
+    );
+}
+
+fn schedule_network_poll(
+    app: AppHandle,
+    backend: Rc<dyn coconut_api::network::NetworkIntegration>,
+    enabled: Signal<bool>,
+    revision: Signal<()>,
+) {
+    let next_app = app.clone();
+    let next_backend = backend.clone();
+    let next_enabled = enabled.clone();
+    let next_revision = revision.clone();
+    app.spawn_background(
+        || std::thread::sleep(Duration::from_secs(2)),
+        move |_| {
+            enabled.set(backend.enabled());
+            revision.set(());
+            schedule_network_poll(next_app, next_backend, next_enabled, next_revision);
+        },
+    );
 }
 
 fn wait_for_change_event(

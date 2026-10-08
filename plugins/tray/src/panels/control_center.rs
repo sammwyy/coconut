@@ -417,7 +417,7 @@ impl Panel for ControlCenterPanel {
 
         Box::new(jsx! {
             <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={16.0} gap={12.0} background={shell_card()} border={(shell_border(), 1.0)}>
-                {coconut_plugin_kit::chrome::panel_header("Control center", None)}
+                {coconut_plugin_kit::chrome::settings_panel_header("system", "Control center", "/connectivity", None)}
                 {Box::new(device_row) as BoxedWidget}
                 {Box::new(status_row) as BoxedWidget}
                 {brightness_card}

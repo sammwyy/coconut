@@ -33,7 +33,9 @@ use coconut_plugin_kit::chrome::{
     shell_accent, shell_border, shell_card, shell_control, shell_control_hover, shell_muted,
     shell_on_accent, shell_panel, shell_selected, shell_text, ISLAND_RADIUS,
 };
-use coconut_plugin_kit::{xdg_data_directories, IconRequest, IconResolver};
+use coconut_plugin_kit::{
+    open_settings, settings_program, xdg_data_directories, IconRequest, IconResolver,
+};
 use coconut_plugin_kit::{Panel, PanelRenderContext};
 use creamui_core::layout::{AlignItems, FlexDirection, JustifyContent, Style as LayoutStyle};
 use creamui_core::{BoxedWidget, Size, StateStyle, Style, Styled};
@@ -204,7 +206,7 @@ fn build_drawer(catalog: AppCatalog, state: DrawerState, on_launch: Rc<dyn Fn()>
     ) as BoxedWidget;
     let category_tabs = category_tabs(state.clone(), &categories);
     let settings = settings_program()
-        .map(settings_button)
+        .map(|_| settings_button())
         .unwrap_or_else(empty_button);
     let scroll = Box::new(
         ScrollView::controlled(scroll_style(), state.scroll.clone())
@@ -221,7 +223,7 @@ fn build_drawer(catalog: AppCatalog, state: DrawerState, on_launch: Rc<dyn Fn()>
         .to_uppercase()
         .to_string();
     let account = settings_program()
-        .map(account_button)
+        .map(|_| account_button())
         .unwrap_or_else(empty_button);
     let app_management = Box::new(
         RawButton::new(small_button_style(), || {})
@@ -660,14 +662,13 @@ fn centered_icon_button_style(size: f32) -> Style {
     })
 }
 
-fn account_button(program: PathBuf) -> BoxedWidget {
+fn account_button() -> BoxedWidget {
     let mut style = small_button_style();
     style.layout.size = fixed(64.0, 32.0);
     Box::new(
-        RawButton::new(style, move || open_settings(program.clone(), "/users/me"))
-            .child(Box::new(
-                jsx! { <RawText color={shell_text()} font_size={11.0}>{"Account"}</RawText> },
-            ) as BoxedWidget),
+        RawButton::new(style, || open_settings("/users/me")).child(Box::new(
+            jsx! { <RawText color={shell_text()} font_size={11.0}>{"Account"}</RawText> },
+        ) as BoxedWidget),
     )
 }
 
@@ -693,12 +694,10 @@ fn footer_actions(on_close: Rc<dyn Fn()>) -> BoxedWidget {
     Box::new(actions)
 }
 
-fn settings_button(program: PathBuf) -> BoxedWidget {
+fn settings_button() -> BoxedWidget {
     Box::new(
-        RawButton::new(settings_button_style(), move || {
-            open_settings(program.clone(), "/connectivity")
-        })
-        .child(Box::new(Icon::new(Symbol::Sliders, shell_muted()).size(18.0)) as BoxedWidget),
+        RawButton::new(settings_button_style(), || open_settings("/connectivity"))
+            .child(Box::new(Icon::new(Symbol::Sliders, shell_muted()).size(18.0)) as BoxedWidget),
     )
 }
 
@@ -706,28 +705,6 @@ fn user_name() -> String {
     std::env::var("USER")
         .or_else(|_| std::env::var("USERNAME"))
         .unwrap_or_else(|_| "User".into())
-}
-
-fn settings_program() -> Option<PathBuf> {
-    let name = format!("coconut-settings{}", std::env::consts::EXE_SUFFIX);
-    let beside_shell = std::env::current_exe()
-        .ok()
-        .and_then(|path| path.parent().map(|directory| directory.join(&name)));
-    beside_shell.filter(|path| path.is_file()).or_else(|| {
-        std::env::var_os("PATH").and_then(|paths| {
-            std::env::split_paths(&paths)
-                .map(|directory| directory.join(&name))
-                .find(|path| path.is_file())
-        })
-    })
-}
-
-fn open_settings(program: PathBuf, route: &'static str) {
-    thread::spawn(move || {
-        let mut command = Command::new(program);
-        command.arg(route);
-        let _ = crate::process::spawn_detached(&mut command);
-    });
 }
 
 #[cfg(all(test, not(target_os = "windows")))]

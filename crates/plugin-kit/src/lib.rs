@@ -22,6 +22,7 @@ mod panel_host;
 mod plugin;
 mod registry;
 mod schema;
+pub mod settings;
 mod state;
 
 pub use chrome::{apply_opacity, with_island_chrome, IslandChrome};
@@ -37,4 +38,5 @@ pub use panel_host::PanelHost;
 pub use plugin::{Plugin, PluginInitContext};
 pub use registry::{warn_unknown_islands, PluginRegistry};
 pub use schema::{ConfigField, FieldKind, NumberPresentation, NumberRange};
+pub use settings::{open_settings, settings_program};
 pub use state::SharedState;

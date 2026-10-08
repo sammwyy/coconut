@@ -378,6 +378,37 @@ pub fn panel_header(title: &str, on_back: Option<Rc<dyn Fn()>>) -> BoxedWidget {
     )
 }
 
+/// A panel title that opens its corresponding Settings route. The optional
+/// back action stays separate so embedded panels can return to their parent.
+pub fn settings_panel_header(
+    icon: &str,
+    title: &str,
+    settings_route: &str,
+    on_back: Option<Rc<dyn Fn()>>,
+) -> BoxedWidget {
+    let route = settings_route.to_owned();
+    let title_link: BoxedWidget = Box::new(
+        RawButton::new(
+            Style::new()
+                .corner_radius(8.0)
+                .hover(StateStyle::new().background(shell_control_hover()))
+                .pressed(StateStyle::new().background(shell_selected())),
+            move || crate::settings::open_settings(route.clone()),
+        )
+        .child(Box::new(jsx! {
+            <Flex direction={FlexDirection::Row} align={Align::Center} gap={10.0} padding_xy={(4.0, 2.0)}>
+                {icon_badge(icon, 28.0)}
+                <RawText color={shell_text()} font_size={15.0}>{title.to_owned()}</RawText>
+            </Flex>
+        })),
+    );
+    let mut row = Flex::row().align(Align::Center).gap(10.0);
+    if let Some(on_back) = on_back {
+        row = row.child(back_button(on_back));
+    }
+    Box::new(row.child(title_link))
+}
+
 fn back_button(on_back: Rc<dyn Fn()>) -> BoxedWidget {
     icon_button("chevron-left", 28.0, on_back)
 }

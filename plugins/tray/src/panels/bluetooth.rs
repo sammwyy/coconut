@@ -3,8 +3,9 @@ use coconut_api::bluetooth::{
     BluetoothDevice, BluetoothIntegration, Fallback as BluetoothFallback,
 };
 use coconut_plugin_kit::chrome::{
-    action_button, compact_switch, detail_row, icon_button, list_row, panel_header, section_label,
-    shell_border, shell_card, shell_muted, shell_panel, shell_text, ISLAND_RADIUS, LIST_WIDTH,
+    action_button, compact_switch, detail_row, icon_button, list_row, section_label,
+    settings_panel_header, shell_border, shell_card, shell_muted, shell_panel, shell_text,
+    ISLAND_RADIUS, LIST_WIDTH,
 };
 use coconut_plugin_kit::{pixel_icon, Panel, PanelRenderContext, SharedState};
 use creamui_core::layout::{Dimension, FlexDirection, Style as LayoutStyle};
@@ -167,7 +168,7 @@ pub fn build_content(
 
     Box::new(jsx! {
         <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={16.0} gap={12.0} background={shell_card()} border={(shell_border(), 1.0)}>
-            {panel_header("BLUETOOTH", on_back)}
+            {settings_panel_header("bluetooth-on", "Bluetooth", "/connectivity/bluetooth", on_back)}
             {scroll_view}
         </Flex>
     })
@@ -329,7 +330,7 @@ fn build_detail(
 
     Box::new(jsx! {
         <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={16.0} gap={12.0} background={shell_card()} border={(shell_border(), 1.0)}>
-            {panel_header(&device.name, Some(on_back))}
+            {settings_panel_header("bluetooth-on", &device.name, "/connectivity/bluetooth", Some(on_back))}
             {Box::new(rows) as BoxedWidget}
             {Box::new(actions) as BoxedWidget}
         </Flex>

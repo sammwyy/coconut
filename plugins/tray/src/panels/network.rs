@@ -6,8 +6,8 @@ use coconut_api::network::{
 };
 use coconut_plugin_kit::chrome::{
     action_button, compact_switch, connection_card, detail_row, detail_row_with_action,
-    icon_button, list_row, panel_header, section_label, shell_border, shell_card, shell_muted,
-    shell_panel, shell_text, wifi_strength_icon, ISLAND_RADIUS, LIST_WIDTH,
+    icon_button, list_row, section_label, settings_panel_header, shell_border, shell_card,
+    shell_muted, shell_panel, shell_text, wifi_strength_icon, ISLAND_RADIUS, LIST_WIDTH,
 };
 use coconut_plugin_kit::{pixel_icon, Panel, PanelRenderContext, SharedState};
 use creamui_core::layout::{Dimension, FlexDirection, Style as LayoutStyle};
@@ -193,7 +193,7 @@ pub fn build_content(
 
     Box::new(jsx! {
         <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={16.0} gap={12.0} background={shell_card()} border={(shell_border(), 1.0)}>
-            {panel_header("NETWORK", on_back)}
+            {settings_panel_header("wifi-excellent", "Wi-Fi", "/connectivity/wifi/nearby", on_back)}
             {connections_row}
             {scroll_view}
         </Flex>
@@ -305,7 +305,7 @@ fn build_detail(
 
     Box::new(jsx! {
         <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={16.0} gap={12.0} background={shell_card()} border={(shell_border(), 1.0)}>
-            {panel_header(&title, Some(on_back))}
+            {settings_panel_header("wifi-excellent", &title, "/connectivity/wifi/nearby", Some(on_back))}
             {Box::new(rows) as BoxedWidget}
             {Box::new(actions) as BoxedWidget}
         </Flex>
