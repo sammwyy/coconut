@@ -1,4 +1,4 @@
-use crate::common::{group, row, section, update_config};
+use crate::common::{group, labeled_group, row, section, update_config};
 use coconut_core::{ClickAction, DesktopColor, IconShape, ShellConfig};
 use creamui_core::layout::FlexDirection;
 use creamui_core::{BoxedWidget, Size};
@@ -93,7 +93,11 @@ pub fn build(_: Size, config: &Signal<ShellConfig>, picker: &ColorPickerControll
     section(
         "Desktop icons",
         "How icons on the desktop grid look and space themselves.",
-        vec![layout, background, behavior],
+        vec![
+            labeled_group("Size & spacing", layout),
+            labeled_group("Appearance", background),
+            labeled_group("Interaction", behavior),
+        ],
     )
 }
 

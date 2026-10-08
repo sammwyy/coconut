@@ -302,7 +302,8 @@ impl State {
             return Box::new(
                 Select::controlled(&labels, controller)
                     .searchable()
-                    .width(220.0)
+                    .width(176.0)
+                    .height(34.0)
                     .on_select(move |index| {
                         if let Some(choice) = choices.get(index).filter(|c| !c.id.is_empty()) {
                             state.apply(if key == "browser" {
@@ -444,19 +445,14 @@ fn item(
         }
         _ => "",
     };
-    let badge = (!glyph.is_empty()).then(|| {
-        crate::common::icon_badge(
-            crate::icons::outline(glyph),
-            if matches!(
-                label.as_str(),
-                "Wallpaper" | "Theme" | "Icon pack" | "Cursor" | "Fonts" | "Sound pack"
-            ) {
-                creamui_theme::Color::rgb(185, 87, 178)
-            } else {
-                creamui_theme::use_theme().colors.accent
-            },
-        )
-    });
+    let badge = Some(crate::common::icon_badge(
+        if glyph.is_empty() {
+            crate::common::setting_icon(&label)
+        } else {
+            crate::icons::outline(glyph)
+        },
+        crate::common::category_color(),
+    ));
     super::connectivity::icon_item(label, hint, badge, trailing, click)
 }
 fn value(text: impl Into<String>) -> BoxedWidget {
@@ -514,12 +510,10 @@ fn unsupported(label: &str, reason: &str) -> BoxedWidget {
     item(label, reason, value("Not supported"), || {})
 }
 fn input(controller: &TextController, placeholder: &str) -> BoxedWidget {
-    Box::new(
-        TextInput::controlled(controller)
-            .placeholder(placeholder)
-            .width(260.0)
-            .height(34.0),
-    )
+    Box::new(crate::common::form_input(
+        TextInput::controlled(controller).placeholder(placeholder),
+        240.0,
+    ))
 }
 
 pub fn hardware(state: &State, nav: &Signal<Section>) -> BoxedWidget {
@@ -724,6 +718,8 @@ pub fn desktop(state: &State, config: &Signal<ShellConfig>, nav: &Signal<Section
             &["Bottom", "Left", "Right", "Top"],
             state.select("dock-position", selected),
         )
+        .width(136.0)
+        .height(34.0)
         .on_select(move |i| update_config(&write, |c| c.dockbar.position = positions[i])),
     );
     let write = config.clone();
@@ -733,7 +729,7 @@ pub fn desktop(state: &State, config: &Signal<ShellConfig>, nav: &Signal<Section
     page(
         vec![
             card(
-                "Shell",
+                "Top panel",
                 vec![
                     item("Top panel", "Show the status bar", panel, || {}),
                     link(
@@ -742,11 +738,13 @@ pub fn desktop(state: &State, config: &Signal<ShellConfig>, nav: &Signal<Section
                         Section::Statusbar,
                         nav,
                     ),
+                ],
+            ),
+            card(
+                "Dock",
+                vec![
                     item("Dock position", "Screen edge", position, || {}),
-                    unsupported(
-                        "Auto-hide dock",
-                        "The shell does not yet implement automatic hiding",
-                    ),
+                    unsupported("Auto-hide dock", "Automatic hiding is not available yet"),
                     item(
                         "Dock size",
                         format!("{:.0} px", c.dockbar.thickness),
@@ -766,7 +764,7 @@ pub fn desktop(state: &State, config: &Signal<ShellConfig>, nav: &Signal<Section
                 vec![
                     link(
                         "Widgets",
-                        "Configure each shell island",
+                        "Clock, weather, launcher and more",
                         Section::Islands,
                         nav,
                     ),
@@ -810,10 +808,7 @@ pub fn windows(
             card(
                 "Behavior & layout",
                 vec![
-                    unsupported(
-                        "Focus follows mouse",
-                        "Blair currently supports click-to-focus only",
-                    ),
+                    unsupported("Focus follows mouse", "Only click-to-focus is available"),
                     item(
                         "Default layout",
                         "Applied to new windows",
@@ -828,19 +823,7 @@ pub fn windows(
                     ),
                     unsupported(
                         "Center new floating windows",
-                        "No configurable placement policy is exposed by Blair",
-                    ),
-                    link(
-                        "Window focus",
-                        "Raise and pointer behavior",
-                        Section::Focus,
-                        nav,
-                    ),
-                    link(
-                        "Layout settings",
-                        "Initial size and master ratio",
-                        Section::Layout,
-                        nav,
+                        "Centered placement is not available yet",
                     ),
                 ],
             ),
@@ -855,7 +838,7 @@ pub fn windows(
                     ),
                     link(
                         "Decorations",
-                        "Server/client negotiation, borders and titlebars",
+                        "Titlebars, borders and window controls",
                         Section::Titlebar,
                         nav,
                     ),
@@ -864,6 +847,23 @@ pub fn windows(
                         "Window and workspace animations",
                         window.effects_control(),
                         || {},
+                    ),
+                ],
+            ),
+            card(
+                "Additional settings",
+                vec![
+                    link(
+                        "Window focus",
+                        "Raise and pointer behavior",
+                        Section::Focus,
+                        nav,
+                    ),
+                    link(
+                        "Layout settings",
+                        "Initial size and master ratio",
+                        Section::Layout,
+                        nav,
                     ),
                     link(
                         "Effect settings",

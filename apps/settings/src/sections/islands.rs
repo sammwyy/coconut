@@ -1,4 +1,4 @@
-use crate::common::{group, row, section, update_config};
+use crate::common::{group, labeled_group, row, section, update_config};
 use coconut_core::{IslandEntry, ShellConfig};
 use coconut_plugin_app_launcher::{AppLauncherIsland, OpenWindowsIsland};
 use coconut_plugin_clock::ClockConfig;
@@ -113,7 +113,10 @@ pub fn build(
     section(
         "Islands",
         "Choose whether each widget appears in the statusbar, dockbar, or both.",
-        vec![toggles, format],
+        vec![
+            labeled_group("Widgets", toggles),
+            labeled_group("Clock", format),
+        ],
     )
 }
 
@@ -181,11 +184,14 @@ fn island_detail_page(
 
 fn clock_format_row() -> BoxedWidget {
     let clock: ClockConfig = coconut_core::modules::load_module("clock");
-    let input: BoxedWidget = Box::new(TextInput::new(clock.format, move |value: String| {
-        let clock = ClockConfig { format: value };
-        if let Err(error) = coconut_core::modules::save_module("clock", &clock) {
-            eprintln!("settings: failed to save modules/clock.toml: {error}");
-        }
-    }));
+    let input: BoxedWidget = Box::new(crate::common::form_input(
+        TextInput::new(clock.format, move |value: String| {
+            let clock = ClockConfig { format: value };
+            if let Err(error) = coconut_core::modules::save_module("clock", &clock) {
+                eprintln!("settings: failed to save modules/clock.toml: {error}");
+            }
+        }),
+        180.0,
+    ));
     row("Clock format", input)
 }

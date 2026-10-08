@@ -1,4 +1,4 @@
-use crate::common::{group, row, section};
+use crate::common::{group, labeled_group, row, section};
 use coconut_core::ShellConfig;
 use coconut_plugin_tray::{TrayConfig, TrayMode, TrayVisibility};
 use creamui_core::{BoxedWidget, Size};
@@ -49,8 +49,8 @@ pub fn build(_: Size, _config: &Signal<ShellConfig>) -> BoxedWidget {
         "Status icons",
         "Choose which quick status controls are shown and how they are arranged. Changes appear after signing out and back in.",
         vec![
-            group(vec![row("Mode", mode_control)]),
-            group(vec![
+            labeled_group("Arrangement", group(vec![row("Mode", mode_control)])),
+            labeled_group("Visibility", group(vec![
                 visibility_row("Wi-Fi", &state, |t| t.wifi, |t, v| t.wifi = v),
                 visibility_row("Bluetooth", &state, |t| t.bluetooth, |t, v| t.bluetooth = v),
                 visibility_row("Battery", &state, |t| t.battery, |t, v| t.battery = v),
@@ -61,7 +61,7 @@ pub fn build(_: Size, _config: &Signal<ShellConfig>) -> BoxedWidget {
                     |t| t.brightness,
                     |t, v| t.brightness = v,
                 ),
-            ]),
+            ])),
         ],
     )
 }

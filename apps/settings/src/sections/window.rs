@@ -10,8 +10,8 @@ use creamui_reactive::Signal;
 use creamui_theme::Color;
 use creamui_widgets::{
     Button, ButtonSize, ButtonState, ButtonVariant, ColorPicker, ColorPickerController, Icon,
-    IconSource, RawButton, SegmentedControl, Switch, Text, TextArea, TextController, TextInput,
-    TextSize,
+    IconSource, RawButton, SegmentedControl, Select, SelectController, Switch, Text, TextArea,
+    TextController, TextInput, TextSize,
 };
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
@@ -74,6 +74,7 @@ pub struct WindowState {
     active_border_picker: ColorPickerController,
     inactive_border_picker: ColorPickerController,
     numeric_inputs: RefCell<HashMap<String, TextController>>,
+    layout_select: SelectController,
 }
 
 pub struct ShortcutState {
@@ -163,7 +164,16 @@ struct Writer {
 
 impl WindowState {
     pub fn load() -> Self {
-        let loaded = load_configuration().and_then(|document| {
+        Self::from_configuration(load_configuration())
+    }
+
+    #[cfg(test)]
+    pub fn preview() -> Self {
+        Self::from_configuration(Ok(DEFAULT.to_owned()))
+    }
+
+    fn from_configuration(document: Result<String, String>) -> Self {
+        let loaded = document.and_then(|document| {
             toml::from_str::<toml::Value>(&document).map_err(|e| e.to_string())
         });
         let available = loaded.is_ok();
@@ -180,6 +190,9 @@ impl WindowState {
         }
         let rules = toml::to_string_pretty(&toml::Value::Table(rules)).unwrap_or_default();
         Self {
+            layout_select: SelectController::new(usize::from(
+                str_at(&config, &["window", "layout"], "floating") == "tiling",
+            )),
             confirmed: Signal::new(config.clone()),
             config: Signal::new(config),
             available,
@@ -238,19 +251,24 @@ impl WindowState {
         }
         let config = self.config.get();
         let current = str_at(&config, &["window", "layout"], "floating");
+        let selected = usize::from(current == "tiling");
+        if self.layout_select.peek_selected() != selected {
+            self.layout_select.select(selected);
+        }
         let writer = self.writer();
         Box::new(
-            SegmentedControl::new(usize::from(current == "tiling"), move |i| {
-                writer.update(|c| {
-                    put(
-                        c,
-                        &["window", "layout"],
-                        toml::Value::String(if i == 0 { "floating" } else { "tiling" }.into()),
-                    )
-                })
-            })
-            .option("Floating")
-            .option("Tiling"),
+            Select::controlled(&["Floating", "Tiling"], self.layout_select.clone())
+                .width(136.0)
+                .height(34.0)
+                .on_select(move |i| {
+                    writer.update(|c| {
+                        put(
+                            c,
+                            &["window", "layout"],
+                            toml::Value::String(if i == 0 { "floating" } else { "tiling" }.into()),
+                        )
+                    })
+                }),
         )
     }
     pub fn gaps_control(&self) -> BoxedWidget {
@@ -1362,11 +1380,12 @@ fn finish(
 /// A quiet label above a related group of controls. The surrounding page
 /// header already supplies context, so settings stay scannable rather than
 /// reading like documentation.
-fn setting_group(title: &str, _: &str, rows: Vec<BoxedWidget>) -> BoxedWidget {
+fn setting_group(title: &str, description: &str, rows: Vec<BoxedWidget>) -> BoxedWidget {
     Box::new(jsx! {
-        <Flex direction={FlexDirection::Column} gap={6.0}>
-            {Box::new(Text::new(title.to_owned()).size(TextSize::Sm)) as BoxedWidget}
+        <Flex direction={FlexDirection::Column} gap={8.0}>
+            {section_label(title)}
             {group(rows)}
+            {Box::new(Text::secondary(description).size(TextSize::Sm).padding_left(4.0).padding_right(4.0)) as BoxedWidget}
         </Flex>
     })
 }
@@ -1394,10 +1413,13 @@ fn integer_field(
     });
     row(
         label,
-        Box::new(TextInput::controlled(&controller).placeholder(&match max {
-            Some(max) => format!("{min}–{max}"),
-            None => format!("At least {min}"),
-        })) as BoxedWidget,
+        Box::new(crate::common::form_input(
+            TextInput::controlled(&controller).placeholder(&match max {
+                Some(max) => format!("{min}–{max}"),
+                None => format!("At least {min}"),
+            }),
+            112.0,
+        )) as BoxedWidget,
     )
 }
 
@@ -1417,7 +1439,10 @@ fn ratio_field(state: &WindowState, label: &str, path: &'static [&'static str]) 
     });
     row(
         label,
-        Box::new(TextInput::controlled(&controller).placeholder("0.1–0.9")) as BoxedWidget,
+        Box::new(crate::common::form_input(
+            TextInput::controlled(&controller).placeholder("0.1–0.9"),
+            112.0,
+        )) as BoxedWidget,
     )
 }
 fn at<'a>(v: &'a toml::Value, path: &[&str]) -> Option<&'a toml::Value> {

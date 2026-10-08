@@ -177,6 +177,64 @@ fn page_description(section: &Section) -> &'static str {
     }
 }
 
+/// Keep child pages visually attached to the category they came from. This
+/// matters once Settings has more than the handful of items shown in the
+/// concept: a page such as "Workspaces" should still read as a Windows page,
+/// instead of falling back to a generic control icon and accent color.
+fn section_presentation(
+    section: &Section,
+    icons: &SettingsIcons,
+) -> (IconSource, creamui_theme::Color) {
+    use creamui_theme::Color;
+
+    match section {
+        Section::Connectivity => (icons.status.clone(), Color::rgb(0, 153, 214)),
+        Section::Hardware | Section::Keyboard | Section::Mouse | Section::Touchpad => {
+            (icons.devices.clone(), Color::rgb(0, 173, 188))
+        }
+        Section::Personalization | Section::IconPack | Section::Sound | Section::CursorTheme => {
+            (icons.paintbrush.clone(), Color::rgb(193, 99, 190))
+        }
+        Section::Wallpaper => (icons.paintbrush.clone(), Color::rgb(193, 99, 190)),
+        Section::DesktopIcons
+        | Section::Desktop
+        | Section::Statusbar
+        | Section::Dockbar
+        | Section::Tray
+        | Section::Islands => (icons.wallpaper.clone(), Color::rgb(110, 105, 224)),
+        Section::Windows
+        | Section::Layout
+        | Section::Titlebar
+        | Section::Compositor
+        | Section::WorkingArea
+        | Section::Effects
+        | Section::Focus => (icons.windows.clone(), Color::rgb(78, 125, 222)),
+        Section::ShortcutsCategory | Section::Shortcuts => {
+            (icons.shortcuts.clone(), Color::rgb(222, 126, 54))
+        }
+        Section::Applications => (icons.applications.clone(), Color::rgb(0, 177, 115)),
+        Section::Users | Section::Profile | Section::User(_) | Section::CreateUser => {
+            (icons.users.clone(), Color::rgb(213, 88, 91))
+        }
+        Section::Privacy => (icons.privacy.clone(), Color::rgb(54, 171, 107)),
+        Section::Accessibility => (icons.accessibility.clone(), Color::rgb(0, 167, 187)),
+        Section::System | Section::About => (icons.system.clone(), Color::rgb(77, 142, 229)),
+        Section::Detail(_) => section_presentation(&sections::native::parent(section), icons),
+        Section::Unavailable(_) => (
+            IconSource::Symbol(Symbol::Controls),
+            Color::rgb(110, 105, 224),
+        ),
+        Section::GroupNetwork
+        | Section::GroupLookAndFeel
+        | Section::GroupWorkflow
+        | Section::GroupPeople
+        | Section::GroupSystem => (
+            IconSource::Symbol(Symbol::Controls),
+            Color::rgb(110, 105, 224),
+        ),
+    }
+}
+
 #[allow(unreachable_code, unused_variables)]
 fn tree(accounts: &[users::Account], icons: &SettingsIcons) -> Vec<SidebarNode<Section>> {
     // This is intentionally a flat navigation model: the mock's categories
@@ -539,7 +597,7 @@ fn settings_sidebar(
             ])}
             {sidebar_group("LOOK & FEEL", vec![
                 sidebar_item(current, Section::Personalization, "Personalization", icons.paintbrush.clone(), Color::rgb(193, 99, 190), view),
-                sidebar_item(current, Section::Desktop, "Desktop", icons.wallpaper.clone(), Color::rgb(83, 132, 232), view),
+                sidebar_item(current, Section::Desktop, "Desktop", icons.wallpaper.clone(), Color::rgb(110, 105, 224), view),
                 sidebar_item(current, Section::Windows, "Windows", icons.windows.clone(), Color::rgb(78, 125, 222), view),
             ])}
             {sidebar_group("WORKFLOW", vec![
@@ -870,6 +928,11 @@ fn build(
     let account_list = users.get();
     let title = page_title(&current);
     let description = page_description(&current);
+    let (category_icon, category_color) = section_presentation(&current, icons);
+    creamui_reactive::provide_context(common::PageStyle {
+        color: category_color,
+        title: title.clone(),
+    });
     let _ = (&sidebar_style, nav);
     let sidebar = settings_sidebar(&current, view, icons);
 
@@ -1013,33 +1076,10 @@ fn build(
         },
         ..Default::default()
     };
-    let category_icon = match &current {
-        Section::Connectivity => icons.status.clone(),
-        Section::Hardware => icons.devices.clone(),
-        Section::Personalization => icons.paintbrush.clone(),
-        Section::Desktop => icons.wallpaper.clone(),
-        Section::Windows => icons.windows.clone(),
-        Section::ShortcutsCategory => icons.shortcuts.clone(),
-        Section::Users => icons.users.clone(),
-        Section::Applications => icons.applications.clone(),
-        Section::Privacy => icons.privacy.clone(),
-        Section::Accessibility => icons.accessibility.clone(),
-        Section::System => icons.system.clone(),
-        Section::About => icons.about.clone(),
-        _ => IconSource::Symbol(Symbol::Controls),
-    };
-    let category_color = match current {
-        Section::Connectivity => creamui_theme::Color::rgb(0, 153, 214),
-        Section::Hardware => creamui_theme::Color::rgb(0, 173, 188),
-        Section::Personalization => creamui_theme::Color::rgb(193, 99, 190),
-        Section::Desktop | Section::Windows => creamui_theme::Color::rgb(83, 132, 232),
-        Section::ShortcutsCategory | Section::Shortcuts => creamui_theme::Color::rgb(207, 91, 36),
-        _ => theme.colors.accent,
-    };
     let page_header: BoxedWidget = Box::new(jsx! {
         <Flex direction={FlexDirection::Row} style={page_header_style} gap={16.0} align={creamui_widgets::layout::Align::Center}>
             <Flex size={(56.0, 56.0)} align={creamui_widgets::layout::Align::Center} justify={creamui_widgets::layout::Justify::Center} background={creamui_core::LinearGradient::new(180.0, category_color.mix(creamui_theme::Color::rgb(255, 255, 255), 0.22), category_color)} corner_radius={16.0}>
-                {Box::new(Icon::new(category_icon, theme.colors.selection_text).size(28.0)) as BoxedWidget}
+                {Box::new(Icon::new(category_icon, creamui_theme::Color::rgb(255, 255, 255)).size(28.0)) as BoxedWidget}
             </Flex>
             <Flex direction={FlexDirection::Column} gap={4.0} justify={creamui_widgets::layout::Justify::Center}>
                 {Box::new(Heading::lg(title).font_size(24.0)) as BoxedWidget}
@@ -1074,15 +1114,14 @@ fn build(
                     RawView::new(Style {
                         flex_direction: FlexDirection::Column,
                         flex_shrink: 0.0,
-                        // `PageContainer` in cnpt is `max-w-3xl mx-auto`.
-                        // The cap prevents cards from becoming billboard-wide
-                        // on a large monitor.
+                        // Let the form use the available width at the normal
+                        // window size; retain a readable cap on large screens.
                         size: creamui_core::layout::Size {
                             width: Dimension::Percent(1.0),
                             height: Dimension::Auto,
                         },
                         max_size: creamui_core::layout::Size {
-                            width: Dimension::Length(768.0),
+                            width: Dimension::Length(864.0),
                             height: Dimension::Auto,
                         },
                         align_self: Some(creamui_core::layout::AlignSelf::Center),
@@ -1091,11 +1130,16 @@ fn build(
                             height: LengthPercentage::Length(32.0),
                         },
                         padding: creamui_core::layout::Rect {
-                            // Matches the mock's `px-10`: it remains roomy
-                            // on wide windows without starving the content
-                            // column on a smaller display.
-                            left: LengthPercentage::Length(40.0),
-                            right: LengthPercentage::Length(40.0),
+                            left: LengthPercentage::Length(if size.width < 1000.0 {
+                                24.0
+                            } else {
+                                40.0
+                            }),
+                            right: LengthPercentage::Length(if size.width < 1000.0 {
+                                24.0
+                            } else {
+                                40.0
+                            }),
                             top: LengthPercentage::Length(if show_page_header {
                                 0.0
                             } else if connectivity_detail
@@ -1253,14 +1297,20 @@ fn build(
     };
 
     let window_surface = theme.colors.surface;
+    let sidebar_surface = window_surface.mix(theme.colors.accent, 0.035);
+    let page_surface = creamui_core::LinearGradient::new(
+        150.0,
+        window_surface,
+        window_surface.mix(theme.colors.accent, 0.055),
+    );
     Box::new(jsx! {
         <Flex direction={FlexDirection::Row} size={(size.width, size.height)} background={window_surface}>
-            <RawView style={sidebar_shell_style}>
+            <RawView style={sidebar_shell_style} background={sidebar_surface}>
                 {sidebar_header}
                 {Box::new(creamui_widgets::RawScrollView::controlled(Style { flex_grow: 1.0, min_size: creamui_core::layout::Size { width: Dimension::Length(0.0), height: Dimension::Length(0.0) }, ..Default::default() }, sidebar_scroll.clone()).scrollbar(false).child(sidebar)) as BoxedWidget}
                 {Box::new(RawView::new(Style { position: Position::Absolute, inset: creamui_core::layout::Rect { left: LengthPercentageAuto::Auto, right: LengthPercentageAuto::Length(0.0), top: LengthPercentageAuto::Length(0.0), bottom: LengthPercentageAuto::Length(0.0) }, size: creamui_core::layout::Size { width: Dimension::Length(1.0), height: Dimension::Percent(1.0) }, ..Default::default() }).background(theme.colors.border)) as BoxedWidget}
             </RawView>
-            <RawView style={main_style}>
+            <RawView style={main_style} background={page_surface}>
                 {panel_content}
             </RawView>
             {drag_area}

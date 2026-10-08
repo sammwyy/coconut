@@ -106,7 +106,9 @@ fn connectivity_layout_matches_reference() {
         let profile = users::ProfileControllers::load(&accounts);
         let icons = SettingsIcons::load();
         let connectivity = sections::connectivity::State::new();
-        let window_state = sections::window::WindowState::load();
+        // Preview actual controls independently of a running Blair service.
+        // Rendering this fixture never applies configuration to the host.
+        let window_state = sections::window::WindowState::preview();
         let shortcuts = sections::window::ShortcutState::load();
         let appearance = Signal::new(creamui_theme::ResolvedAppearance {
             theme_id: "test".into(),
