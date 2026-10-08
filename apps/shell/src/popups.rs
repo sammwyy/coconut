@@ -604,7 +604,16 @@ fn status_card(status: &StatusUpdate, width: f32) -> BoxedWidget {
                 .width((width - 98.0).max(0.0))
                 .height(6.0),
             ))
-            .child(Box::new(Text::secondary(format!("{:.0}%", status.level * 100.0)))),
+            // Keep the percentage as one unit.  Let the progress bar give up
+            // space first; otherwise flex can shrink the text enough to put
+            // the '%' on a second line.
+            .child(Box::new(
+                RawView::new(Style {
+                    flex_shrink: 0.0,
+                    ..Default::default()
+                })
+                .child(Box::new(Text::secondary(format!("{:.0}%", status.level * 100.0)))),
+            )),
     )
 }
 
