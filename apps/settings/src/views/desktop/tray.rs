@@ -1,4 +1,4 @@
-use crate::common::{group, labeled_group, row, section};
+use crate::components::{group, labeled_group, row, section};
 use coconut_core::ShellConfig;
 use coconut_plugin_tray::{TrayConfig, TrayMode, TrayVisibility};
 use creamui_core::{BoxedWidget, Size};

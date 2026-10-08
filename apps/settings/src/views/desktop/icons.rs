@@ -1,4 +1,4 @@
-use crate::common::{group, labeled_group, row, section, update_config};
+use crate::components::{group, labeled_group, row, section, update_config};
 use coconut_core::{ClickAction, DesktopColor, IconShape, ShellConfig};
 use creamui_core::layout::FlexDirection;
 use creamui_core::{BoxedWidget, Size};

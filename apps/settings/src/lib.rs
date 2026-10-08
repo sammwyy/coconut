@@ -1,7 +1,7 @@
-mod common;
+mod components;
 mod icons;
 mod polkit;
-mod sections;
+mod views;
 mod users;
 #[cfg(test)]
 mod visual_tests;
@@ -19,7 +19,7 @@ use creamui_render::{
 };
 use creamui_widgets::{
     Avatar, CUIWindowDragArea, ColorPickerController, Heading, Icon, IconSource, RawButton,
-    RawView, ScrollController, SidebarNavController, SidebarNode, Symbol, Text, TextController,
+    RawView, ScrollController, SidebarNavController, Symbol, Text, TextController,
     TextInput, TextSize,
 };
 use icons::SettingsIcons;
@@ -67,28 +67,8 @@ enum Section {
     Privacy,
     Accessibility,
     About,
-    Detail(sections::native::Page),
+    Detail(views::native::Page),
     Unavailable(String),
-}
-
-/// The page shown when a sidebar category is opened. Keeping this decision in
-/// the app lets `nested_sidebar` remain generic while ensuring its visible
-/// selection always corresponds to the content panel.
-fn category_default(section: Section) -> Section {
-    match section {
-        Section::Connectivity => Section::Unavailable("Connectivity".into()),
-        Section::Hardware => Section::Keyboard,
-        Section::Desktop => Section::Wallpaper,
-        Section::Windows => Section::Layout,
-        Section::ShortcutsCategory => Section::Shortcuts,
-        Section::Applications => Section::Unavailable("Applications".into()),
-        Section::Users => Section::Profile,
-        Section::Privacy => Section::Unavailable("Privacy & Security".into()),
-        Section::Accessibility => Section::Unavailable("Accessibility".into()),
-        Section::System => Section::Unavailable("System".into()),
-        Section::About => Section::Unavailable("About".into()),
-        leaf => leaf,
-    }
 }
 
 fn page_title(section: &Section) -> String {
@@ -219,7 +199,7 @@ fn section_presentation(
         Section::Privacy => (icons.privacy.clone(), Color::rgb(54, 171, 107)),
         Section::Accessibility => (icons.accessibility.clone(), Color::rgb(0, 167, 187)),
         Section::System | Section::About => (icons.system.clone(), Color::rgb(77, 142, 229)),
-        Section::Detail(_) => section_presentation(&sections::native::parent(section), icons),
+        Section::Detail(_) => section_presentation(&views::native::parent(section), icons),
         Section::Unavailable(_) => (
             IconSource::Symbol(Symbol::Controls),
             Color::rgb(110, 105, 224),
@@ -235,292 +215,11 @@ fn section_presentation(
     }
 }
 
-#[allow(unreachable_code, unused_variables)]
-fn tree(accounts: &[users::Account], icons: &SettingsIcons) -> Vec<SidebarNode<Section>> {
-    // This is intentionally a flat navigation model: the mock's categories
-    // are destinations, not folders.  A click changes the main view while
-    // keeping the complete category list visible in the sidebar.
-    return vec![
-        SidebarNode::group(
-            Section::GroupNetwork,
-            "Network",
-            vec![
-                SidebarNode::leaf(Section::Connectivity, icons.status.clone(), "Connectivity"),
-                SidebarNode::leaf(Section::Hardware, icons.devices.clone(), "Hardware"),
-            ],
-        ),
-        SidebarNode::group(
-            Section::GroupLookAndFeel,
-            "Look & Feel",
-            vec![
-                SidebarNode::leaf(
-                    Section::Personalization,
-                    icons.paintbrush.clone(),
-                    "Personalization",
-                ),
-                SidebarNode::leaf(Section::Desktop, icons.wallpaper.clone(), "Desktop"),
-                SidebarNode::leaf(Section::Windows, icons.windows.clone(), "Windows"),
-            ],
-        ),
-        SidebarNode::group(
-            Section::GroupWorkflow,
-            "Workflow",
-            vec![
-                SidebarNode::leaf(
-                    Section::ShortcutsCategory,
-                    icons.shortcuts.clone(),
-                    "Shortcuts",
-                ),
-                SidebarNode::leaf(
-                    Section::Applications,
-                    IconSource::Symbol(Symbol::Grid),
-                    "Applications",
-                ),
-            ],
-        ),
-        SidebarNode::group(
-            Section::GroupPeople,
-            "People",
-            vec![
-                SidebarNode::leaf(Section::Users, icons.users.clone(), "Users & Accounts"),
-                SidebarNode::leaf(
-                    Section::Privacy,
-                    IconSource::Symbol(Symbol::Controls),
-                    "Privacy & Security",
-                ),
-                SidebarNode::leaf(
-                    Section::Accessibility,
-                    IconSource::Symbol(Symbol::Appearance),
-                    "Accessibility",
-                ),
-            ],
-        ),
-        SidebarNode::group(
-            Section::GroupSystem,
-            "System",
-            vec![
-                SidebarNode::leaf(Section::System, icons.system.clone(), "System"),
-                SidebarNode::leaf(Section::About, IconSource::Symbol(Symbol::Display), "About"),
-            ],
-        ),
-    ];
-
-    let profile_icon = std::env::var("USER")
-        .ok()
-        .and_then(|username| accounts.iter().find(|account| account.username == username))
-        .map(users::account_icon)
-        .unwrap_or(IconSource::Symbol(Symbol::Controls));
-    let personalization = SidebarNode::parent(
-        Section::Personalization,
-        icons.paintbrush.clone(),
-        "Personalization",
-        vec![
-            SidebarNode::leaf(Section::Wallpaper, icons.wallpaper.clone(), "Wallpaper"),
-            SidebarNode::leaf(
-                Section::IconPack,
-                IconSource::Symbol(Symbol::Grid),
-                "Icon pack",
-            ),
-            SidebarNode::leaf(Section::CursorTheme, icons.cursor.clone(), "Cursor"),
-            SidebarNode::leaf(Section::Sound, icons.music_note.clone(), "Sound pack"),
-        ],
-    );
-    let desktop = SidebarNode::parent(
-        Section::Desktop,
-        icons.wallpaper.clone(),
-        "Desktop",
-        vec![
-            SidebarNode::leaf(Section::Statusbar, icons::blank(), "Top panel"),
-            SidebarNode::leaf(Section::Dockbar, icons::blank(), "Dock"),
-            SidebarNode::leaf(Section::Islands, icons.islands.clone(), "Widgets"),
-            SidebarNode::leaf(Section::Tray, icons.status.clone(), "Status icons"),
-            SidebarNode::leaf(
-                Section::DesktopIcons,
-                IconSource::Symbol(Symbol::Grid),
-                "Desktop icons",
-            ),
-        ],
-    );
-    let windows = SidebarNode::parent(
-        Section::Windows,
-        icons.windows.clone(),
-        "Windows",
-        vec![
-            SidebarNode::leaf(
-                Section::Layout,
-                IconSource::Symbol(Symbol::Grid),
-                "Default layout",
-            ),
-            SidebarNode::leaf(
-                Section::Focus,
-                IconSource::Symbol(Symbol::Controls),
-                "Focus follows mouse",
-            ),
-            SidebarNode::leaf(Section::WorkingArea, icons.workspaces.clone(), "Workspaces"),
-            SidebarNode::leaf(Section::Titlebar, icons.titlebar.clone(), "Decorations"),
-            SidebarNode::leaf(Section::Effects, icons.eye.clone(), "Effects"),
-            SidebarNode::leaf(
-                Section::Unavailable("Window rules".into()),
-                IconSource::Symbol(Symbol::Sliders),
-                "Window rules",
-            ),
-        ],
-    );
-    let users_node = SidebarNode::parent(
-        Section::Users,
-        icons.users.clone(),
-        "Users & Accounts",
-        vec![
-            SidebarNode::leaf(Section::Profile, profile_icon, "My profile"),
-            SidebarNode::group(
-                Section::Users,
-                "Other accounts",
-                accounts
-                    .iter()
-                    .map(|account| {
-                        SidebarNode::leaf(
-                            Section::User(account.username.clone()),
-                            users::account_icon(account),
-                            if account.real_name.is_empty() {
-                                account.username.clone()
-                            } else {
-                                account.real_name.clone()
-                            },
-                        )
-                    })
-                    .collect(),
-            ),
-            SidebarNode::leaf(Section::CreateUser, icons.users.clone(), "Add user"),
-        ],
-    );
-    vec![
-        SidebarNode::group(
-            Section::GroupNetwork,
-            "Network",
-            vec![
-                SidebarNode::parent(
-                    Section::Connectivity,
-                    icons.status.clone(),
-                    "Connectivity",
-                    vec![SidebarNode::leaf(
-                        Section::Unavailable("Connectivity".into()),
-                        icons.status.clone(),
-                        "Not available yet",
-                    )],
-                ),
-                SidebarNode::parent(
-                    Section::Hardware,
-                    icons.devices.clone(),
-                    "Hardware",
-                    vec![
-                        SidebarNode::leaf(Section::Keyboard, icons.keyboard.clone(), "Keyboard"),
-                        SidebarNode::leaf(Section::Mouse, icons.mouse.clone(), "Mouse & touchpad"),
-                        SidebarNode::leaf(
-                            Section::Touchpad,
-                            IconSource::Symbol(Symbol::Controls),
-                            "Touchpad",
-                        ),
-                        SidebarNode::leaf(
-                            Section::Unavailable("Displays & sound".into()),
-                            IconSource::Symbol(Symbol::Display),
-                            "Displays & sound",
-                        ),
-                    ],
-                ),
-            ],
-        ),
-        SidebarNode::group(
-            Section::GroupLookAndFeel,
-            "Look & Feel",
-            vec![personalization, desktop, windows],
-        ),
-        SidebarNode::group(
-            Section::GroupWorkflow,
-            "Workflow",
-            vec![
-                SidebarNode::parent(
-                    Section::ShortcutsCategory,
-                    icons.shortcuts.clone(),
-                    "Shortcuts",
-                    vec![SidebarNode::leaf(
-                        Section::Shortcuts,
-                        icons.shortcuts.clone(),
-                        "Keyboard shortcuts",
-                    )],
-                ),
-                SidebarNode::parent(
-                    Section::Applications,
-                    IconSource::Symbol(Symbol::Grid),
-                    "Applications",
-                    vec![SidebarNode::leaf(
-                        Section::Unavailable("Applications".into()),
-                        IconSource::Symbol(Symbol::Grid),
-                        "Not available yet",
-                    )],
-                ),
-            ],
-        ),
-        SidebarNode::group(
-            Section::GroupPeople,
-            "People",
-            vec![
-                users_node,
-                SidebarNode::parent(
-                    Section::Privacy,
-                    IconSource::Symbol(Symbol::Controls),
-                    "Privacy & Security",
-                    vec![SidebarNode::leaf(
-                        Section::Unavailable("Privacy & Security".into()),
-                        IconSource::Symbol(Symbol::Controls),
-                        "Not available yet",
-                    )],
-                ),
-                SidebarNode::parent(
-                    Section::Accessibility,
-                    IconSource::Symbol(Symbol::Appearance),
-                    "Accessibility",
-                    vec![SidebarNode::leaf(
-                        Section::Unavailable("Accessibility".into()),
-                        IconSource::Symbol(Symbol::Appearance),
-                        "Not available yet",
-                    )],
-                ),
-            ],
-        ),
-        SidebarNode::group(
-            Section::GroupSystem,
-            "System",
-            vec![
-                SidebarNode::parent(
-                    Section::System,
-                    icons.system.clone(),
-                    "System",
-                    vec![SidebarNode::leaf(
-                        Section::Unavailable("System".into()),
-                        icons.system.clone(),
-                        "Not available yet",
-                    )],
-                ),
-                SidebarNode::parent(
-                    Section::About,
-                    IconSource::Symbol(Symbol::Display),
-                    "About",
-                    vec![SidebarNode::leaf(
-                        Section::Unavailable("About".into()),
-                        IconSource::Symbol(Symbol::Display),
-                        "Not available yet",
-                    )],
-                ),
-            ],
-        ),
-    ]
-}
-
 fn unavailable_page(name: &str) -> BoxedWidget {
-    common::section(
+    components::section(
         "",
         "",
-        vec![common::group(vec![common::row(
+        vec![components::group(vec![components::row(
             "Not available yet",
             Box::new(
                 Text::secondary(format!(
@@ -547,7 +246,7 @@ fn sidebar_item(
     view: &Signal<Section>,
 ) -> BoxedWidget {
     let theme = creamui_theme::use_theme();
-    let active = sections::native::parent(current) == section;
+    let active = views::native::parent(current) == section;
     let select = view.clone();
     let item = RawButton::new(
         Style {
@@ -567,7 +266,7 @@ fn sidebar_item(
             padding: creamui_core::layout::Rect { left: LengthPercentage::Length(8.0), right: LengthPercentage::Length(8.0), top: LengthPercentage::Length(0.0), bottom: LengthPercentage::Length(0.0) },
             ..Default::default()
         }}>
-            {common::icon_badge(icon, color)}
+            {components::icon_badge(icon, color)}
             {Box::new(Text::new(label).font_size(13.0)) as BoxedWidget}
         </RawView>
     }));
@@ -702,7 +401,7 @@ fn window_controls(
 }
 
 pub fn run() {
-    common::load_settings_fonts();
+    components::load_settings_fonts();
     let config = Signal::new(ShellConfig::load());
     let integrations = coconut_registry::detect();
     let appearance = Signal::new(load_system_appearance());
@@ -716,17 +415,17 @@ pub fn run() {
     let profile = users::ProfileControllers::load(&account_list);
     let users = Signal::new(account_list);
     let icons = SettingsIcons::load();
-    let wallpaper_gallery = sections::wallpaper::GalleryState::new();
-    let connectivity = sections::connectivity::State::new();
-    let native = sections::native::State::new(integrations.settings.clone());
-    let window_settings = sections::window::WindowState::load();
-    let shortcut_settings = sections::window::ShortcutState::load();
+    let wallpaper_gallery = views::personalization::wallpaper::GalleryState::new();
+    let connectivity = views::connectivity::State::new();
+    let native = views::native::State::new(integrations.settings.clone());
+    let window_settings = views::windows::WindowState::load();
+    let shortcut_settings = views::windows::ShortcutState::load();
     let content_scroll = ScrollController::new(0.0);
     let sidebar_scroll = ScrollController::new(0.0);
     let dock_scroll = ScrollController::new(0.0);
-    let dock_tab = Signal::new(sections::general::DockTab::Display);
+    let dock_tab = Signal::new(views::desktop::bars::DockTab::Display);
     let islands_detail: Signal<Option<&'static str>> = Signal::new(None);
-    let island_settings = sections::island_settings::State::default();
+    let island_settings = views::desktop::island_settings::State::default();
     let settings_search = TextController::new("");
     let maximized = Signal::new(false);
     let last_view = RefCell::new(Section::Connectivity);
@@ -884,19 +583,19 @@ fn build(
     users: &Signal<Vec<users::Account>>,
     profile: &users::ProfileControllers,
     icons: &SettingsIcons,
-    wallpaper_gallery: &sections::wallpaper::GalleryState,
-    window_settings: &sections::window::WindowState,
-    shortcut_settings: &sections::window::ShortcutState,
+    wallpaper_gallery: &views::personalization::wallpaper::GalleryState,
+    window_settings: &views::windows::WindowState,
+    shortcut_settings: &views::windows::ShortcutState,
     content_scroll: &ScrollController,
     sidebar_scroll: &ScrollController,
     dock_scroll: &ScrollController,
-    dock_tab: &Signal<sections::general::DockTab>,
+    dock_tab: &Signal<views::desktop::bars::DockTab>,
     islands_detail: &Signal<Option<&'static str>>,
-    island_settings: &sections::island_settings::State,
+    island_settings: &views::desktop::island_settings::State,
     settings_search: &TextController,
-    connectivity: &sections::connectivity::State,
+    connectivity: &views::connectivity::State,
     maximized: &Signal<bool>,
-    native: &sections::native::State,
+    native: &views::native::State,
 ) -> BoxedWidget {
     let theme = creamui_theme::use_theme();
 
@@ -922,14 +621,14 @@ fn build(
     };
     let current = view.get();
     let connectivity_detail = current == Section::Connectivity && connectivity.showing_detail();
-    let native_detail = sections::native::parent(&current) != current;
+    let native_detail = views::native::parent(&current) != current;
     let decorations = creamui_render::use_window_decorations();
     let show_page_header = !connectivity_detail && !native_detail;
     let account_list = users.get();
     let title = page_title(&current);
     let description = page_description(&current);
     let (category_icon, category_color) = section_presentation(&current, icons);
-    creamui_reactive::provide_context(common::PageStyle {
+    creamui_reactive::provide_context(components::PageStyle {
         color: category_color,
         title: title.clone(),
     });
@@ -938,29 +637,29 @@ fn build(
 
     let content_has_own_scroll = matches!(current, Section::Statusbar | Section::Dockbar);
     let content = match current.clone() {
-        Section::Connectivity => sections::connectivity::build(
+        Section::Connectivity => views::connectivity::build(
             size,
             integrations.network.clone(),
             integrations.bluetooth.clone(),
             connectivity,
             icons,
         ),
-        Section::Hardware => sections::native::hardware(native, view),
-        Section::Personalization => sections::native::personalization(
+        Section::Hardware => views::native::hardware(native, view),
+        Section::Personalization => views::native::personalization(
             native,
             config,
             appearance,
             view,
-            sections::appearance::overview(
+            views::personalization::appearance::overview(
                 appearance,
                 window,
                 appearance_accent_picker,
                 appearance_custom_accent,
             ),
         ),
-        Section::Desktop => sections::native::desktop(native, config, view),
-        Section::Windows => sections::native::windows(native, view, window_settings),
-        Section::Detail(ref page) => sections::native::detail(
+        Section::Desktop => views::native::desktop(native, config, view),
+        Section::Windows => views::native::windows(native, view, window_settings),
+        Section::Detail(ref page) => views::native::detail(
             page,
             native,
             view,
@@ -969,16 +668,16 @@ fn build(
             appearance,
             window,
         ),
-        Section::ShortcutsCategory => sections::window::build_shortcuts(size, shortcut_settings),
-        Section::Applications => sections::native::applications(native, view),
-        Section::Users => sections::native::accounts(native, &account_list, view),
-        Section::Privacy => sections::native::privacy(native, view),
-        Section::Accessibility => sections::native::accessibility(native, window_settings),
-        Section::System => sections::native::system(native, view),
-        Section::About => sections::native::about(native),
-        Section::IconPack => sections::asset_packs::icon_packs(size, config),
-        Section::Sound => sections::asset_packs::sound_themes(size, config),
-        Section::Wallpaper => sections::wallpaper::build(
+        Section::ShortcutsCategory => views::windows::build_shortcuts(size, shortcut_settings),
+        Section::Applications => views::native::applications(native, view),
+        Section::Users => views::native::accounts(native, &account_list, view),
+        Section::Privacy => views::native::privacy(native, view),
+        Section::Accessibility => views::native::accessibility(native, window_settings),
+        Section::System => views::native::system(native, view),
+        Section::About => views::native::about(native),
+        Section::IconPack => views::personalization::asset_packs::icon_packs(size, config),
+        Section::Sound => views::personalization::asset_packs::sound_themes(size, config),
+        Section::Wallpaper => views::personalization::wallpaper::build(
             size,
             config,
             wallpaper_color_picker,
@@ -986,38 +685,38 @@ fn build(
             window,
         ),
         Section::DesktopIcons => {
-            sections::desktop_icons::build(size, config, desktop_icons_color_picker)
+            views::desktop::icons::build(size, config, desktop_icons_color_picker)
         }
-        Section::Statusbar => sections::general::build_bar_page(
+        Section::Statusbar => views::desktop::bars::build_bar_page(
             size,
             config,
             dock_scroll,
             dock_tab,
-            sections::general::BarKind::Statusbar,
+            views::desktop::bars::BarKind::Statusbar,
         ),
-        Section::Dockbar => sections::general::build_bar_page(
+        Section::Dockbar => views::desktop::bars::build_bar_page(
             size,
             config,
             dock_scroll,
             dock_tab,
-            sections::general::BarKind::Dockbar,
+            views::desktop::bars::BarKind::Dockbar,
         ),
-        Section::Tray => sections::tray::build(size, config),
-        Section::Islands => sections::islands::build(size, config, islands_detail, island_settings),
-        Section::Layout => sections::window::build_layout(size, window_settings),
-        Section::Titlebar => sections::window::build_titlebar(size, window_settings),
-        Section::Compositor => sections::window::build_general(size, window_settings),
-        Section::WorkingArea => sections::window::build_working_area(size, window_settings),
-        Section::Effects => sections::window::build_effects(size, window_settings),
-        Section::Keyboard => sections::window::build_keyboard(size, window_settings),
+        Section::Tray => views::desktop::tray::build(size, config),
+        Section::Islands => views::desktop::islands::build(size, config, islands_detail, island_settings),
+        Section::Layout => views::windows::build_layout(size, window_settings),
+        Section::Titlebar => views::windows::build_titlebar(size, window_settings),
+        Section::Compositor => views::windows::build_general(size, window_settings),
+        Section::WorkingArea => views::windows::build_working_area(size, window_settings),
+        Section::Effects => views::windows::build_effects(size, window_settings),
+        Section::Keyboard => views::windows::build_keyboard(size, window_settings),
         Section::Mouse => category_pages(vec![
-            sections::window::build_mouse(size, window_settings),
-            sections::window::build_touchpad(size, window_settings),
+            views::windows::build_mouse(size, window_settings),
+            views::windows::build_touchpad(size, window_settings),
         ]),
-        Section::CursorTheme => sections::asset_packs::cursor_themes(size, config),
-        Section::Touchpad => sections::window::build_touchpad(size, window_settings),
-        Section::Focus => sections::window::build_focus(size, window_settings),
-        Section::Shortcuts => sections::window::build_shortcuts(size, shortcut_settings),
+        Section::CursorTheme => views::personalization::asset_packs::cursor_themes(size, config),
+        Section::Touchpad => views::windows::build_touchpad(size, window_settings),
+        Section::Focus => views::windows::build_focus(size, window_settings),
+        Section::Shortcuts => views::windows::build_shortcuts(size, shortcut_settings),
         Section::Profile => users::build(size, profile),
         Section::User(ref username) => users::account_view(size, &account_list, username),
         Section::CreateUser => users::create_user_view(size),
@@ -1089,7 +788,7 @@ fn build(
     });
     let panel_content: BoxedWidget = if content_has_own_scroll {
         let header = if native_detail {
-            sections::native::detail_header(&current, view, size.width)
+            views::native::detail_header(&current, view, size.width)
         } else {
             page_header
         };
@@ -1145,8 +844,8 @@ fn build(
                             } else if connectivity_detail
                                 && matches!(
                                     connectivity.view.get(),
-                                    sections::connectivity::View::KnownNetworks
-                                        | sections::connectivity::View::NearbyNetworks
+                                    views::connectivity::View::KnownNetworks
+                                        | views::connectivity::View::NearbyNetworks
                                 )
                             {
                                 16.0
@@ -1168,9 +867,9 @@ fn build(
         );
         if connectivity_detail || native_detail {
             let header = if connectivity_detail {
-                sections::connectivity::detail_header(connectivity, size.width)
+                views::connectivity::detail_header(connectivity, size.width)
             } else {
-                sections::native::detail_header(&current, view, size.width)
+                views::native::detail_header(&current, view, size.width)
             };
             Box::new(jsx! {
                 <Flex direction={FlexDirection::Column} grow={1.0} gap={0.0}>

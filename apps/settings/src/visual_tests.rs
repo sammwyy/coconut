@@ -72,8 +72,8 @@ fn connectivity_layout_matches_reference() {
     use creamui_theme::{Color, Theme, ThemeProvider};
 
     creamui_reactive::with_context_scope(|| {
-        common::load_settings_fonts();
-        let theme = common::settings_theme(Theme::light());
+        components::load_settings_fonts();
+        let theme = components::settings_theme(Theme::light());
         creamui_reactive::provide_context(ThemeProvider::new(theme));
         let moves = Rc::new(Cell::new(0));
         creamui_reactive::provide_context(creamui_core::WindowDragHandle::new({
@@ -105,11 +105,11 @@ fn connectivity_layout_matches_reference() {
         let accounts = Vec::new();
         let profile = users::ProfileControllers::load(&accounts);
         let icons = SettingsIcons::load();
-        let connectivity = sections::connectivity::State::new();
+        let connectivity = views::connectivity::State::new();
         // Preview actual controls independently of a running Blair service.
         // Rendering this fixture never applies configuration to the host.
-        let window_state = sections::window::WindowState::preview();
-        let shortcuts = sections::window::ShortcutState::load();
+        let window_state = views::windows::WindowState::preview();
+        let shortcuts = views::windows::ShortcutState::load();
         let appearance = Signal::new(creamui_theme::ResolvedAppearance {
             theme_id: "test".into(),
             variant_id: "light".into(),
@@ -127,14 +127,14 @@ fn connectivity_layout_matches_reference() {
         let picker = ColorPickerController::new();
         let custom_accent = Signal::new(false);
         let users = Signal::new(accounts);
-        let gallery = sections::wallpaper::GalleryState::new();
+        let gallery = views::personalization::wallpaper::GalleryState::new();
         let dock_scroll = ScrollController::new(0.0);
-        let dock_tab = Signal::new(sections::general::DockTab::Display);
+        let dock_tab = Signal::new(views::desktop::bars::DockTab::Display);
         let islands = Signal::new(None);
-        let island_settings = sections::island_settings::State::default();
+        let island_settings = views::desktop::island_settings::State::default();
         let search = TextController::new("");
         let maximized = Signal::new(false);
-        let native = sections::native::State::new(integrations.settings.clone());
+        let native = views::native::State::new(integrations.settings.clone());
 
         let size = Size {
             width: 1120.0,
@@ -246,7 +246,7 @@ fn connectivity_layout_matches_reference() {
             .expect("known networks row")();
         assert!(matches!(
             connectivity.view.peek(),
-            sections::connectivity::View::KnownNetworks
+            views::connectivity::View::KnownNetworks
         ));
         assert!(
             content_scroll.max_offset() > 0.0,
@@ -292,7 +292,7 @@ fn connectivity_layout_matches_reference() {
             .expect("subpage back button")();
         assert!(matches!(
             connectivity.view.peek(),
-            sections::connectivity::View::Overview
+            views::connectivity::View::Overview
         ));
         assert!(
             content_scroll.max_offset() <= 1.0,
@@ -439,38 +439,38 @@ fn connectivity_layout_matches_reference() {
             Section::About,
         ];
         let details = [
-            sections::native::Page::Displays,
-            sections::native::Page::Devices,
-            sections::native::Page::Printers,
-            sections::native::Page::AddPrinter,
-            sections::native::Page::Fonts,
-            sections::native::Page::InstalledApps,
-            sections::native::Page::App("test.desktop".into()),
-            sections::native::Page::FileTypes,
-            sections::native::Page::Startup,
-            sections::native::Page::AddStartup,
-            sections::native::Page::Password,
-            sections::native::Page::AddUser,
-            sections::native::Page::OnlineAccounts,
-            sections::native::Page::Fingerprint,
-            sections::native::Page::Camera,
-            sections::native::Page::Microphone,
-            sections::native::Page::Notifications,
-            sections::native::Page::HotCorners,
-            sections::native::Page::WindowRules,
-            sections::native::Page::Updates,
-            sections::native::Page::Storage,
-            sections::native::Page::Activity,
-            sections::native::Page::DateTime,
-            sections::native::Page::Language,
-            sections::native::Page::Reset,
+            views::native::Page::Displays,
+            views::native::Page::Devices,
+            views::native::Page::Printers,
+            views::native::Page::AddPrinter,
+            views::native::Page::Fonts,
+            views::native::Page::InstalledApps,
+            views::native::Page::App("test.desktop".into()),
+            views::native::Page::FileTypes,
+            views::native::Page::Startup,
+            views::native::Page::AddStartup,
+            views::native::Page::Password,
+            views::native::Page::AddUser,
+            views::native::Page::OnlineAccounts,
+            views::native::Page::Fingerprint,
+            views::native::Page::Camera,
+            views::native::Page::Microphone,
+            views::native::Page::Notifications,
+            views::native::Page::HotCorners,
+            views::native::Page::WindowRules,
+            views::native::Page::Updates,
+            views::native::Page::Storage,
+            views::native::Page::Activity,
+            views::native::Page::DateTime,
+            views::native::Page::Language,
+            views::native::Page::Reset,
         ];
         for (name, base) in [
             ("light", Theme::light()),
             ("dark", Theme::dark()),
             ("midnight", Theme::midnight()),
         ] {
-            let theme = common::settings_theme(base);
+            let theme = components::settings_theme(base);
             creamui_reactive::provide_context(ThemeProvider::new(theme));
             appearance.set(creamui_theme::ResolvedAppearance {
                 theme_id: "default".into(),
@@ -520,7 +520,7 @@ fn connectivity_layout_matches_reference() {
                         "client clips {title}"
                     );
                 }
-                if sections::native::parent(&section) != section {
+                if views::native::parent(&section) != section {
                     assert!(
                         scene.window_drag_at(Point { x: 306.0, y: 28.0 }).is_none(),
                         "back button swallowed by drag: {title}"
@@ -529,7 +529,7 @@ fn connectivity_layout_matches_reference() {
                         .hit_test(Point { x: 306.0, y: 28.0 })
                         .expect("compact back button")();
                     assert!(
-                        view.peek() == sections::native::parent(&section),
+                        view.peek() == views::native::parent(&section),
                         "incorrect parent for {title}"
                     );
                 }

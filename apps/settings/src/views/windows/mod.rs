@@ -1,6 +1,6 @@
 //! Blair settings edited through its D-Bus client. Blair validates, applies,
 //! and persists its own configuration.
-use crate::common::{group, row, section, section_label};
+use crate::components::{group, row, section, section_label};
 use blair_client::BlairClient;
 use coconut_core::{CustomShortcut, ShellShortcut, ShortcutAction, ShortcutConfig};
 use creamui_core::layout::{FlexDirection, Style};
@@ -1413,7 +1413,7 @@ fn integer_field(
     });
     row(
         label,
-        Box::new(crate::common::form_input(
+        Box::new(crate::components::form_input(
             TextInput::controlled(&controller).placeholder(&match max {
                 Some(max) => format!("{min}–{max}"),
                 None => format!("At least {min}"),
@@ -1439,7 +1439,7 @@ fn ratio_field(state: &WindowState, label: &str, path: &'static [&'static str]) 
     });
     row(
         label,
-        Box::new(crate::common::form_input(
+        Box::new(crate::components::form_input(
             TextInput::controlled(&controller).placeholder("0.1–0.9"),
             112.0,
         )) as BoxedWidget,
@@ -1493,8 +1493,8 @@ mod shortcut_tests {
     #[test]
     fn shortcut_cards_keep_recording_and_custom_actions_usable() {
         creamui_reactive::with_context_scope(|| {
-            crate::common::load_settings_fonts();
-            let theme = crate::common::settings_theme(Theme::light());
+            crate::components::load_settings_fonts();
+            let theme = crate::components::settings_theme(Theme::light());
             creamui_reactive::provide_context(ThemeProvider::new(theme));
             let config = ShortcutConfig::default();
             let state = ShortcutState {

@@ -1,4 +1,4 @@
-use crate::common::{group, row, section};
+use crate::components::{group, row, section};
 use coconut_core::UserProfile;
 use creamui_core::layout::{LengthPercentage, Style};
 use creamui_core::{BoxedWidget, Size, StateStyle, Style as WidgetStyle, Styled};

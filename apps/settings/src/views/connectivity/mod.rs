@@ -1,4 +1,4 @@
-use crate::common::{group, section, section_label};
+use crate::components::{group, section, section_label};
 use crate::icons::SettingsIcons;
 use coconut_api::{
     bluetooth::{BluetoothDevice, BluetoothIntegration},
@@ -196,7 +196,7 @@ pub fn detail_header(state: &State, window_width: f32) -> BoxedWidget {
     };
     Box::new(jsx! {
         <Flex direction={FlexDirection::Row} align={creamui_widgets::layout::Align::Center} gap={12.0} style={Style { flex_direction: FlexDirection::Row, flex_shrink: 0.0, size: creamui_core::layout::Size { width: Dimension::Percent(1.0), height: Dimension::Length(56.0) }, align_items: Some(creamui_core::layout::AlignItems::Center), padding: creamui_core::layout::Rect { left: LengthPercentage::Length(left_padding), right: LengthPercentage::Length(right_padding), top: LengthPercentage::Length(0.0), bottom: LengthPercentage::Length(0.0) }, ..Default::default() }}>
-            {crate::common::back_button(move || back.set(View::Overview))}
+            {crate::components::back_button(move || back.set(View::Overview))}
             {Box::new(Text::new(label).font_size(14.0).bold(true)) as BoxedWidget}
         </Flex>
     })
@@ -242,7 +242,7 @@ fn overview(
                 "Off".into()
             }
         }),
-        Some(crate::common::icon_badge(
+        Some(crate::components::icon_badge(
             icons.status.clone(),
             creamui_theme::use_theme().colors.accent,
         )),
@@ -444,7 +444,7 @@ fn wifi_list(
                 {group(vec![icon_item(
                     "Ask to join new networks",
                     "Notify when a known network is unavailable",
-                    Some(crate::common::icon_badge(icons.about.clone(), creamui_theme::use_theme().colors.accent)),
+                    Some(crate::components::icon_badge(icons.about.clone(), creamui_theme::use_theme().colors.accent)),
                     Box::new(Switch::new(false, || {}).customize(|switch| switch.disabled = true)),
                     || {},
                 )])}

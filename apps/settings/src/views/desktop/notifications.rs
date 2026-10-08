@@ -1,4 +1,4 @@
-use crate::common::{group, row, section, section_label, update_config};
+use crate::components::{group, row, section, section_label, update_config};
 use coconut_core::{PopupAlign, PopupConfig, PopupEdge, ShellConfig};
 use creamui_core::{BoxedWidget, Styled};
 use creamui_reactive::Signal;

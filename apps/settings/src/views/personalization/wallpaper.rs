@@ -1,4 +1,4 @@
-use crate::common::{group, row, section, tab_colors, update_config};
+use crate::components::{group, row, section, tab_colors, update_config};
 use coconut_core::{DesktopColor, ShellConfig, WallpaperMode};
 use creamui_core::layout::FlexDirection;
 use creamui_core::{BoxedWidget, Size, Styled};

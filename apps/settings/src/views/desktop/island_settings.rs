@@ -1,4 +1,4 @@
-use crate::common::{group, row, section};
+use crate::components::{group, row, section};
 use coconut_core::modules::{load_module_value, save_module_value};
 use coconut_plugin_kit::{ConfigField, FieldKind, NumberPresentation, NumberRange};
 use creamui_core::layout::FlexDirection;

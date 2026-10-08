@@ -1,4 +1,4 @@
-use crate::common::{fixed_body, group, row, section, tab_colors, update_config};
+use crate::components::{fixed_body, group, row, section, tab_colors, update_config};
 use coconut_core::{DockConfig, DockPosition, SectionConfig, ShellConfig};
 use creamui_core::{BoxedWidget, Size};
 use creamui_reactive::Signal;

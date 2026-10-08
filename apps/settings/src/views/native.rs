@@ -1,7 +1,7 @@
 //! Native counterparts of the concept's category and drill-down pages.
 //! Service discovery and all privileged writes happen outside the UI thread.
 use crate::{
-    common::{group, section, section_label, update_config},
+    components::{group, section, section_label, update_config},
     users, Section,
 };
 use coconut_api::settings::{Action, SettingsIntegration, Snapshot, Value};
@@ -445,15 +445,15 @@ fn item(
         }
         _ => "",
     };
-    let badge = Some(crate::common::icon_badge(
+    let badge = Some(crate::components::icon_badge(
         if glyph.is_empty() {
-            crate::common::setting_icon(&label)
+            crate::components::setting_icon(&label)
         } else {
             crate::icons::outline(glyph)
         },
-        crate::common::category_color(),
+        crate::components::category_color(),
     ));
-    super::connectivity::icon_item(label, hint, badge, trailing, click)
+    crate::views::connectivity::icon_item(label, hint, badge, trailing, click)
 }
 fn value(text: impl Into<String>) -> BoxedWidget {
     Box::new(Text::secondary(text.into()).size(TextSize::Sm))
@@ -510,7 +510,7 @@ fn unsupported(label: &str, reason: &str) -> BoxedWidget {
     item(label, reason, value("Not supported"), || {})
 }
 fn input(controller: &TextController, placeholder: &str) -> BoxedWidget {
-    Box::new(crate::common::form_input(
+    Box::new(crate::components::form_input(
         TextInput::controlled(controller).placeholder(placeholder),
         240.0,
     ))
@@ -621,11 +621,11 @@ pub fn personalization(
     config: &Signal<ShellConfig>,
     appearance: &Signal<creamui_theme::ResolvedAppearance>,
     nav: &Signal<Section>,
-    appearance_controls: super::appearance::OverviewControls,
+    appearance_controls: crate::views::personalization::appearance::OverviewControls,
 ) -> BoxedWidget {
     let config = config.get();
     let selected = appearance.get();
-    let super::appearance::OverviewControls {
+    let crate::views::personalization::appearance::OverviewControls {
         theme,
         style,
         accent,
@@ -801,7 +801,7 @@ pub fn desktop(state: &State, config: &Signal<ShellConfig>, nav: &Signal<Section
 pub fn windows(
     state: &State,
     nav: &Signal<Section>,
-    window: &super::window::WindowState,
+    window: &crate::views::windows::WindowState,
 ) -> BoxedWidget {
     page(
         vec![
@@ -1065,7 +1065,7 @@ pub fn privacy(state: &State, nav: &Signal<Section>) -> BoxedWidget {
         state,
     )
 }
-pub fn accessibility(state: &State, window: &super::window::WindowState) -> BoxedWidget {
+pub fn accessibility(state: &State, window: &crate::views::windows::WindowState) -> BoxedWidget {
     page(
         vec![
             card(
@@ -1286,12 +1286,12 @@ pub fn detail(
     state: &State,
     nav: &Signal<Section>,
     config: &Signal<ShellConfig>,
-    window: &super::window::WindowState,
+    window: &crate::views::windows::WindowState,
     appearance: &Signal<creamui_theme::ResolvedAppearance>,
     handle: &Rc<RefCell<Option<creamui_render::WindowHandle>>>,
 ) -> BoxedWidget {
     if *which == Page::Notifications {
-        return super::popups::build(config);
+        return crate::views::desktop::notifications::build(config);
     }
     let s = state.snapshot.get();
     let refresh = state.clone();
@@ -1307,7 +1307,7 @@ pub fn detail(
             let fonts = s.entries("fonts").to_vec(); let labels: Vec<_> = fonts.iter().map(|f| f.name.as_str()).collect();
             let index = fonts.iter().position(|f| f.name == family).unwrap_or(0); let appearance = appearance.clone(); let handle = handle.clone();
             let control = if fonts.is_empty() { value(family) } else { Box::new(Select::controlled(&labels, state.select("interface-font", index)).searchable().on_select(move |i| {
-                if let Some(font) = fonts.get(i) { let current = appearance.peek(); super::appearance::apply(creamui_theme::AppearanceSelection { theme: Some(current.theme_id), variant: Some(current.variant_id), accent: Some(current.accent), font_family: Some(format!("{}, system-ui", font.name)), corners: Some(current.corners) }, &appearance, &handle); }
+                if let Some(font) = fonts.get(i) { let current = appearance.peek(); crate::views::personalization::appearance::apply(creamui_theme::AppearanceSelection { theme: Some(current.theme_id), variant: Some(current.variant_id), accent: Some(current.accent), font_family: Some(format!("{}, system-ui", font.name)), corners: Some(current.corners) }, &appearance, &handle); }
             })) as BoxedWidget };
             vec![card("Typography", vec![item("Interface font", "Installed fonts and Coconut's bundled font", control, || {}), state.preference("Text scaling", "text-scale", "Controlled by the active desktop")])]
         },
@@ -1432,7 +1432,7 @@ pub fn detail_header(current: &Section, nav: &Signal<Section>, width: f32) -> Bo
     };
     Box::new(
         jsx! { <Flex direction={FlexDirection::Row} align={creamui_widgets::layout::Align::Center} gap={12.0} height={56.0} shrink={0.0} padding_left={left} padding_right={right}>
-            {crate::common::back_button(move || back.set(parent.clone()))}
+            {crate::components::back_button(move || back.set(parent.clone()))}
             {Box::new(Text::new(title).font_size(14.0).bold(true)) as BoxedWidget}
         </Flex> },
     )

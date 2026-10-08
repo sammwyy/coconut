@@ -1,4 +1,4 @@
-use crate::common::icon_badge;
+use crate::components::icon_badge;
 use creamui_core::layout::FlexDirection;
 use creamui_core::{BoxedWidget, Style, Styled};
 use creamui_macros::jsx;
@@ -354,7 +354,7 @@ fn custom_accent_picker(
     ))
 }
 
-pub(super) fn apply(
+pub(crate) fn apply(
     selection: AppearanceSelection,
     appearance: &Signal<ResolvedAppearance>,
     window: &Rc<RefCell<Option<WindowHandle>>>,
@@ -391,7 +391,7 @@ fn title_case(id: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::common::group;
+    use crate::components::group;
     use creamui_core::{Renderer, Size};
     use creamui_render::{Damage, Rasterizer, SceneRecorder};
     use creamui_theme::{Theme, ThemeProvider};
@@ -399,7 +399,7 @@ mod tests {
     #[test]
     fn preset_colors_render_and_custom_picker_remains_accessible() {
         creamui_reactive::with_context_scope(|| {
-            let theme = crate::common::settings_theme(Theme::light());
+            let theme = crate::components::settings_theme(Theme::light());
             creamui_reactive::provide_context(ThemeProvider::new(theme));
             let appearance = Signal::new(ResolvedAppearance {
                 theme_id: "default".into(),

@@ -1,4 +1,4 @@
-use crate::common::{section, update_config};
+use crate::components::{section, update_config};
 use coconut_core::ShellConfig;
 use coconut_plugin_kit::installed_icon_themes;
 use creamui_core::layout::FlexDirection;

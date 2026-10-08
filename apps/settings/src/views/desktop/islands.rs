@@ -1,4 +1,4 @@
-use crate::common::{group, labeled_group, row, section, update_config};
+use crate::components::{group, labeled_group, row, section, update_config};
 use coconut_core::{IslandEntry, ShellConfig};
 use coconut_plugin_app_launcher::{AppLauncherIsland, OpenWindowsIsland};
 use coconut_plugin_clock::ClockConfig;
@@ -93,7 +93,7 @@ pub fn build(
     size: Size,
     config: &Signal<ShellConfig>,
     detail: &Signal<Option<&'static str>>,
-    settings: &crate::sections::island_settings::State,
+    settings: &crate::views::desktop::island_settings::State,
 ) -> BoxedWidget {
     if let Some(id) = detail.get() {
         if let Some(entry) = known_islands().into_iter().find(|entry| entry.id == id) {
@@ -160,7 +160,7 @@ fn island_detail_page(
     size: Size,
     entry: KnownIsland,
     detail: &Signal<Option<&'static str>>,
-    settings: &crate::sections::island_settings::State,
+    settings: &crate::views::desktop::island_settings::State,
 ) -> BoxedWidget {
     let back = {
         let detail = detail.clone();
@@ -172,7 +172,7 @@ fn island_detail_page(
             move || detail.set(None),
         )) as BoxedWidget
     };
-    let page = crate::sections::island_settings::build(
+    let page = crate::views::desktop::island_settings::build(
         size,
         entry.id,
         entry.label,
@@ -184,7 +184,7 @@ fn island_detail_page(
 
 fn clock_format_row() -> BoxedWidget {
     let clock: ClockConfig = coconut_core::modules::load_module("clock");
-    let input: BoxedWidget = Box::new(crate::common::form_input(
+    let input: BoxedWidget = Box::new(crate::components::form_input(
         TextInput::new(clock.format, move |value: String| {
             let clock = ClockConfig { format: value };
             if let Err(error) = coconut_core::modules::save_module("clock", &clock) {
