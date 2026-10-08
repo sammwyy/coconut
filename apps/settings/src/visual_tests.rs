@@ -129,6 +129,7 @@ fn connectivity_layout_matches_reference() {
         let dock_scroll = ScrollController::new(0.0);
         let dock_tab = Signal::new(sections::general::DockTab::Display);
         let islands = Signal::new(None);
+        let island_settings = sections::island_settings::State::default();
         let search = TextController::new("");
         let maximized = Signal::new(false);
         let native = sections::native::State::new(integrations.settings.clone());
@@ -161,6 +162,7 @@ fn connectivity_layout_matches_reference() {
                 &dock_scroll,
                 &dock_tab,
                 &islands,
+                &island_settings,
                 &search,
                 &connectivity,
                 &maximized,

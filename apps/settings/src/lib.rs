@@ -668,6 +668,7 @@ pub fn run() {
     let dock_scroll = ScrollController::new(0.0);
     let dock_tab = Signal::new(sections::general::DockTab::Display);
     let islands_detail: Signal<Option<&'static str>> = Signal::new(None);
+    let island_settings = sections::island_settings::State::default();
     let settings_search = TextController::new("");
     let maximized = Signal::new(false);
     let last_view = RefCell::new(Section::Connectivity);
@@ -752,6 +753,7 @@ pub fn run() {
                         &dock_scroll,
                         &dock_tab,
                         &islands_detail,
+                        &island_settings,
                         &settings_search,
                         &connectivity,
                         &maximized,
@@ -832,6 +834,7 @@ fn build(
     dock_scroll: &ScrollController,
     dock_tab: &Signal<sections::general::DockTab>,
     islands_detail: &Signal<Option<&'static str>>,
+    island_settings: &sections::island_settings::State,
     settings_search: &TextController,
     connectivity: &sections::connectivity::State,
     maximized: &Signal<bool>,
@@ -937,7 +940,7 @@ fn build(
             sections::general::BarKind::Dockbar,
         ),
         Section::Tray => sections::tray::build(size, config),
-        Section::Islands => sections::islands::build(size, config, islands_detail),
+        Section::Islands => sections::islands::build(size, config, islands_detail, island_settings),
         Section::Layout => sections::window::build_layout(size, window_settings),
         Section::Titlebar => sections::window::build_titlebar(size, window_settings),
         Section::Compositor => sections::window::build_general(size, window_settings),

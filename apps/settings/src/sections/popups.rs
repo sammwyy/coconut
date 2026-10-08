@@ -80,8 +80,8 @@ fn battery_alerts(config: &Signal<ShellConfig>) -> BoxedWidget {
         current.critical_percent,
         Box::new(move |value| {
             update_config(&critical_config, |config| {
-                config.battery_alerts.critical_percent = ((value * 100.0).round() as u8)
-                    .clamp(1, config.battery_alerts.low_percent);
+                config.battery_alerts.critical_percent =
+                    ((value * 100.0).round() as u8).clamp(1, config.battery_alerts.low_percent);
             });
         }),
     );

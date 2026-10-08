@@ -1,6 +1,6 @@
 use crate::common::{group, row, section};
 use coconut_core::UserProfile;
-use creamui_core::layout::Style;
+use creamui_core::layout::{LengthPercentage, Style};
 use creamui_core::{BoxedWidget, Size, StateStyle, Style as WidgetStyle, Styled};
 use creamui_theme::use_theme;
 use creamui_widgets::layout::fixed;
@@ -209,6 +209,12 @@ fn input(controller: &TextController, placeholder: &str) -> BoxedWidget {
             .placeholder(placeholder)
             .layout(Style {
                 size: fixed(260.0, 34.0),
+                padding: creamui_core::layout::Rect {
+                    left: LengthPercentage::Length(12.0),
+                    right: LengthPercentage::Length(12.0),
+                    top: LengthPercentage::Length(0.0),
+                    bottom: LengthPercentage::Length(0.0),
+                },
                 ..Default::default()
             }),
     )

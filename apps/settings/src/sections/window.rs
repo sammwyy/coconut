@@ -13,7 +13,7 @@ use creamui_widgets::{
     IconSource, RawButton, SegmentedControl, Switch, Text, TextArea, TextController, TextInput,
     TextSize,
 };
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 const DEFAULT: &str = r#"
 [general]
@@ -72,6 +72,7 @@ pub struct WindowState {
     titlebar_picker: ColorPickerController,
     active_border_picker: ColorPickerController,
     inactive_border_picker: ColorPickerController,
+    numeric_inputs: RefCell<HashMap<String, TextController>>,
 }
 
 pub struct ShortcutState {
@@ -188,7 +189,15 @@ impl WindowState {
             titlebar_picker: ColorPickerController::new(),
             active_border_picker: ColorPickerController::new(),
             inactive_border_picker: ColorPickerController::new(),
+            numeric_inputs: RefCell::new(HashMap::new()),
         }
+    }
+    fn numeric_input(&self, path: &[&str], initial: String) -> TextController {
+        self.numeric_inputs
+            .borrow_mut()
+            .entry(path.join("."))
+            .or_insert_with(|| TextController::new(initial))
+            .clone()
     }
     fn writer(&self) -> Writer {
         Writer {
@@ -303,7 +312,23 @@ impl WindowState {
         let editor = self.rules_editor.clone();
         let writer = self.writer();
         section("", "", vec![Box::new(Text::secondary("Edit [[rules]] entries. Blair validates, applies and persists the document; rejected changes are rolled back.").size(TextSize::Sm)),
-            Box::new(TextArea::controlled(&self.rules_editor).layout(Style { size: creamui_core::layout::Size { width: creamui_core::layout::Dimension::Percent(1.0), height: creamui_core::layout::Dimension::Length(280.0) }, ..Default::default() }).placeholder("[[rules]]\napp_id = \"org.example.App\"\nfloating = true")),
+            Box::new(
+                TextArea::controlled(&self.rules_editor)
+                    .layout(Style {
+                        size: creamui_core::layout::Size {
+                            width: creamui_core::layout::Dimension::Percent(1.0),
+                            height: creamui_core::layout::Dimension::Length(280.0),
+                        },
+                        padding: creamui_core::layout::Rect {
+                            left: creamui_core::layout::LengthPercentage::Length(12.0),
+                            right: creamui_core::layout::LengthPercentage::Length(12.0),
+                            top: creamui_core::layout::LengthPercentage::Length(12.0),
+                            bottom: creamui_core::layout::LengthPercentage::Length(12.0),
+                        },
+                        ..Default::default()
+                    })
+                    .placeholder("[[rules]]\napp_id = \"org.example.App\"\nfloating = true"),
+            ),
             Box::new(Button::new("Apply rules", move || {
                 let parsed = toml::from_str::<toml::Value>(&editor.value());
                 match parsed {
@@ -1331,23 +1356,25 @@ fn integer_field(
     max: Option<i64>,
 ) -> BoxedWidget {
     let value = int_at(&state.config.get(), path, min);
+    let controller = state.numeric_input(path, value.to_string());
     let writer = state.writer();
+    controller.on_change(move |_, input| {
+        if let Ok(value) = input.parse::<i64>() {
+            if value >= min && max.is_none_or(|max| value <= max) {
+                writer.update(|c| put(c, path, toml::Value::Integer(value)));
+            }
+        }
+        // The text field may temporarily be empty or below its minimum while
+        // the user replaces a value. Keep that draft (and its cursor) rather
+        // than rebuilding it from the last valid configuration value.
+        Some(input.to_owned())
+    });
     row(
         label,
-        Box::new(
-            TextInput::new(value.to_string(), move |input| {
-                let Ok(value) = input.parse::<i64>() else {
-                    return;
-                };
-                if value >= min && max.is_none_or(|max| value <= max) {
-                    writer.update(|c| put(c, path, toml::Value::Integer(value)));
-                }
-            })
-            .placeholder(&match max {
-                Some(max) => format!("{min}–{max}"),
-                None => format!("At least {min}"),
-            }),
-        ) as BoxedWidget,
+        Box::new(TextInput::controlled(&controller).placeholder(&match max {
+            Some(max) => format!("{min}–{max}"),
+            None => format!("At least {min}"),
+        })) as BoxedWidget,
     )
 }
 
@@ -1355,20 +1382,19 @@ fn ratio_field(state: &WindowState, label: &str, path: &'static [&'static str]) 
     let value = at(&state.config.get(), path)
         .and_then(toml::Value::as_float)
         .unwrap_or(0.5);
+    let controller = state.numeric_input(path, value.to_string());
     let writer = state.writer();
+    controller.on_change(move |_, input| {
+        if let Ok(value) = input.parse::<f64>() {
+            if value.is_finite() && (0.1..=0.9).contains(&value) {
+                writer.update(|c| put(c, path, toml::Value::Float(value)));
+            }
+        }
+        Some(input.to_owned())
+    });
     row(
         label,
-        Box::new(
-            TextInput::new(value.to_string(), move |input| {
-                let Ok(value) = input.parse::<f64>() else {
-                    return;
-                };
-                if value.is_finite() && (0.1..=0.9).contains(&value) {
-                    writer.update(|c| put(c, path, toml::Value::Float(value)));
-                }
-            })
-            .placeholder("0.1–0.9"),
-        ) as BoxedWidget,
+        Box::new(TextInput::controlled(&controller).placeholder("0.1–0.9")) as BoxedWidget,
     )
 }
 fn at<'a>(v: &'a toml::Value, path: &[&str]) -> Option<&'a toml::Value> {

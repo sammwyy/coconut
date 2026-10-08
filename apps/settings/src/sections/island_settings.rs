@@ -5,13 +5,40 @@ use creamui_core::layout::FlexDirection;
 use creamui_core::{BoxedWidget, Size};
 use creamui_macros::jsx;
 use creamui_widgets::layout::Align;
-use creamui_widgets::{Slider, Switch, Text, TextInput, TextSize};
+use creamui_widgets::{Slider, Switch, Text, TextController, TextInput, TextSize};
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::rc::Rc;
 
-pub fn build(_: Size, id: &'static str, label: &str, schema: &[ConfigField]) -> BoxedWidget {
+/// Keeps text editing state alive while Settings rebuilds its immediate-mode
+/// widget tree. In particular, a numeric field must be allowed to temporarily
+/// contain an empty or out-of-range value while it is being edited.
+#[derive(Clone, Default)]
+pub struct State {
+    inputs: Rc<RefCell<HashMap<(&'static str, &'static str), TextController>>>,
+}
+
+impl State {
+    fn input(&self, id: &'static str, key: &'static str, initial: String) -> TextController {
+        self.inputs
+            .borrow_mut()
+            .entry((id, key))
+            .or_insert_with(|| TextController::new(initial))
+            .clone()
+    }
+}
+
+pub fn build(
+    _: Size,
+    id: &'static str,
+    label: &str,
+    schema: &[ConfigField],
+    state: &State,
+) -> BoxedWidget {
     let table = load_table(id);
     let rows = schema
         .iter()
-        .map(|field| field_row(id, field, &table))
+        .map(|field| field_row(id, field, &table, state))
         .collect();
     section(label, "", vec![group(rows)])
 }
@@ -23,7 +50,12 @@ fn load_table(id: &str) -> toml::value::Table {
     }
 }
 
-fn field_row(id: &'static str, field: &ConfigField, table: &toml::value::Table) -> BoxedWidget {
+fn field_row(
+    id: &'static str,
+    field: &ConfigField,
+    table: &toml::value::Table,
+    state: &State,
+) -> BoxedWidget {
     match field.kind {
         FieldKind::Toggle => {
             let default = matches!(field.default, coconut_plugin_kit::ConfigValue::Bool(true));
@@ -58,7 +90,7 @@ fn field_row(id: &'static str, field: &ConfigField, table: &toml::value::Table) 
                     slider_row(id, field.key, field.label, value, range, suffix)
                 }
                 NumberPresentation::Input => {
-                    input_row(id, field.key, field.label, value, range, suffix)
+                    input_row(id, field.key, field.label, value, range, suffix, state)
                 }
             }
         }
@@ -95,13 +127,23 @@ fn input_row(
     value: f64,
     range: NumberRange,
     _suffix: &str,
+    state: &State,
 ) -> BoxedWidget {
     let text = format_number(value, range.step);
-    let input: BoxedWidget = Box::new(TextInput::new(text, move |value: String| {
+    let controller = state.input(id, key, text);
+    controller.on_change(move |_, value| {
         if let Ok(parsed) = value.parse::<f64>() {
-            update_field(id, key, toml::Value::Float(snap(parsed, range)));
+            if parsed.is_finite() && (range.min..=range.max).contains(&parsed) {
+                update_field(id, key, toml::Value::Float(parsed));
+            }
         }
-    }));
+        // Do not clamp while the user is typing. For example, changing `60`
+        // to `70` necessarily passes through `6` (and often an empty value).
+        // The controller keeps that draft and its cursor across rebuilds;
+        // only an in-range number is written to the configuration.
+        Some(value.to_owned())
+    });
+    let input: BoxedWidget = Box::new(TextInput::controlled(&controller));
     row(label, input)
 }
 

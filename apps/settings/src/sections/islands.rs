@@ -93,10 +93,11 @@ pub fn build(
     size: Size,
     config: &Signal<ShellConfig>,
     detail: &Signal<Option<&'static str>>,
+    settings: &crate::sections::island_settings::State,
 ) -> BoxedWidget {
     if let Some(id) = detail.get() {
         if let Some(entry) = known_islands().into_iter().find(|entry| entry.id == id) {
-            return island_detail_page(size, entry, detail);
+            return island_detail_page(size, entry, detail, settings);
         }
         detail.set(None);
     }
@@ -156,6 +157,7 @@ fn island_detail_page(
     size: Size,
     entry: KnownIsland,
     detail: &Signal<Option<&'static str>>,
+    settings: &crate::sections::island_settings::State,
 ) -> BoxedWidget {
     let back = {
         let detail = detail.clone();
@@ -167,7 +169,13 @@ fn island_detail_page(
             move || detail.set(None),
         )) as BoxedWidget
     };
-    let page = crate::sections::island_settings::build(size, entry.id, entry.label, &entry.schema);
+    let page = crate::sections::island_settings::build(
+        size,
+        entry.id,
+        entry.label,
+        &entry.schema,
+        settings,
+    );
     Box::new(Flex::column().gap(14.0).with_children(vec![back, page]))
 }
 
