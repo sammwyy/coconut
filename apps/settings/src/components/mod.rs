@@ -351,3 +351,6 @@ pub fn update_config(config: &Signal<ShellConfig>, mutate: impl FnOnce(&mut Shel
         }
     }
 }
+
+pub mod navigation;
+pub mod pages;

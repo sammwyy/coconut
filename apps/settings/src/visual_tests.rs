@@ -90,7 +90,7 @@ fn connectivity_layout_matches_reference() {
             },
         });
         creamui_reactive::provide_context(decorations.clone());
-        let integrations = coconut_api::Registry {
+        let integrations = Rc::new(coconut_api::Registry {
             desktop: Rc::new(coconut_api::desktop::Fallback),
             audio: Rc::new(coconut_api::audio::Fallback),
             brightness: Rc::new(coconut_api::brightness::Fallback),
@@ -101,15 +101,16 @@ fn connectivity_layout_matches_reference() {
             power_profile: Rc::new(coconut_api::power_profile::Fallback),
             settings: std::sync::Arc::new(coconut_api::settings::Fallback),
             notifications: Rc::new(coconut_api::notifications::Fallback),
-        };
+        });
         let accounts = Vec::new();
         let profile = users::ProfileControllers::load(&accounts);
         let icons = SettingsIcons::load();
-        let connectivity = views::connectivity::State::new();
+        let view = routes::create(routes::DEFAULT_ROUTE).unwrap();
+        let connectivity = crate::views::connectivity::State::new(view.clone());
         // Preview actual controls independently of a running Blair service.
         // Rendering this fixture never applies configuration to the host.
-        let window_state = views::windows::WindowState::preview();
-        let shortcuts = views::windows::ShortcutState::load();
+        let window_state = Rc::new(crate::views::windows::WindowState::preview());
+        let shortcuts = Rc::new(crate::views::windows::ShortcutState::load());
         let appearance = Signal::new(creamui_theme::ResolvedAppearance {
             theme_id: "test".into(),
             variant_id: "light".into(),
@@ -120,56 +121,51 @@ fn connectivity_layout_matches_reference() {
         });
         let content_scroll = ScrollController::new(0.0);
         let sidebar_scroll = ScrollController::new(0.0);
-        let view = Signal::new(Section::Connectivity);
         let config = Signal::new(ShellConfig::default());
-        let nav = SidebarNavController::new();
         let window = Rc::new(RefCell::new(None));
         let picker = ColorPickerController::new();
         let custom_accent = Signal::new(false);
         let users = Signal::new(accounts);
-        let gallery = views::personalization::wallpaper::GalleryState::new();
+        let gallery = crate::views::personalization::wallpaper::GalleryState::new();
         let dock_scroll = ScrollController::new(0.0);
-        let dock_tab = Signal::new(views::desktop::bars::DockTab::Display);
-        let islands = Signal::new(None);
-        let island_settings = views::desktop::island_settings::State::default();
+        let island_settings = crate::views::desktop::island_settings::State::default();
         let search = TextController::new("");
         let maximized = Signal::new(false);
-        let native = views::native::State::new(integrations.settings.clone());
+        let native = crate::views::native::State::new(integrations.settings.clone());
 
         let size = Size {
             width: 1120.0,
             height: 760.0,
         };
         let root = |size| {
-            build(
-                size,
-                &config,
-                &integrations,
-                &appearance,
-                &view,
-                &nav,
-                &window,
-                &picker,
-                &picker,
-                &picker,
-                &custom_accent,
-                &users,
-                &profile,
-                &icons,
-                &gallery,
-                &window_state,
-                &shortcuts,
-                &content_scroll,
-                &sidebar_scroll,
-                &dock_scroll,
-                &dock_tab,
-                &islands,
-                &island_settings,
-                &search,
-                &connectivity,
-                &maximized,
-                &native,
-            )
+            RouterProvider::new(view.clone()).render(|| {
+                build(
+                    size,
+                    &config,
+                    &integrations,
+                    &appearance,
+                    &view,
+                    &window,
+                    &picker,
+                    &picker,
+                    &picker,
+                    &custom_accent,
+                    &users,
+                    &profile,
+                    &icons,
+                    &gallery,
+                    &window_state,
+                    &shortcuts,
+                    &content_scroll,
+                    &sidebar_scroll,
+                    &dock_scroll,
+                    &island_settings,
+                    &search,
+                    &connectivity,
+                    &maximized,
+                    &native,
+                )
+            })
         };
         let mut recorder = SceneRecorder::new();
         recorder.begin(1120, 760, 1.0, Color::rgba(0, 0, 0, 0), theme.colors);
@@ -245,8 +241,8 @@ fn connectivity_layout_matches_reference() {
             .hit_test(Point { x: 700.0, y: 350.0 })
             .expect("known networks row")();
         assert!(matches!(
-            connectivity.view.peek(),
-            views::connectivity::View::KnownNetworks
+            connectivity.current(),
+            crate::views::connectivity::View::KnownNetworks
         ));
         assert!(
             content_scroll.max_offset() > 0.0,
@@ -291,8 +287,8 @@ fn connectivity_layout_matches_reference() {
             .hit_test(Point { x: 306.0, y: 28.0 })
             .expect("subpage back button")();
         assert!(matches!(
-            connectivity.view.peek(),
-            views::connectivity::View::Overview
+            connectivity.current(),
+            crate::views::connectivity::View::Overview
         ));
         assert!(
             content_scroll.max_offset() <= 1.0,
@@ -439,31 +435,31 @@ fn connectivity_layout_matches_reference() {
             Section::About,
         ];
         let details = [
-            views::native::Page::Displays,
-            views::native::Page::Devices,
-            views::native::Page::Printers,
-            views::native::Page::AddPrinter,
-            views::native::Page::Fonts,
-            views::native::Page::InstalledApps,
-            views::native::Page::App("test.desktop".into()),
-            views::native::Page::FileTypes,
-            views::native::Page::Startup,
-            views::native::Page::AddStartup,
-            views::native::Page::Password,
-            views::native::Page::AddUser,
-            views::native::Page::OnlineAccounts,
-            views::native::Page::Fingerprint,
-            views::native::Page::Camera,
-            views::native::Page::Microphone,
-            views::native::Page::Notifications,
-            views::native::Page::HotCorners,
-            views::native::Page::WindowRules,
-            views::native::Page::Updates,
-            views::native::Page::Storage,
-            views::native::Page::Activity,
-            views::native::Page::DateTime,
-            views::native::Page::Language,
-            views::native::Page::Reset,
+            crate::views::native::Page::Displays,
+            crate::views::native::Page::Devices,
+            crate::views::native::Page::Printers,
+            crate::views::native::Page::AddPrinter,
+            crate::views::native::Page::Fonts,
+            crate::views::native::Page::InstalledApps,
+            crate::views::native::Page::App("test.desktop".into()),
+            crate::views::native::Page::FileTypes,
+            crate::views::native::Page::Startup,
+            crate::views::native::Page::AddStartup,
+            crate::views::native::Page::Password,
+            crate::views::native::Page::AddUser,
+            crate::views::native::Page::OnlineAccounts,
+            crate::views::native::Page::Fingerprint,
+            crate::views::native::Page::Camera,
+            crate::views::native::Page::Microphone,
+            crate::views::native::Page::Notifications,
+            crate::views::native::Page::HotCorners,
+            crate::views::native::Page::WindowRules,
+            crate::views::native::Page::Updates,
+            crate::views::native::Page::Storage,
+            crate::views::native::Page::Activity,
+            crate::views::native::Page::DateTime,
+            crate::views::native::Page::Language,
+            crate::views::native::Page::Reset,
         ];
         for (name, base) in [
             ("light", Theme::light()),
@@ -506,7 +502,7 @@ fn connectivity_layout_matches_reference() {
                     Section::Profile,
                 ])
             {
-                view.set(section.clone());
+                routes::navigate(&view, &section);
                 content_scroll.set(0.0);
                 recorder.begin(1120, 760, 1.0, Color::rgba(0, 0, 0, 0), theme.colors);
                 let scene = Renderer::new().render(root(size), size, &mut recorder);
@@ -520,7 +516,7 @@ fn connectivity_layout_matches_reference() {
                         "client clips {title}"
                     );
                 }
-                if views::native::parent(&section) != section {
+                if crate::views::native::parent(&section) != section {
                     assert!(
                         scene.window_drag_at(Point { x: 306.0, y: 28.0 }).is_none(),
                         "back button swallowed by drag: {title}"
@@ -529,7 +525,7 @@ fn connectivity_layout_matches_reference() {
                         .hit_test(Point { x: 306.0, y: 28.0 })
                         .expect("compact back button")();
                     assert!(
-                        view.peek() == views::native::parent(&section),
+                        routes::current(&view) == crate::views::native::parent(&section),
                         "incorrect parent for {title}"
                     );
                 }

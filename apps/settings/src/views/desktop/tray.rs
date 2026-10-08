@@ -88,3 +88,10 @@ fn visibility_row(
     );
     row(label, control)
 }
+
+pub(crate) fn route_view() -> creamui_core::BoxedWidget {
+    let context = creamui_reactive::use_context::<crate::views::context::ViewContext>();
+    let size = context.size;
+    let config = &context.config;
+    crate::views::desktop::tray::build(size, config)
+}

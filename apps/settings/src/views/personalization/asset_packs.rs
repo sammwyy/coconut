@@ -150,3 +150,24 @@ fn xdg_data_directories() -> Vec<PathBuf> {
     directories.extend(std::env::split_paths(&system));
     directories
 }
+
+pub(crate) fn icons_view() -> creamui_core::BoxedWidget {
+    let context = creamui_reactive::use_context::<crate::views::context::ViewContext>();
+    let size = context.size;
+    let config = &context.config;
+    crate::views::personalization::asset_packs::icon_packs(size, config)
+}
+
+pub(crate) fn sounds_view() -> creamui_core::BoxedWidget {
+    let context = creamui_reactive::use_context::<crate::views::context::ViewContext>();
+    let size = context.size;
+    let config = &context.config;
+    crate::views::personalization::asset_packs::sound_themes(size, config)
+}
+
+pub(crate) fn cursor_view() -> creamui_core::BoxedWidget {
+    let context = creamui_reactive::use_context::<crate::views::context::ViewContext>();
+    let size = context.size;
+    let config = &context.config;
+    crate::views::personalization::asset_packs::cursor_themes(size, config)
+}

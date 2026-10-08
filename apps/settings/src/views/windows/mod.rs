@@ -1582,3 +1582,53 @@ mod shortcut_tests {
         });
     }
 }
+
+pub(crate) fn overview() -> creamui_core::BoxedWidget {
+    let context = creamui_reactive::use_context::<crate::views::context::ViewContext>();
+    let view = &context.view;
+    let window_settings = &context.window_settings;
+    let native = &context.native;
+    crate::views::native::windows(native, view, window_settings)
+}
+
+pub(crate) fn layout_view() -> creamui_core::BoxedWidget {
+    let context = creamui_reactive::use_context::<crate::views::context::ViewContext>();
+    let size = context.size;
+    let window_settings = &context.window_settings;
+    crate::views::windows::build_layout(size, window_settings)
+}
+
+pub(crate) fn titlebar_view() -> creamui_core::BoxedWidget {
+    let context = creamui_reactive::use_context::<crate::views::context::ViewContext>();
+    let size = context.size;
+    let window_settings = &context.window_settings;
+    crate::views::windows::build_titlebar(size, window_settings)
+}
+
+pub(crate) fn advanced_view() -> creamui_core::BoxedWidget {
+    let context = creamui_reactive::use_context::<crate::views::context::ViewContext>();
+    let size = context.size;
+    let window_settings = &context.window_settings;
+    crate::views::windows::build_general(size, window_settings)
+}
+
+pub(crate) fn workspaces_view() -> creamui_core::BoxedWidget {
+    let context = creamui_reactive::use_context::<crate::views::context::ViewContext>();
+    let size = context.size;
+    let window_settings = &context.window_settings;
+    crate::views::windows::build_working_area(size, window_settings)
+}
+
+pub(crate) fn effects_view() -> creamui_core::BoxedWidget {
+    let context = creamui_reactive::use_context::<crate::views::context::ViewContext>();
+    let size = context.size;
+    let window_settings = &context.window_settings;
+    crate::views::windows::build_effects(size, window_settings)
+}
+
+pub(crate) fn focus_view() -> creamui_core::BoxedWidget {
+    let context = creamui_reactive::use_context::<crate::views::context::ViewContext>();
+    let size = context.size;
+    let window_settings = &context.window_settings;
+    crate::views::windows::build_focus(size, window_settings)
+}

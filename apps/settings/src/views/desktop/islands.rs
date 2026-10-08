@@ -92,20 +92,22 @@ fn toggle_island(config: &mut ShellConfig, id: &str, statusbar: bool) {
 pub fn build(
     size: Size,
     config: &Signal<ShellConfig>,
-    detail: &Signal<Option<&'static str>>,
     settings: &crate::views::desktop::island_settings::State,
 ) -> BoxedWidget {
-    if let Some(id) = detail.get() {
-        if let Some(entry) = known_islands().into_iter().find(|entry| entry.id == id) {
-            return island_detail_page(size, entry, detail, settings);
+    if let Some(id) = creamui_router::use_params().get("widget_id") {
+        if let Some(entry) = known_islands()
+            .into_iter()
+            .find(|entry| entry.id == id.as_str())
+        {
+            return island_detail_page(size, entry, settings);
         }
-        detail.set(None);
+        return crate::components::pages::unavailable_page("Unknown widget");
     }
 
     let toggles = group(
         known_islands()
             .into_iter()
-            .map(|entry| island_row(entry, config, detail))
+            .map(|entry| island_row(entry, config))
             .collect(),
     );
     let format = group(vec![clock_format_row()]);
@@ -120,11 +122,7 @@ pub fn build(
     )
 }
 
-fn island_row(
-    entry: KnownIsland,
-    config: &Signal<ShellConfig>,
-    detail: &Signal<Option<&'static str>>,
-) -> BoxedWidget {
+fn island_row(entry: KnownIsland, config: &Signal<ShellConfig>) -> BoxedWidget {
     let status_checked = island_present(&config.get(), entry.id, true);
     let dock_checked = island_present(&config.get(), entry.id, false);
     let status_apply = config.clone();
@@ -144,13 +142,18 @@ fn island_row(
         .child(Box::new(creamui_widgets::Text::secondary("Dock")) as BoxedWidget)
         .child(dock_switch);
     if !entry.schema.is_empty() {
-        let detail = detail.clone();
+        let router = creamui_router::use_router();
         control = control.child(Box::new(Button::styled(
             ButtonVariant::Secondary,
             ButtonSize::Sm,
             "Configure",
             ButtonState::Normal,
-            move || detail.set(Some(id)),
+            move || {
+                crate::routes::open(
+                    &router,
+                    &format!("/desktop/widgets/{}", crate::routes::segment(id)),
+                )
+            },
         )));
     }
     row(entry.label, Box::new(control))
@@ -159,17 +162,16 @@ fn island_row(
 fn island_detail_page(
     size: Size,
     entry: KnownIsland,
-    detail: &Signal<Option<&'static str>>,
     settings: &crate::views::desktop::island_settings::State,
 ) -> BoxedWidget {
     let back = {
-        let detail = detail.clone();
+        let router = creamui_router::use_router();
         Box::new(Button::styled(
             ButtonVariant::Secondary,
             ButtonSize::Sm,
             "‹ Islands",
             ButtonState::Normal,
-            move || detail.set(None),
+            move || crate::routes::open(&router, "/desktop/widgets"),
         )) as BoxedWidget
     };
     let page = crate::views::desktop::island_settings::build(
@@ -194,4 +196,12 @@ fn clock_format_row() -> BoxedWidget {
         180.0,
     ));
     row("Clock format", input)
+}
+
+pub(crate) fn route_view() -> creamui_core::BoxedWidget {
+    let context = creamui_reactive::use_context::<crate::views::context::ViewContext>();
+    let size = context.size;
+    let config = &context.config;
+    let island_settings = &context.island_settings;
+    crate::views::desktop::islands::build(size, config, island_settings)
 }

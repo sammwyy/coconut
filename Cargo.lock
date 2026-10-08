@@ -254,16 +254,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3ded4057c258ba199e2d26386d3af3780957ecaee6c4ef4041c6b4b8b97c0b06"
 
 [[package]]
-name = "blair-blur-protocol"
-version = "0.1.0"
-dependencies = [
- "wayland-backend",
- "wayland-client",
- "wayland-protocols",
- "wayland-scanner",
-]
-
-[[package]]
 name = "blair-client"
 version = "0.1.0"
 dependencies = [
@@ -298,16 +288,6 @@ dependencies = [
 [[package]]
 name = "blair-protocol"
 version = "0.1.0"
-
-[[package]]
-name = "blair-window-integration-protocol"
-version = "0.1.0"
-dependencies = [
- "wayland-backend",
- "wayland-client",
- "wayland-protocols",
- "wayland-scanner",
-]
 
 [[package]]
 name = "block"
@@ -770,14 +750,17 @@ dependencies = [
  "creamui-macros",
  "creamui-reactive",
  "creamui-render",
+ "creamui-router",
  "creamui-theme",
  "creamui-theme-loader",
  "creamui-widgets",
  "dbus",
  "image",
+ "percent-encoding",
  "rfd",
  "tokio",
  "toml 0.9.12+spec-1.1.0",
+ "url",
 ]
 
 [[package]]
@@ -973,7 +956,7 @@ dependencies = [
 
 [[package]]
 name = "creamui-core"
-version = "0.1.2"
+version = "0.2.0"
 dependencies = [
  "bitflags 2.13.2",
  "creamui-reactive",
@@ -984,7 +967,7 @@ dependencies = [
 
 [[package]]
 name = "creamui-devtools"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "creamui-core",
  "creamui-render",
@@ -996,7 +979,7 @@ dependencies = [
 
 [[package]]
 name = "creamui-fonts"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "creamui-reactive",
  "log",
@@ -1007,7 +990,7 @@ dependencies = [
 
 [[package]]
 name = "creamui-image"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "creamui-core",
  "creamui-theme",
@@ -1017,14 +1000,14 @@ dependencies = [
 
 [[package]]
 name = "creamui-jsx"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "creamui-core",
 ]
 
 [[package]]
 name = "creamui-macros"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "creamui-core",
  "proc-macro-crate",
@@ -1035,19 +1018,19 @@ dependencies = [
 
 [[package]]
 name = "creamui-platform"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
- "blair-blur-protocol",
- "blair-window-integration-protocol",
  "jni",
  "libc",
  "log",
  "raw-window-handle",
  "smithay-client-toolkit",
  "wasm-bindgen",
+ "wayland-backend",
  "wayland-client",
  "wayland-protocols-plasma",
  "wayland-protocols-wlr",
+ "wayland-scanner",
  "web-sys",
  "web-time",
  "winit",
@@ -1056,11 +1039,11 @@ dependencies = [
 
 [[package]]
 name = "creamui-reactive"
-version = "0.1.1"
+version = "0.2.0"
 
 [[package]]
 name = "creamui-render"
-version = "0.1.2"
+version = "0.2.0"
 dependencies = [
  "bytemuck",
  "creamui-core",
@@ -1087,8 +1070,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "creamui-router"
+version = "0.2.0"
+dependencies = [
+ "android-activity",
+ "creamui-core",
+ "creamui-reactive",
+ "jni",
+ "js-sys",
+ "log",
+ "serde",
+ "serde_json",
+ "url",
+ "wasm-bindgen",
+ "web-sys",
+]
+
+[[package]]
 name = "creamui-theme"
-version = "0.1.2"
+version = "0.2.0"
 dependencies = [
  "creamui-fonts",
  "creamui-reactive",
@@ -1096,7 +1096,7 @@ dependencies = [
 
 [[package]]
 name = "creamui-theme-loader"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "creamui-theme",
  "serde",
@@ -1105,7 +1105,7 @@ dependencies = [
 
 [[package]]
 name = "creamui-widgets"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "arboard",
  "creamui-core",

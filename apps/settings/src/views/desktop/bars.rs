@@ -53,31 +53,42 @@ pub fn build_bar_page(
     _: Size,
     config: &Signal<ShellConfig>,
     scroll: &ScrollController,
-    tab: &Signal<DockTab>,
     kind: BarKind,
 ) -> BoxedWidget {
+    let router = creamui_router::use_router();
+    let tab = match router.location().query("tab").as_deref() {
+        Some("appearance") => DockTab::Appearance,
+        Some("contents") => DockTab::Content,
+        _ => DockTab::Display,
+    };
     let bar = kind.get(&config.get()).clone();
-    let body = match tab.get() {
+    let body = match tab {
         DockTab::Display => display_card(config, kind, &bar),
         DockTab::Appearance => appearance_card(config, kind, &bar),
         DockTab::Content => content_card(config, kind, &bar),
     };
-    fixed_body(tabs(tab, tab.get()), body, scroll.clone())
+    fixed_body(tabs(&router, tab), body, scroll.clone())
 }
 
-fn tabs(tab: &Signal<DockTab>, active: DockTab) -> BoxedWidget {
+fn tabs(router: &creamui_router::Router, active: DockTab) -> BoxedWidget {
     let labels = ["Position", "Appearance", "Contents"];
     let styles = tab_styles(&labels, TabSizing::Fill, 38.0, 12.0);
     let mut tabs = Tabs::new(tab_colors(), Default::default()).gap(8.0);
     for (index, label) in labels.into_iter().enumerate() {
         let target = [DockTab::Display, DockTab::Appearance, DockTab::Content][index];
-        let state = tab.clone();
+        let router = router.clone();
         tabs = tabs.child(Box::new(Tab::new(
             tab_colors(),
             styles[index].clone(),
             label,
             active == target,
-            move || state.set(target),
+            move || {
+                crate::routes::set_query(
+                    &router,
+                    "tab",
+                    ["position", "appearance", "contents"][index],
+                )
+            },
         )));
     }
     Box::new(tabs)
@@ -270,4 +281,30 @@ fn content_card(config: &Signal<ShellConfig>, kind: BarKind, bar: &DockConfig) -
         )),
     )]));
     section("Island groups", "Groups are the visual islands that separate widgets. Add widgets from the Islands page, then place them in either bar.", groups)
+}
+
+pub(crate) fn statusbar_view() -> creamui_core::BoxedWidget {
+    let context = creamui_reactive::use_context::<crate::views::context::ViewContext>();
+    let size = context.size;
+    let config = &context.config;
+    let dock_scroll = &context.dock_scroll;
+    crate::views::desktop::bars::build_bar_page(
+        size,
+        config,
+        dock_scroll,
+        crate::views::desktop::bars::BarKind::Statusbar,
+    )
+}
+
+pub(crate) fn dock_view() -> creamui_core::BoxedWidget {
+    let context = creamui_reactive::use_context::<crate::views::context::ViewContext>();
+    let size = context.size;
+    let config = &context.config;
+    let dock_scroll = &context.dock_scroll;
+    crate::views::desktop::bars::build_bar_page(
+        size,
+        config,
+        dock_scroll,
+        crate::views::desktop::bars::BarKind::Dockbar,
+    )
 }

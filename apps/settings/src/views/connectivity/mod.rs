@@ -7,7 +7,7 @@ use coconut_api::{
 use creamui_core::layout::{Dimension, FlexDirection, LengthPercentage, Style};
 use creamui_core::{BoxedWidget, Size, Styled};
 use creamui_macros::jsx;
-use creamui_reactive::Signal;
+use creamui_router::Router;
 use creamui_widgets::{Icon, RawButton, RawView, Switch, Symbol, Text, TextSize};
 use std::rc::Rc;
 
@@ -24,17 +24,19 @@ pub enum View {
     Network,
 }
 
+#[derive(Clone)]
 pub struct State {
-    pub view: Signal<View>,
+    pub router: Router,
 }
 impl State {
-    pub fn new() -> Self {
-        Self {
-            view: Signal::new(View::Overview),
-        }
+    pub fn new(router: Router) -> Self {
+        Self { router }
+    }
+    pub fn current(&self) -> View {
+        current(&self.router)
     }
     pub fn showing_detail(&self) -> bool {
-        !matches!(self.view.get(), View::Overview)
+        !matches!(current(&self.router), View::Overview)
     }
 }
 
@@ -102,8 +104,8 @@ fn bluetooth_card(
 ) -> BoxedWidget {
     let theme = creamui_theme::use_theme();
     let scan = bluetooth.clone();
-    let pair_page = state.view.clone();
-    let saved = state.view.clone();
+    let pair_page = state.router.clone();
+    let saved = state.router.clone();
     let footer_button = |label: &str, action: Box<dyn Fn()>| -> BoxedWidget {
         Box::new(
             RawButton::new(
@@ -137,7 +139,7 @@ fn bluetooth_card(
                 "Pair new device",
                 Box::new(move || {
                     scan.start_scan();
-                    pair_page.set(View::Bluetooth);
+                    navigate(&pair_page, View::Bluetooth);
                 }),
             ),
             Box::new(
@@ -153,7 +155,7 @@ fn bluetooth_card(
             ),
             footer_button(
                 "Saved devices",
-                Box::new(move || saved.set(View::Bluetooth)),
+                Box::new(move || navigate(&saved, View::Bluetooth)),
             ),
         ]),
     ));
@@ -161,7 +163,7 @@ fn bluetooth_card(
 }
 
 pub fn detail_header(state: &State, window_width: f32) -> BoxedWidget {
-    let label = match state.view.get() {
+    let label = match current(&state.router) {
         View::Wifi(ssid) => ssid,
         View::KnownNetworks => "Known networks".into(),
         View::NearbyNetworks => "Wi-Fi networks".into(),
@@ -172,7 +174,7 @@ pub fn detail_header(state: &State, window_width: f32) -> BoxedWidget {
         View::Network => "Network".into(),
         View::Overview => "Connectivity".into(),
     };
-    let back = state.view.clone();
+    let back = state.router.clone();
     let decorations = creamui_render::use_window_decorations();
     let controls = decorations.controls;
     let right_padding = match decorations.mode {
@@ -196,7 +198,7 @@ pub fn detail_header(state: &State, window_width: f32) -> BoxedWidget {
     };
     Box::new(jsx! {
         <Flex direction={FlexDirection::Row} align={creamui_widgets::layout::Align::Center} gap={12.0} style={Style { flex_direction: FlexDirection::Row, flex_shrink: 0.0, size: creamui_core::layout::Size { width: Dimension::Percent(1.0), height: Dimension::Length(56.0) }, align_items: Some(creamui_core::layout::AlignItems::Center), padding: creamui_core::layout::Rect { left: LengthPercentage::Length(left_padding), right: LengthPercentage::Length(right_padding), top: LengthPercentage::Length(0.0), bottom: LengthPercentage::Length(0.0) }, ..Default::default() }}>
-            {crate::components::back_button(move || back.set(View::Overview))}
+            {crate::components::back_button(move || navigate(&back, View::Overview))}
             {Box::new(Text::new(label).font_size(14.0).bold(true)) as BoxedWidget}
         </Flex>
     })
@@ -209,7 +211,7 @@ pub fn build(
     state: &State,
     icons: &SettingsIcons,
 ) -> BoxedWidget {
-    match state.view.get() {
+    match current(&state.router) {
         View::Overview => overview(network, bluetooth, state, icons),
         View::Wifi(ssid) => wifi_detail(network, state, &ssid),
         View::KnownNetworks => wifi_list(network, state, true, icons),
@@ -261,12 +263,12 @@ fn overview(
             let label = wifi.ssid.clone();
             let active = wifi.active;
             let detail = wifi_hint(&wifi);
-            let page = state.view.clone();
+            let page = state.router.clone();
             let connect = network.clone();
             let ssid = label.clone();
             wifi_rows.push(item(label, detail, chevron(), move || {
                 if active {
-                    page.set(View::Wifi(ssid.clone()))
+                    navigate(&page, View::Wifi(ssid.clone()))
                 } else {
                     connect.connect_wifi(&ssid)
                 }
@@ -274,7 +276,7 @@ fn overview(
         }
     }
     if wifi_rows.len() == 1 {
-        let page = state.view.clone();
+        let page = state.router.clone();
         let scan = network.clone();
         wifi_rows.push(item(
             "No Wi-Fi connection",
@@ -282,7 +284,7 @@ fn overview(
             chevron(),
             move || {
                 scan.rescan();
-                page.set(View::NearbyNetworks);
+                navigate(&page, View::NearbyNetworks);
             },
         ));
     }
@@ -294,16 +296,16 @@ fn overview(
         Box::new(Switch::new(false, || {}).customize(|switch| switch.disabled = true)),
         || {},
     ));
-    let known = state.view.clone();
+    let known = state.router.clone();
     wifi_rows.push(item(
         "Known networks",
         format!("{} saved networks", network.saved_wifi_networks().len()),
         chevron(),
-        move || known.set(View::KnownNetworks),
+        move || navigate(&known, View::KnownNetworks),
     ));
     let powered = bluetooth.powered();
     let set_powered = bluetooth.clone();
-    let open_bt = state.view.clone();
+    let open_bt = state.router.clone();
     let mut bt_rows = vec![item(
         "Bluetooth",
         if powered {
@@ -314,11 +316,11 @@ fn overview(
         Box::new(Switch::new(powered, move || {
             set_powered.set_powered(!set_powered.powered())
         })),
-        move || open_bt.set(View::Bluetooth),
+        move || navigate(&open_bt, View::Bluetooth),
     )];
     for device in bluetooth.devices().into_iter().filter(|d| d.connected) {
         let address = device.address.clone();
-        let page = state.view.clone();
+        let page = state.router.clone();
         let hint = bluetooth_hint(&device);
         let icon = device
             .icon_hint
@@ -334,28 +336,31 @@ fn overview(
                 ) as BoxedWidget
             });
         bt_rows.push(icon_item(device.name, hint, icon, chevron(), move || {
-            page.set(View::BluetoothDevice(address.clone()))
+            navigate(&page, View::BluetoothDevice(address.clone()))
         }));
     }
     let devices = network.devices();
     let mut device_rows = Vec::new();
     for kind in [NetworkDeviceKind::Ethernet, NetworkDeviceKind::Vpn] {
         let (name, detail) = device_summary(kind, devices.iter().find(|d| d.kind == kind));
-        let page = state.view.clone();
+        let page = state.router.clone();
         device_rows.push(item(name, detail, chevron(), move || {
-            page.set(if kind == NetworkDeviceKind::Ethernet {
-                View::Ethernet
-            } else {
-                View::Vpn
-            })
+            navigate(
+                &page,
+                if kind == NetworkDeviceKind::Ethernet {
+                    View::Ethernet
+                } else {
+                    View::Vpn
+                },
+            )
         }));
     }
-    let network_page = state.view.clone();
+    let network_page = state.router.clone();
     device_rows.push(item(
         "Network",
         "DNS, proxies, hostname",
         chevron(),
-        move || network_page.set(View::Network),
+        move || navigate(&network_page, View::Network),
     ));
     section(
         "",
@@ -403,7 +408,7 @@ fn wifi_list(
         names
             .into_iter()
             .map(|name| {
-                let page = state.view.clone();
+                let page = state.router.clone();
                 let ssid = name.clone();
                 let hint = available
                     .iter()
@@ -417,7 +422,7 @@ fn wifi_list(
                         }
                     });
                 item(name, hint, chevron(), move || {
-                    page.set(View::Wifi(ssid.clone()))
+                    navigate(&page, View::Wifi(ssid.clone()))
                 })
             })
             .collect()
@@ -515,10 +520,10 @@ fn bluetooth_detail(bluetooth: Rc<dyn BluetoothIntegration>, state: &State) -> B
     )];
     for device in bluetooth.devices() {
         let address = device.address.clone();
-        let page = state.view.clone();
+        let page = state.router.clone();
         let hint = bluetooth_hint(&device);
         rows.push(item(device.name, hint, chevron(), move || {
-            page.set(View::BluetoothDevice(address.clone()))
+            navigate(&page, View::BluetoothDevice(address.clone()))
         }));
     }
     section(
@@ -626,4 +631,61 @@ fn device_summary(kind: NetworkDeviceKind, device: Option<&NetworkDevice>) -> (S
         None => "Not available".into(),
     };
     (name, hint)
+}
+
+pub(crate) fn route_view() -> creamui_core::BoxedWidget {
+    let context = creamui_reactive::use_context::<crate::views::context::ViewContext>();
+    let size = context.size;
+    let integrations = &context.integrations;
+    let icons = &context.icons;
+    let connectivity = &context.connectivity;
+    crate::views::connectivity::build(
+        size,
+        integrations.network.clone(),
+        integrations.bluetooth.clone(),
+        connectivity,
+        icons,
+    )
+}
+
+fn current(router: &Router) -> View {
+    let matched = router.current_match();
+    let pattern = matched
+        .as_ref()
+        .map(|m| m.pattern.as_str())
+        .unwrap_or_default();
+    let params = router.params();
+    match pattern {
+        "/connectivity/wifi/known" => View::KnownNetworks,
+        "/connectivity/wifi/nearby" => View::NearbyNetworks,
+        "/connectivity/wifi/:ssid" => View::Wifi(params.get("ssid").cloned().unwrap_or_default()),
+        "/connectivity/bluetooth" => View::Bluetooth,
+        "/connectivity/bluetooth/:address" => {
+            View::BluetoothDevice(params.get("address").cloned().unwrap_or_default())
+        }
+        "/connectivity/ethernet" => View::Ethernet,
+        "/connectivity/vpn" => View::Vpn,
+        "/connectivity/network" => View::Network,
+        _ => View::Overview,
+    }
+}
+
+fn navigate(router: &Router, view: View) {
+    let path = match view {
+        View::Overview => "/connectivity".into(),
+        View::KnownNetworks => "/connectivity/wifi/known".into(),
+        View::NearbyNetworks => "/connectivity/wifi/nearby".into(),
+        View::Wifi(ssid) => format!("/connectivity/wifi/{}", crate::routes::segment(&ssid)),
+        View::Bluetooth => "/connectivity/bluetooth".into(),
+        View::BluetoothDevice(address) => format!(
+            "/connectivity/bluetooth/{}",
+            crate::routes::segment(&address)
+        ),
+        View::Ethernet => "/connectivity/ethernet".into(),
+        View::Vpn => "/connectivity/vpn".into(),
+        View::Network => "/connectivity/network".into(),
+    };
+    if let Err(error) = router.navigate(&path) {
+        eprintln!("settings: navigation failed: {error}");
+    }
 }

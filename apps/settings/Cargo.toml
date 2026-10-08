@@ -24,6 +24,9 @@ creamui-fonts = { path = "../../../creamui/crates/fonts" }
 creamui-image = { path = "../../../creamui/crates/image", features = ["webp", "jpeg", "svg"] }
 creamui-jsx = { path = "../../../creamui/crates/jsx" }
 creamui-macros = { path = "../../../creamui/crates/macros" }
+creamui-router = { path = "../../../creamui/crates/router" }
+percent-encoding = "2"
+url = "2"
 creamui-reactive = { path = "../../../creamui/crates/reactive" }
 creamui-render = { path = "../../../creamui/crates/render", features = ["platform-wayland", "system-theme", "platform-window-integration-blair", "platform-blur-blair", "platform-blur-kwin"] }
 creamui-theme = { path = "../../../creamui/crates/theme" }

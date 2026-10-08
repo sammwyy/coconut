@@ -1,14 +1,10 @@
-pub mod bars;
-pub mod icons;
-pub mod island_settings;
-pub mod islands;
-pub mod notifications;
-pub mod tray;
-
 pub(crate) fn overview() -> creamui_core::BoxedWidget {
     let context = creamui_reactive::use_context::<crate::views::context::ViewContext>();
-    let config = &context.config;
     let view = &context.view;
     let native = &context.native;
-    crate::views::native::desktop(native, config, view)
+    let account_list = context.users.get();
+    crate::views::native::accounts(native, &account_list, view)
 }
+pub mod account;
+pub mod create;
+pub mod profile;

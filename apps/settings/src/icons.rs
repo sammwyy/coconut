@@ -7,6 +7,7 @@ use creamui_widgets::{IconImage, IconSource, Symbol};
 /// sidebar tree on every rebuild. Each is monochrome, so [`Icon::draw`]
 /// recolors it to match the active/hover state and theme the same way a
 /// built-in [`Symbol`] would.
+#[derive(Clone)]
 pub struct SettingsIcons {
     pub paintbrush: IconSource,
     pub wallpaper: IconSource,

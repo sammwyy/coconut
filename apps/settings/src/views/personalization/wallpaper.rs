@@ -56,7 +56,11 @@ pub fn build(
     window: &Rc<RefCell<Option<WindowHandle>>>,
 ) -> BoxedWidget {
     let desktop = config.get().desktop;
-    let image_mode = desktop.wallpaper_mode == WallpaperMode::Image;
+    let image_mode = match creamui_router::use_location().query("tab").as_deref() {
+        Some("image") => true,
+        Some("color") => false,
+        _ => desktop.wallpaper_mode == WallpaperMode::Image,
+    };
     let content = if image_mode {
         image_content(
             config,
@@ -89,12 +93,18 @@ fn mode_tabs(config: &Signal<ShellConfig>, image_mode: bool) -> BoxedWidget {
     .gap(8.0);
     for (index, label) in labels.into_iter().enumerate() {
         let config = config.clone();
+        let router = creamui_router::use_router();
         tabs = tabs.child(Box::new(Tab::new(
             colors,
             styles[index].clone(),
             label,
             (index == 0) == image_mode,
             move || {
+                crate::routes::set_query(
+                    &router,
+                    "tab",
+                    if index == 0 { "image" } else { "color" },
+                );
                 update_config(&config, |config| {
                     config.desktop.wallpaper_mode = if index == 0 {
                         WallpaperMode::Image
@@ -513,4 +523,20 @@ mod tests {
         fs::remove_dir_all(&directory).ok();
         assert_eq!(found, vec![directory.join("beach.png")]);
     }
+}
+
+pub(crate) fn route_view() -> creamui_core::BoxedWidget {
+    let context = creamui_reactive::use_context::<crate::views::context::ViewContext>();
+    let size = context.size;
+    let config = &context.config;
+    let window = &context.window;
+    let wallpaper_color_picker = &context.wallpaper_color_picker;
+    let wallpaper_gallery = &context.wallpaper_gallery;
+    crate::views::personalization::wallpaper::build(
+        size,
+        config,
+        wallpaper_color_picker,
+        wallpaper_gallery,
+        window,
+    )
 }

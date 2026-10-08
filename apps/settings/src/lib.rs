@@ -1,8 +1,11 @@
 mod components;
 mod icons;
 mod polkit;
-mod views;
+mod routes;
 mod users;
+mod views;
+use creamui_router::{Router, RouterOutlet, RouterProvider};
+use routes::destination::{page_description, page_title, section_presentation, Section};
 #[cfg(test)]
 mod visual_tests;
 
@@ -19,394 +22,26 @@ use creamui_render::{
 };
 use creamui_widgets::{
     Avatar, CUIWindowDragArea, ColorPickerController, Heading, Icon, IconSource, RawButton,
-    RawView, ScrollController, SidebarNavController, Symbol, Text, TextController,
-    TextInput, TextSize,
+    RawView, ScrollController, Text, TextController, TextInput, TextSize,
 };
 use icons::SettingsIcons;
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
-#[derive(Clone, PartialEq)]
-enum Section {
-    GroupNetwork,
-    GroupLookAndFeel,
-    GroupWorkflow,
-    GroupPeople,
-    GroupSystem,
-    Connectivity,
-    Hardware,
-    Personalization,
-    IconPack,
-    Sound,
-    Desktop,
-    Wallpaper,
-    DesktopIcons,
-    Statusbar,
-    Dockbar,
-    Tray,
-    Islands,
-    Windows,
-    System,
-    Layout,
-    Titlebar,
-    Compositor,
-    WorkingArea,
-    Effects,
-    Keyboard,
-    Mouse,
-    CursorTheme,
-    Touchpad,
-    Focus,
-    ShortcutsCategory,
-    Shortcuts,
-    Applications,
-    Users,
-    Profile,
-    User(String),
-    CreateUser,
-    Privacy,
-    Accessibility,
-    About,
-    Detail(views::native::Page),
-    Unavailable(String),
-}
+use components::pages::{category_pages, unavailable_page};
 
-fn page_title(section: &Section) -> String {
-    match section {
-        Section::Detail(page) => page.title().into(),
-        Section::IconPack => "Icons".into(),
-        Section::Sound => "Sound".into(),
-        Section::Wallpaper => "Wallpaper".into(),
-        Section::DesktopIcons => "Desktop icons".into(),
-        Section::Statusbar => "Statusbar".into(),
-        Section::Dockbar => "Dockbar".into(),
-        Section::Tray => "Status icons".into(),
-        Section::Islands => "Islands".into(),
-        Section::Layout => "Window layout".into(),
-        Section::Titlebar => "Titlebar".into(),
-        Section::Compositor => "Advanced".into(),
-        Section::WorkingArea => "Workspaces".into(),
-        Section::Effects => "Motion".into(),
-        Section::Keyboard => "Keyboard".into(),
-        Section::Mouse => "Mouse & touchpad".into(),
-        Section::CursorTheme => "Cursor".into(),
-        Section::Touchpad => "Touchpad".into(),
-        Section::Focus => "Window focus".into(),
-        Section::Shortcuts => "Shortcuts".into(),
-        Section::Profile => "My profile".into(),
-        Section::User(username) => username.clone(),
-        Section::CreateUser => "Create user".into(),
-        Section::Unavailable(title) => title.clone(),
-        Section::Connectivity => "Connectivity".into(),
-        Section::Hardware => "Hardware".into(),
-        Section::Personalization => "Personalization".into(),
-        Section::Desktop => "Desktop".into(),
-        Section::Windows => "Windows".into(),
-        Section::ShortcutsCategory => "Shortcuts".into(),
-        Section::Applications => "Applications".into(),
-        Section::Users => "Users & Accounts".into(),
-        Section::Privacy => "Privacy & Security".into(),
-        Section::Accessibility => "Accessibility".into(),
-        Section::System => "System".into(),
-        Section::About => "About".into(),
-        Section::GroupNetwork
-        | Section::GroupLookAndFeel
-        | Section::GroupWorkflow
-        | Section::GroupPeople
-        | Section::GroupSystem => "Settings".into(),
-    }
-}
-
-/// The mock uses a small, human description below each page title.  Keep it
-/// here with the navigation metadata so the native pages get that context
-/// without every individual settings section needing to duplicate chrome.
-fn page_description(section: &Section) -> &'static str {
-    match section {
-        Section::Connectivity => "Wireless, wired and virtual network connections.",
-        Section::Hardware => "Displays, audio, input and connected peripherals.",
-        Section::Personalization => "Make the desktop feel like yours.",
-        Section::Desktop => "Panels, widgets, status controls and desktop icons.",
-        Section::Windows => "How windows open, arrange and behave.",
-        Section::ShortcutsCategory => "Keyboard shortcuts for the system and apps.",
-        Section::Applications => "Installed apps, defaults and startup items.",
-        Section::Users => "People who use this device and their accounts.",
-        Section::Privacy => "Control what apps can access and how you sign in.",
-        Section::Accessibility => "Adjust the system for vision, hearing and motor needs.",
-        Section::System => "Updates, storage, date, language and more.",
-        Section::About => "Information about this device.",
-        Section::IconPack => "Choose the icons used throughout the desktop.",
-        Section::Sound => "Select the sound theme for desktop events.",
-        Section::CursorTheme => "Choose the pointer style used by applications.",
-        Section::Wallpaper | Section::DesktopIcons => "Personalize how your desktop looks.",
-        Section::Statusbar | Section::Dockbar | Section::Tray | Section::Islands => {
-            "Configure the desktop shell and its status controls."
-        }
-        Section::Layout | Section::Titlebar | Section::WorkingArea | Section::Focus => {
-            "Control how application windows behave."
-        }
-        Section::Compositor | Section::Effects => "Fine-tune desktop rendering and motion.",
-        Section::Keyboard | Section::Mouse | Section::Touchpad => {
-            "Adjust your input devices and interactions."
-        }
-        Section::Shortcuts => "Set the keyboard shortcuts used by the desktop.",
-        Section::Profile | Section::User(_) | Section::CreateUser => {
-            "Manage the people and accounts on this computer."
-        }
-        Section::Unavailable(_) => "This area is planned but is not supported by Coconut yet.",
-        _ => "Customize your Coconut desktop.",
-    }
-}
-
-/// Keep child pages visually attached to the category they came from. This
-/// matters once Settings has more than the handful of items shown in the
-/// concept: a page such as "Workspaces" should still read as a Windows page,
-/// instead of falling back to a generic control icon and accent color.
-fn section_presentation(
-    section: &Section,
-    icons: &SettingsIcons,
-) -> (IconSource, creamui_theme::Color) {
-    use creamui_theme::Color;
-
-    match section {
-        Section::Connectivity => (icons.status.clone(), Color::rgb(0, 153, 214)),
-        Section::Hardware | Section::Keyboard | Section::Mouse | Section::Touchpad => {
-            (icons.devices.clone(), Color::rgb(0, 173, 188))
-        }
-        Section::Personalization | Section::IconPack | Section::Sound | Section::CursorTheme => {
-            (icons.paintbrush.clone(), Color::rgb(193, 99, 190))
-        }
-        Section::Wallpaper => (icons.paintbrush.clone(), Color::rgb(193, 99, 190)),
-        Section::DesktopIcons
-        | Section::Desktop
-        | Section::Statusbar
-        | Section::Dockbar
-        | Section::Tray
-        | Section::Islands => (icons.wallpaper.clone(), Color::rgb(110, 105, 224)),
-        Section::Windows
-        | Section::Layout
-        | Section::Titlebar
-        | Section::Compositor
-        | Section::WorkingArea
-        | Section::Effects
-        | Section::Focus => (icons.windows.clone(), Color::rgb(78, 125, 222)),
-        Section::ShortcutsCategory | Section::Shortcuts => {
-            (icons.shortcuts.clone(), Color::rgb(222, 126, 54))
-        }
-        Section::Applications => (icons.applications.clone(), Color::rgb(0, 177, 115)),
-        Section::Users | Section::Profile | Section::User(_) | Section::CreateUser => {
-            (icons.users.clone(), Color::rgb(213, 88, 91))
-        }
-        Section::Privacy => (icons.privacy.clone(), Color::rgb(54, 171, 107)),
-        Section::Accessibility => (icons.accessibility.clone(), Color::rgb(0, 167, 187)),
-        Section::System | Section::About => (icons.system.clone(), Color::rgb(77, 142, 229)),
-        Section::Detail(_) => section_presentation(&views::native::parent(section), icons),
-        Section::Unavailable(_) => (
-            IconSource::Symbol(Symbol::Controls),
-            Color::rgb(110, 105, 224),
-        ),
-        Section::GroupNetwork
-        | Section::GroupLookAndFeel
-        | Section::GroupWorkflow
-        | Section::GroupPeople
-        | Section::GroupSystem => (
-            IconSource::Symbol(Symbol::Controls),
-            Color::rgb(110, 105, 224),
-        ),
-    }
-}
-
-fn unavailable_page(name: &str) -> BoxedWidget {
-    components::section(
-        "",
-        "",
-        vec![components::group(vec![components::row(
-            "Not available yet",
-            Box::new(
-                Text::secondary(format!(
-                    "{name} is part of the Settings layout, but Coconut does not support it yet."
-                ))
-                .size(TextSize::Sm),
-            ),
-        )])],
-    )
-}
-
-fn category_pages(pages: Vec<BoxedWidget>) -> BoxedWidget {
-    Box::new(jsx! {
-        <Flex direction={FlexDirection::Column} gap={32.0} children={pages} />
-    })
-}
-
-fn sidebar_item(
-    current: &Section,
-    section: Section,
-    label: &str,
-    icon: IconSource,
-    color: creamui_theme::Color,
-    view: &Signal<Section>,
-) -> BoxedWidget {
-    let theme = creamui_theme::use_theme();
-    let active = views::native::parent(current) == section;
-    let select = view.clone();
-    let item = RawButton::new(
-        Style {
-            size: creamui_core::layout::Size { width: Dimension::Percent(1.0), height: Dimension::Length(36.0) },
-            ..Default::default()
-        },
-        move || select.set(section.clone()),
-    )
-    .background(if active { theme.colors.selection_background } else { creamui_theme::Color::rgba(0, 0, 0, 0) })
-    .hover_style(creamui_core::StateStyle::new().background(if active { theme.colors.selection_background } else { theme.colors.surface_hover }))
-    .corner_radius(12.0)
-    .child(Box::new(jsx! {
-        <RawView style={Style {
-            size: creamui_core::layout::Size { width: Dimension::Percent(1.0), height: Dimension::Percent(1.0) },
-            align_items: Some(creamui_core::layout::AlignItems::Center),
-            gap: creamui_core::layout::Size { width: LengthPercentage::Length(10.0), height: LengthPercentage::Length(0.0) },
-            padding: creamui_core::layout::Rect { left: LengthPercentage::Length(8.0), right: LengthPercentage::Length(8.0), top: LengthPercentage::Length(0.0), bottom: LengthPercentage::Length(0.0) },
-            ..Default::default()
-        }}>
-            {components::icon_badge(icon, color)}
-            {Box::new(Text::new(label).font_size(13.0)) as BoxedWidget}
-        </RawView>
-    }));
-    Box::new(item)
-}
-
-fn sidebar_group(label: &str, items: Vec<BoxedWidget>) -> BoxedWidget {
-    Box::new(jsx! {
-        <Flex direction={FlexDirection::Column} gap={4.0}>
-            {Box::new(Text::secondary(label).font_size(10.0).bold(true).padding_left(8.0)) as BoxedWidget}
-            {Box::new(RawView::new(Style { flex_direction: FlexDirection::Column, ..Default::default() }).with_children(items)) as BoxedWidget}
-        </Flex>
-    })
-}
-
-fn settings_sidebar(
-    current: &Section,
-    view: &Signal<Section>,
-    icons: &SettingsIcons,
-) -> BoxedWidget {
-    use creamui_theme::Color;
-    Box::new(jsx! {
-        <Flex direction={FlexDirection::Column} gap={16.0} padding={12.0}>
-            {sidebar_group("NETWORK", vec![
-                sidebar_item(current, Section::Connectivity, "Connectivity", icons.status.clone(), Color::rgb(0, 153, 214), view),
-                sidebar_item(current, Section::Hardware, "Hardware", icons.devices.clone(), Color::rgb(0, 173, 188), view),
-            ])}
-            {sidebar_group("LOOK & FEEL", vec![
-                sidebar_item(current, Section::Personalization, "Personalization", icons.paintbrush.clone(), Color::rgb(193, 99, 190), view),
-                sidebar_item(current, Section::Desktop, "Desktop", icons.wallpaper.clone(), Color::rgb(110, 105, 224), view),
-                sidebar_item(current, Section::Windows, "Windows", icons.windows.clone(), Color::rgb(78, 125, 222), view),
-            ])}
-            {sidebar_group("WORKFLOW", vec![
-                sidebar_item(current, Section::ShortcutsCategory, "Shortcuts", icons.shortcuts.clone(), Color::rgb(222, 126, 54), view),
-                sidebar_item(current, Section::Applications, "Applications", icons.applications.clone(), Color::rgb(0, 177, 115), view),
-            ])}
-            {sidebar_group("PEOPLE", vec![
-                sidebar_item(current, Section::Users, "Users & Accounts", icons.users.clone(), Color::rgb(213, 88, 91), view),
-                sidebar_item(current, Section::Privacy, "Privacy & Security", icons.privacy.clone(), Color::rgb(54, 171, 107), view),
-                sidebar_item(current, Section::Accessibility, "Accessibility", icons.accessibility.clone(), Color::rgb(0, 167, 187), view),
-            ])}
-            {sidebar_group("SYSTEM", vec![
-                sidebar_item(current, Section::System, "System", icons.system.clone(), Color::rgb(77, 142, 229), view),
-                sidebar_item(current, Section::About, "About", icons.about.clone(), Color::rgb(0, 148, 191), view),
-            ])}
-        </Flex>
-    })
-}
-
-fn distribution_name() -> String {
-    std::fs::read_to_string("/etc/os-release")
-        .ok()
-        .and_then(|release| {
-            release.lines().find_map(|line| {
-                line.strip_prefix("ID=")
-                    .map(|id| id.trim_matches('"').to_owned())
-            })
-        })
-        .unwrap_or_else(|| std::env::consts::OS.to_owned())
-}
-
-fn window_controls(
-    window: &Rc<RefCell<Option<WindowHandle>>>,
-    icons: &SettingsIcons,
-    maximized: &Signal<bool>,
-) -> BoxedWidget {
-    let theme = creamui_theme::use_theme();
-    let buttons = [
-        icons.minimize.clone(),
-        icons.maximize.clone(),
-        icons.close.clone(),
-    ]
-    .into_iter()
-    .enumerate()
-    .map(|(action, icon)| {
-        let window = window.clone();
-        let maximized = maximized.clone();
-        Box::new(
-            RawButton::new(
-                Style {
-                    size: creamui_core::layout::Size {
-                        width: Dimension::Length(28.0),
-                        height: Dimension::Length(28.0),
-                    },
-                    align_items: Some(creamui_core::layout::AlignItems::Center),
-                    justify_content: Some(creamui_core::layout::JustifyContent::Center),
-                    ..Default::default()
-                },
-                move || {
-                    if let Some(handle) = window.borrow().as_ref() {
-                        match action {
-                            0 => handle.minimize(),
-                            1 => {
-                                let next = !maximized.peek();
-                                handle.set_maximized(next);
-                                maximized.set(next);
-                            }
-                            _ => handle.close(),
-                        }
-                    }
-                },
-            )
-            .background(theme.colors.text_secondary.mix(theme.colors.surface, 0.88))
-            .hover_style(
-                creamui_core::StateStyle::new()
-                    .background(theme.colors.text_secondary.mix(theme.colors.surface, 0.75)),
-            )
-            .corner_radius(14.0)
-            .child(Box::new(
-                Icon::new(icon, theme.colors.text_primary).size(16.0),
-            )),
-        ) as BoxedWidget
-    })
-    .collect();
-    Box::new(
-        RawView::new(Style {
-            position: Position::Absolute,
-            inset: creamui_core::layout::Rect {
-                right: LengthPercentageAuto::Length(16.0),
-                top: LengthPercentageAuto::Length(14.0),
-                left: LengthPercentageAuto::Auto,
-                bottom: LengthPercentageAuto::Auto,
-            },
-            gap: creamui_core::layout::Size {
-                width: LengthPercentage::Length(6.0),
-                height: LengthPercentage::Length(0.0),
-            },
-            ..Default::default()
-        })
-        .with_children(buttons),
-    )
-}
+use components::navigation::{distribution_name, settings_sidebar, window_controls};
 
 pub fn run() {
     components::load_settings_fonts();
     let config = Signal::new(ShellConfig::load());
-    let integrations = coconut_registry::detect();
+    let integrations = Rc::new(coconut_registry::detect());
     let appearance = Signal::new(load_system_appearance());
-    let view = Signal::new(Section::Connectivity);
-    let nav = SidebarNavController::new();
+    let view = routes::create(&routes::initial_route(std::env::args().nth(1).as_deref()))
+        .unwrap_or_else(|error| {
+            eprintln!("settings: invalid initial route: {error}");
+            routes::create(routes::DEFAULT_ROUTE).expect("valid settings routes")
+        });
     let wallpaper_color_picker = ColorPickerController::new();
     let desktop_icons_color_picker = ColorPickerController::new();
     let appearance_accent_picker = ColorPickerController::new();
@@ -415,17 +50,15 @@ pub fn run() {
     let profile = users::ProfileControllers::load(&account_list);
     let users = Signal::new(account_list);
     let icons = SettingsIcons::load();
-    let wallpaper_gallery = views::personalization::wallpaper::GalleryState::new();
-    let connectivity = views::connectivity::State::new();
-    let native = views::native::State::new(integrations.settings.clone());
-    let window_settings = views::windows::WindowState::load();
-    let shortcut_settings = views::windows::ShortcutState::load();
+    let wallpaper_gallery = crate::views::personalization::wallpaper::GalleryState::new();
+    let connectivity = crate::views::connectivity::State::new(view.clone());
+    let native = crate::views::native::State::new(integrations.settings.clone());
+    let window_settings = Rc::new(crate::views::windows::WindowState::load());
+    let shortcut_settings = Rc::new(crate::views::windows::ShortcutState::load());
     let content_scroll = ScrollController::new(0.0);
     let sidebar_scroll = ScrollController::new(0.0);
     let dock_scroll = ScrollController::new(0.0);
-    let dock_tab = Signal::new(views::desktop::bars::DockTab::Display);
-    let islands_detail: Signal<Option<&'static str>> = Signal::new(None);
-    let island_settings = views::desktop::island_settings::State::default();
+    let island_settings = crate::views::desktop::island_settings::State::default();
     let settings_search = TextController::new("");
     let maximized = Signal::new(false);
     let last_view = RefCell::new(Section::Connectivity);
@@ -471,51 +104,50 @@ pub fn run() {
                     }
                 },
                 move |size| {
-                    connectivity_revision.get();
-                    let current = view.get();
-                    if *last_view.borrow() != current {
-                        content_scroll.set(0.0);
-                        dock_scroll.set(0.0);
-                        *last_view.borrow_mut() = current;
-                    }
-                    let decorations = creamui_render::use_window_decorations();
-                    if decorations.mode != WindowDecorationMode::Pending
-                        && reported_decorations.replace(decorations.mode) != decorations.mode
-                    {
-                        eprintln!(
-                            "settings: CreamUI negotiated window decorations: {:?}",
-                            decorations.mode
-                        );
-                    }
-                    build(
-                        size,
-                        &config,
-                        &integrations,
-                        &appearance,
-                        &view,
-                        &nav,
-                        &window,
-                        &wallpaper_color_picker,
-                        &desktop_icons_color_picker,
-                        &appearance_accent_picker,
-                        &appearance_custom_accent,
-                        &users,
-                        &profile,
-                        &icons,
-                        &wallpaper_gallery,
-                        &window_settings,
-                        &shortcut_settings,
-                        &content_scroll,
-                        &sidebar_scroll,
-                        &dock_scroll,
-                        &dock_tab,
-                        &islands_detail,
-                        &island_settings,
-                        &settings_search,
-                        &connectivity,
-                        &maximized,
-                        &native,
-                    )
+                    RouterProvider::new(view.clone()).render(|| {
+                        connectivity_revision.get();
+                        let current = routes::current(&view);
+                        if *last_view.borrow() != current {
+                            content_scroll.set(0.0);
+                            dock_scroll.set(0.0);
+                            *last_view.borrow_mut() = current;
+                        }
+                        let decorations = creamui_render::use_window_decorations();
+                        if decorations.mode != WindowDecorationMode::Pending
+                            && reported_decorations.replace(decorations.mode) != decorations.mode
+                        {
+                            eprintln!(
+                                "settings: CreamUI negotiated window decorations: {:?}",
+                                decorations.mode
+                            );
+                        }
+                        build(
+                            size,
+                            &config,
+                            &integrations,
+                            &appearance,
+                            &view,
+                            &window,
+                            &wallpaper_color_picker,
+                            &desktop_icons_color_picker,
+                            &appearance_accent_picker,
+                            &appearance_custom_accent,
+                            &users,
+                            &profile,
+                            &icons,
+                            &wallpaper_gallery,
+                            &window_settings,
+                            &shortcut_settings,
+                            &content_scroll,
+                            &sidebar_scroll,
+                            &dock_scroll,
+                            &island_settings,
+                            &settings_search,
+                            &connectivity,
+                            &maximized,
+                            &native,
+                        )
+                    })
                 },
             );
         })
@@ -571,10 +203,9 @@ fn load_system_appearance() -> creamui_theme::ResolvedAppearance {
 fn build(
     size: Size,
     config: &Signal<ShellConfig>,
-    integrations: &coconut_api::Registry,
+    integrations: &Rc<coconut_api::Registry>,
     appearance: &Signal<creamui_theme::ResolvedAppearance>,
-    view: &Signal<Section>,
-    nav: &SidebarNavController<Section>,
+    view: &Router,
     window: &Rc<RefCell<Option<WindowHandle>>>,
     wallpaper_color_picker: &ColorPickerController,
     desktop_icons_color_picker: &ColorPickerController,
@@ -583,19 +214,17 @@ fn build(
     users: &Signal<Vec<users::Account>>,
     profile: &users::ProfileControllers,
     icons: &SettingsIcons,
-    wallpaper_gallery: &views::personalization::wallpaper::GalleryState,
-    window_settings: &views::windows::WindowState,
-    shortcut_settings: &views::windows::ShortcutState,
+    wallpaper_gallery: &crate::views::personalization::wallpaper::GalleryState,
+    window_settings: &Rc<crate::views::windows::WindowState>,
+    shortcut_settings: &Rc<crate::views::windows::ShortcutState>,
     content_scroll: &ScrollController,
     sidebar_scroll: &ScrollController,
     dock_scroll: &ScrollController,
-    dock_tab: &Signal<views::desktop::bars::DockTab>,
-    islands_detail: &Signal<Option<&'static str>>,
-    island_settings: &views::desktop::island_settings::State,
+    island_settings: &crate::views::desktop::island_settings::State,
     settings_search: &TextController,
-    connectivity: &views::connectivity::State,
+    connectivity: &crate::views::connectivity::State,
     maximized: &Signal<bool>,
-    native: &views::native::State,
+    native: &crate::views::native::State,
 ) -> BoxedWidget {
     let theme = creamui_theme::use_theme();
 
@@ -619,9 +248,9 @@ fn build(
         },
         ..Default::default()
     };
-    let current = view.get();
+    let current = routes::current(view);
     let connectivity_detail = current == Section::Connectivity && connectivity.showing_detail();
-    let native_detail = views::native::parent(&current) != current;
+    let native_detail = crate::views::native::parent(&current) != current;
     let decorations = creamui_render::use_window_decorations();
     let show_page_header = !connectivity_detail && !native_detail;
     let account_list = users.get();
@@ -632,101 +261,37 @@ fn build(
         color: category_color,
         title: title.clone(),
     });
-    let _ = (&sidebar_style, nav);
+    let _ = &sidebar_style;
     let sidebar = settings_sidebar(&current, view, icons);
 
     let content_has_own_scroll = matches!(current, Section::Statusbar | Section::Dockbar);
-    let content = match current.clone() {
-        Section::Connectivity => views::connectivity::build(
-            size,
-            integrations.network.clone(),
-            integrations.bluetooth.clone(),
-            connectivity,
-            icons,
-        ),
-        Section::Hardware => views::native::hardware(native, view),
-        Section::Personalization => views::native::personalization(
-            native,
-            config,
-            appearance,
-            view,
-            views::personalization::appearance::overview(
-                appearance,
-                window,
-                appearance_accent_picker,
-                appearance_custom_accent,
-            ),
-        ),
-        Section::Desktop => views::native::desktop(native, config, view),
-        Section::Windows => views::native::windows(native, view, window_settings),
-        Section::Detail(ref page) => views::native::detail(
-            page,
-            native,
-            view,
-            config,
-            window_settings,
-            appearance,
-            window,
-        ),
-        Section::ShortcutsCategory => views::windows::build_shortcuts(size, shortcut_settings),
-        Section::Applications => views::native::applications(native, view),
-        Section::Users => views::native::accounts(native, &account_list, view),
-        Section::Privacy => views::native::privacy(native, view),
-        Section::Accessibility => views::native::accessibility(native, window_settings),
-        Section::System => views::native::system(native, view),
-        Section::About => views::native::about(native),
-        Section::IconPack => views::personalization::asset_packs::icon_packs(size, config),
-        Section::Sound => views::personalization::asset_packs::sound_themes(size, config),
-        Section::Wallpaper => views::personalization::wallpaper::build(
-            size,
-            config,
-            wallpaper_color_picker,
-            wallpaper_gallery,
-            window,
-        ),
-        Section::DesktopIcons => {
-            views::desktop::icons::build(size, config, desktop_icons_color_picker)
-        }
-        Section::Statusbar => views::desktop::bars::build_bar_page(
-            size,
-            config,
-            dock_scroll,
-            dock_tab,
-            views::desktop::bars::BarKind::Statusbar,
-        ),
-        Section::Dockbar => views::desktop::bars::build_bar_page(
-            size,
-            config,
-            dock_scroll,
-            dock_tab,
-            views::desktop::bars::BarKind::Dockbar,
-        ),
-        Section::Tray => views::desktop::tray::build(size, config),
-        Section::Islands => views::desktop::islands::build(size, config, islands_detail, island_settings),
-        Section::Layout => views::windows::build_layout(size, window_settings),
-        Section::Titlebar => views::windows::build_titlebar(size, window_settings),
-        Section::Compositor => views::windows::build_general(size, window_settings),
-        Section::WorkingArea => views::windows::build_working_area(size, window_settings),
-        Section::Effects => views::windows::build_effects(size, window_settings),
-        Section::Keyboard => views::windows::build_keyboard(size, window_settings),
-        Section::Mouse => category_pages(vec![
-            views::windows::build_mouse(size, window_settings),
-            views::windows::build_touchpad(size, window_settings),
-        ]),
-        Section::CursorTheme => views::personalization::asset_packs::cursor_themes(size, config),
-        Section::Touchpad => views::windows::build_touchpad(size, window_settings),
-        Section::Focus => views::windows::build_focus(size, window_settings),
-        Section::Shortcuts => views::windows::build_shortcuts(size, shortcut_settings),
-        Section::Profile => users::build(size, profile),
-        Section::User(ref username) => users::account_view(size, &account_list, username),
-        Section::CreateUser => users::create_user_view(size),
-        Section::Unavailable(ref name) => unavailable_page(name),
-        Section::GroupNetwork
-        | Section::GroupLookAndFeel
-        | Section::GroupWorkflow
-        | Section::GroupPeople
-        | Section::GroupSystem => unreachable!("navigation group is not selectable"),
-    };
+    creamui_reactive::provide_context(crate::views::context::ViewContext {
+        size: size,
+        config: config.clone(),
+        integrations: integrations.clone(),
+        appearance: appearance.clone(),
+        view: view.clone(),
+        window: window.clone(),
+        wallpaper_color_picker: wallpaper_color_picker.clone(),
+        desktop_icons_color_picker: desktop_icons_color_picker.clone(),
+        appearance_accent_picker: appearance_accent_picker.clone(),
+        appearance_custom_accent: appearance_custom_accent.clone(),
+        users: users.clone(),
+        profile: profile.clone(),
+        icons: icons.clone(),
+        wallpaper_gallery: wallpaper_gallery.clone(),
+        window_settings: window_settings.clone(),
+        shortcut_settings: shortcut_settings.clone(),
+        content_scroll: content_scroll.clone(),
+        sidebar_scroll: sidebar_scroll.clone(),
+        dock_scroll: dock_scroll.clone(),
+        island_settings: island_settings.clone(),
+        settings_search: settings_search.clone(),
+        connectivity: connectivity.clone(),
+        maximized: maximized.clone(),
+        native: native.clone(),
+    });
+    let content = RouterOutlet::render();
 
     let sidebar_shell_style = Style {
         flex_direction: FlexDirection::Column,
@@ -788,7 +353,7 @@ fn build(
     });
     let panel_content: BoxedWidget = if content_has_own_scroll {
         let header = if native_detail {
-            views::native::detail_header(&current, view, size.width)
+            crate::views::native::detail_header(&current, view, size.width)
         } else {
             page_header
         };
@@ -843,9 +408,9 @@ fn build(
                                 0.0
                             } else if connectivity_detail
                                 && matches!(
-                                    connectivity.view.get(),
-                                    views::connectivity::View::KnownNetworks
-                                        | views::connectivity::View::NearbyNetworks
+                                    connectivity.current(),
+                                    crate::views::connectivity::View::KnownNetworks
+                                        | crate::views::connectivity::View::NearbyNetworks
                                 )
                             {
                                 16.0
@@ -867,9 +432,9 @@ fn build(
         );
         if connectivity_detail || native_detail {
             let header = if connectivity_detail {
-                views::connectivity::detail_header(connectivity, size.width)
+                crate::views::connectivity::detail_header(connectivity, size.width)
             } else {
-                views::native::detail_header(&current, view, size.width)
+                crate::views::native::detail_header(&current, view, size.width)
             };
             Box::new(jsx! {
                 <Flex direction={FlexDirection::Column} grow={1.0} gap={0.0}>

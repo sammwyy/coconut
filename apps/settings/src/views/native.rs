@@ -487,7 +487,7 @@ fn link(
     label: &str,
     hint: impl Into<String>,
     target: Section,
-    nav: &Signal<Section>,
+    nav: &creamui_router::Router,
 ) -> BoxedWidget {
     let nav = nav.clone();
     let theme = creamui_theme::use_theme();
@@ -495,14 +495,14 @@ fn link(
         label,
         hint,
         Box::new(Icon::new(Symbol::ChevronRight, theme.colors.text_secondary).size(16.0)),
-        move || nav.set(target.clone()),
+        move || crate::routes::navigate(&nav, &target),
     )
 }
 fn detail_link(
     label: &str,
     hint: impl Into<String>,
     target: Page,
-    nav: &Signal<Section>,
+    nav: &creamui_router::Router,
 ) -> BoxedWidget {
     link(label, hint, Section::Detail(target), nav)
 }
@@ -516,7 +516,7 @@ fn input(controller: &TextController, placeholder: &str) -> BoxedWidget {
     ))
 }
 
-pub fn hardware(state: &State, nav: &Signal<Section>) -> BoxedWidget {
+pub fn hardware(state: &State, nav: &creamui_router::Router) -> BoxedWidget {
     let snapshot = state.snapshot.get();
     let tray: coconut_plugin_tray::TrayConfig = coconut_core::modules::load_module("tray");
     let percentage = tray.show_battery_percentage;
@@ -620,7 +620,7 @@ pub fn personalization(
     state: &State,
     config: &Signal<ShellConfig>,
     appearance: &Signal<creamui_theme::ResolvedAppearance>,
-    nav: &Signal<Section>,
+    nav: &creamui_router::Router,
     appearance_controls: crate::views::personalization::appearance::OverviewControls,
 ) -> BoxedWidget {
     let config = config.get();
@@ -696,7 +696,11 @@ pub fn personalization(
         state,
     )
 }
-pub fn desktop(state: &State, config: &Signal<ShellConfig>, nav: &Signal<Section>) -> BoxedWidget {
+pub fn desktop(
+    state: &State,
+    config: &Signal<ShellConfig>,
+    nav: &creamui_router::Router,
+) -> BoxedWidget {
     let c = config.get();
     let write = config.clone();
     let panel: BoxedWidget = Box::new(Switch::new(c.statusbar.enabled, move || {
@@ -800,7 +804,7 @@ pub fn desktop(state: &State, config: &Signal<ShellConfig>, nav: &Signal<Section
 }
 pub fn windows(
     state: &State,
-    nav: &Signal<Section>,
+    nav: &creamui_router::Router,
     window: &crate::views::windows::WindowState,
 ) -> BoxedWidget {
     page(
@@ -884,7 +888,7 @@ pub fn windows(
         state,
     )
 }
-pub fn applications(state: &State, nav: &Signal<Section>) -> BoxedWidget {
+pub fn applications(state: &State, nav: &creamui_router::Router) -> BoxedWidget {
     let snapshot = state.snapshot.get();
     page(
         vec![
@@ -938,7 +942,11 @@ pub fn applications(state: &State, nav: &Signal<Section>) -> BoxedWidget {
         state,
     )
 }
-pub fn accounts(state: &State, accounts: &[users::Account], nav: &Signal<Section>) -> BoxedWidget {
+pub fn accounts(
+    state: &State,
+    accounts: &[users::Account],
+    nav: &creamui_router::Router,
+) -> BoxedWidget {
     let username = std::env::var("USER").unwrap_or_default();
     let own = accounts.iter().find(|a| a.username == username);
     let display = own
@@ -1020,7 +1028,7 @@ pub fn accounts(state: &State, accounts: &[users::Account], nav: &Signal<Section
         state,
     )
 }
-pub fn privacy(state: &State, nav: &Signal<Section>) -> BoxedWidget {
+pub fn privacy(state: &State, nav: &creamui_router::Router) -> BoxedWidget {
     let s = state.snapshot.get();
     page(
         vec![
@@ -1104,7 +1112,7 @@ pub fn accessibility(state: &State, window: &crate::views::windows::WindowState)
         state,
     )
 }
-pub fn system(state: &State, nav: &Signal<Section>) -> BoxedWidget {
+pub fn system(state: &State, nav: &creamui_router::Router) -> BoxedWidget {
     let snapshot = state.snapshot.get();
     page(
         vec![
@@ -1238,7 +1246,7 @@ fn entries(state: &State, key: &str, empty_message: &str) -> BoxedWidget {
         rows
     })
 }
-fn app_list(state: &State, nav: &Signal<Section>, startup: bool) -> BoxedWidget {
+fn app_list(state: &State, nav: &creamui_router::Router, startup: bool) -> BoxedWidget {
     let s = state.snapshot.get();
     let query = state.search.value().to_lowercase();
     let rows = s
@@ -1284,7 +1292,7 @@ fn app_list(state: &State, nav: &Signal<Section>, startup: bool) -> BoxedWidget 
 pub fn detail(
     which: &Page,
     state: &State,
-    nav: &Signal<Section>,
+    nav: &creamui_router::Router,
     config: &Signal<ShellConfig>,
     window: &crate::views::windows::WindowState,
     appearance: &Signal<creamui_theme::ResolvedAppearance>,
@@ -1412,7 +1420,7 @@ pub(crate) fn parent(section: &Section) -> Section {
     }
 }
 
-pub fn detail_header(current: &Section, nav: &Signal<Section>, width: f32) -> BoxedWidget {
+pub fn detail_header(current: &Section, nav: &creamui_router::Router, width: f32) -> BoxedWidget {
     let parent = parent(current);
     let title = crate::page_title(current);
     let back = nav.clone();
@@ -1432,8 +1440,27 @@ pub fn detail_header(current: &Section, nav: &Signal<Section>, width: f32) -> Bo
     };
     Box::new(
         jsx! { <Flex direction={FlexDirection::Row} align={creamui_widgets::layout::Align::Center} gap={12.0} height={56.0} shrink={0.0} padding_left={left} padding_right={right}>
-            {crate::components::back_button(move || back.set(parent.clone()))}
+            {crate::components::back_button(move || crate::routes::navigate(&back, &parent))}
             {Box::new(Text::new(title).font_size(14.0).bold(true)) as BoxedWidget}
         </Flex> },
+    )
+}
+
+pub(crate) fn detail_view(page: &Page) -> creamui_core::BoxedWidget {
+    let context = creamui_reactive::use_context::<crate::views::context::ViewContext>();
+    let config = &context.config;
+    let appearance = &context.appearance;
+    let view = &context.view;
+    let window = &context.window;
+    let window_settings = &context.window_settings;
+    let native = &context.native;
+    crate::views::native::detail(
+        page,
+        native,
+        view,
+        config,
+        window_settings,
+        appearance,
+        window,
     )
 }

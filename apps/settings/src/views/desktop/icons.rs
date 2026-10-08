@@ -124,3 +124,13 @@ fn slider_row(
     });
     row(label, control)
 }
+
+pub(crate) fn route_view() -> creamui_core::BoxedWidget {
+    let context = creamui_reactive::use_context::<crate::views::context::ViewContext>();
+    let size = context.size;
+    let config = &context.config;
+    let desktop_icons_color_picker = &context.desktop_icons_color_picker;
+    {
+        crate::views::desktop::icons::build(size, config, desktop_icons_color_picker)
+    }
+}
