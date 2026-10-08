@@ -1,6 +1,6 @@
-//! Blair settings edited through its D-Bus client. Blair validates, applies,
-//! and persists its own configuration.
 use crate::components::{group, row, section, section_label};
+use crate::routes::destination::Section;
+use crate::{components::system_settings::*, routes::detail::Page, services::settings::State};
 use blair_client::BlairClient;
 use coconut_core::{CustomShortcut, ShellShortcut, ShortcutAction, ShortcutConfig};
 use creamui_core::layout::{FlexDirection, Style};
@@ -1588,7 +1588,7 @@ pub(crate) fn overview() -> creamui_core::BoxedWidget {
     let view = &context.view;
     let window_settings = &context.window_settings;
     let native = &context.native;
-    crate::views::native::windows(native, view, window_settings)
+    build(native, view, window_settings)
 }
 
 pub(crate) fn layout_view() -> creamui_core::BoxedWidget {
@@ -1632,3 +1632,91 @@ pub(crate) fn focus_view() -> creamui_core::BoxedWidget {
     let window_settings = &context.window_settings;
     crate::views::windows::build_focus(size, window_settings)
 }
+
+fn build(
+    state: &State,
+    nav: &creamui_router::Router,
+    window: &crate::views::windows::WindowState,
+) -> BoxedWidget {
+    page(
+        vec![
+            card(
+                "Behavior & layout",
+                vec![
+                    unsupported("Focus follows mouse", "Only click-to-focus is available"),
+                    item(
+                        "Default layout",
+                        "Applied to new windows",
+                        window.layout_control(),
+                        || {},
+                    ),
+                    item(
+                        "Tiling gaps",
+                        "Spacing between tiled windows",
+                        window.gaps_control(),
+                        || {},
+                    ),
+                    unsupported(
+                        "Center new floating windows",
+                        "Centered placement is not available yet",
+                    ),
+                ],
+            ),
+            card(
+                "Workspaces & look",
+                vec![
+                    link(
+                        "Workspaces",
+                        "Count, wrapping and working area",
+                        Section::WorkingArea,
+                        nav,
+                    ),
+                    link(
+                        "Decorations",
+                        "Titlebars, borders and window controls",
+                        Section::Titlebar,
+                        nav,
+                    ),
+                    item(
+                        "Effects",
+                        "Window and workspace animations",
+                        window.effects_control(),
+                        || {},
+                    ),
+                ],
+            ),
+            card(
+                "Additional settings",
+                vec![
+                    link(
+                        "Window focus",
+                        "Raise and pointer behavior",
+                        Section::Focus,
+                        nav,
+                    ),
+                    link(
+                        "Layout settings",
+                        "Initial size and master ratio",
+                        Section::Layout,
+                        nav,
+                    ),
+                    link(
+                        "Effect settings",
+                        "Durations and rendering",
+                        Section::Effects,
+                        nav,
+                    ),
+                    detail_link(
+                        "Window rules",
+                        "Match apps and override window behavior",
+                        Page::WindowRules,
+                        nav,
+                    ),
+                ],
+            ),
+            window.availability(),
+        ],
+        state,
+    )
+}
+pub mod rules;

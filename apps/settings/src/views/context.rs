@@ -1,4 +1,11 @@
-use crate::*;
+use crate::icons::SettingsIcons;
+use coconut_core::ShellConfig;
+use creamui_core::Size;
+use creamui_reactive::Signal;
+use creamui_render::WindowHandle;
+use creamui_router::Router;
+use creamui_widgets::{ColorPickerController, ScrollController, TextController};
+use std::{cell::RefCell, rc::Rc};
 
 #[derive(Clone)]
 pub(crate) struct ViewContext {
@@ -12,8 +19,8 @@ pub(crate) struct ViewContext {
     pub desktop_icons_color_picker: ColorPickerController,
     pub appearance_accent_picker: ColorPickerController,
     pub appearance_custom_accent: Signal<bool>,
-    pub users: Signal<Vec<users::Account>>,
-    pub profile: users::ProfileControllers,
+    pub users: Signal<Vec<crate::services::accounts::Account>>,
+    pub profile: crate::views::users::profile::ProfileControllers,
     pub icons: SettingsIcons,
     pub wallpaper_gallery: crate::views::personalization::wallpaper::GalleryState,
     pub window_settings: Rc<crate::views::windows::WindowState>,
@@ -25,5 +32,5 @@ pub(crate) struct ViewContext {
     pub settings_search: TextController,
     pub connectivity: crate::views::connectivity::State,
     pub maximized: Signal<bool>,
-    pub native: crate::views::native::State,
+    pub native: crate::services::settings::State,
 }

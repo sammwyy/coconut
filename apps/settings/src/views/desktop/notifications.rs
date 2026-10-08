@@ -184,3 +184,8 @@ fn controls(config: &Signal<ShellConfig>, kind: Kind) -> BoxedWidget {
         row("Duration", duration),
     ])
 }
+
+pub(crate) fn route_view() -> BoxedWidget {
+    let context = creamui_reactive::use_context::<crate::views::context::ViewContext>();
+    build(&context.config)
+}

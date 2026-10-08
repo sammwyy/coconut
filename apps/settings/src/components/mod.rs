@@ -97,6 +97,7 @@ pub fn form_input(input: TextInput, width: f32) -> TextInput {
         .border(theme.colors.border, 1.0)
 }
 
+#[cfg(test)]
 pub fn settings_theme(theme: creamui_theme::Theme) -> creamui_theme::Theme {
     coconut_plugin_kit::design::coconut_theme(theme)
 }
@@ -352,5 +353,8 @@ pub fn update_config(config: &Signal<ShellConfig>, mutate: impl FnOnce(&mut Shel
     }
 }
 
+pub mod account;
 pub mod navigation;
 pub mod pages;
+pub mod setting_row;
+pub mod system_settings;

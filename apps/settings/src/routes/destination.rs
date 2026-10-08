@@ -33,11 +33,10 @@ pub(crate) enum Section {
     Users,
     Profile,
     User(String),
-    CreateUser,
     Privacy,
     Accessibility,
     About,
-    Detail(crate::views::native::Page),
+    Detail(crate::routes::detail::Page),
     Unavailable(String),
 }
 
@@ -65,7 +64,6 @@ pub(crate) fn page_title(section: &Section) -> String {
         Section::Shortcuts => "Shortcuts".into(),
         Section::Profile => "My profile".into(),
         Section::User(username) => username.clone(),
-        Section::CreateUser => "Create user".into(),
         Section::Unavailable(title) => title.clone(),
         Section::Connectivity => "Connectivity".into(),
         Section::Hardware => "Hardware".into(),
@@ -111,9 +109,7 @@ pub(crate) fn page_description(section: &Section) -> &'static str {
             "Adjust your input devices and interactions."
         }
         Section::Shortcuts => "Set the keyboard shortcuts used by the desktop.",
-        Section::Profile | Section::User(_) | Section::CreateUser => {
-            "Manage the people and accounts on this computer."
-        }
+        Section::Profile | Section::User(_) => "Manage the people and accounts on this computer.",
         Section::Unavailable(_) => "This area is planned but is not supported by Coconut yet.",
         _ => "Customize your Coconut desktop.",
     }
@@ -151,16 +147,42 @@ pub(crate) fn section_presentation(
             (icons.shortcuts.clone(), Color::rgb(222, 126, 54))
         }
         Section::Applications => (icons.applications.clone(), Color::rgb(0, 177, 115)),
-        Section::Users | Section::Profile | Section::User(_) | Section::CreateUser => {
+        Section::Users | Section::Profile | Section::User(_) => {
             (icons.users.clone(), Color::rgb(213, 88, 91))
         }
         Section::Privacy => (icons.privacy.clone(), Color::rgb(54, 171, 107)),
         Section::Accessibility => (icons.accessibility.clone(), Color::rgb(0, 167, 187)),
         Section::System | Section::About => (icons.system.clone(), Color::rgb(77, 142, 229)),
-        Section::Detail(_) => section_presentation(&crate::views::native::parent(section), icons),
+        Section::Detail(_) => {
+            section_presentation(&crate::routes::destination::parent(section), icons)
+        }
         Section::Unavailable(_) => (
             IconSource::Symbol(Symbol::Controls),
             Color::rgb(110, 105, 224),
         ),
+    }
+}
+
+pub(crate) fn parent(section: &Section) -> Section {
+    match section {
+        Section::Detail(page) => page.parent(),
+        Section::IconPack | Section::Sound | Section::Wallpaper | Section::CursorTheme => {
+            Section::Personalization
+        }
+        Section::DesktopIcons
+        | Section::Statusbar
+        | Section::Dockbar
+        | Section::Tray
+        | Section::Islands => Section::Desktop,
+        Section::Layout
+        | Section::Titlebar
+        | Section::Compositor
+        | Section::WorkingArea
+        | Section::Effects
+        | Section::Focus => Section::Windows,
+        Section::Keyboard | Section::Mouse | Section::Touchpad => Section::Hardware,
+        Section::Shortcuts => Section::ShortcutsCategory,
+        Section::Profile | Section::User(_) => Section::Users,
+        other => other.clone(),
     }
 }

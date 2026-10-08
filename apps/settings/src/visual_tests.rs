@@ -1,6 +1,17 @@
 //! Render the real native tree without a display server. The fixture mirrors
 //! the reference's connection state, so layout checks don't depend on hardware.
-use super::*;
+use crate::icons::SettingsIcons;
+use crate::routes::destination::{page_title, Section};
+use crate::views::layout::build;
+use crate::{components, routes};
+use coconut_core::ShellConfig;
+use creamui_core::Size;
+use creamui_reactive::Signal;
+use creamui_router::RouterProvider;
+use creamui_widgets::{ColorPickerController, ScrollController, TextController};
+use std::cell::{Cell, RefCell};
+use std::rc::Rc;
+
 use coconut_api::bluetooth::{BluetoothDevice, BluetoothIntegration};
 use coconut_api::network::{NetworkIntegration, WifiNetwork};
 
@@ -103,7 +114,7 @@ fn connectivity_layout_matches_reference() {
             notifications: Rc::new(coconut_api::notifications::Fallback),
         });
         let accounts = Vec::new();
-        let profile = users::ProfileControllers::load(&accounts);
+        let profile = crate::views::users::profile::ProfileControllers::load(&accounts);
         let icons = SettingsIcons::load();
         let view = routes::create(routes::DEFAULT_ROUTE).unwrap();
         let connectivity = crate::views::connectivity::State::new(view.clone());
@@ -131,7 +142,7 @@ fn connectivity_layout_matches_reference() {
         let island_settings = crate::views::desktop::island_settings::State::default();
         let search = TextController::new("");
         let maximized = Signal::new(false);
-        let native = crate::views::native::State::new(integrations.settings.clone());
+        let native = crate::services::settings::State::new(integrations.settings.clone());
 
         let size = Size {
             width: 1120.0,
@@ -139,32 +150,33 @@ fn connectivity_layout_matches_reference() {
         };
         let root = |size| {
             RouterProvider::new(view.clone()).render(|| {
-                build(
-                    size,
-                    &config,
-                    &integrations,
-                    &appearance,
-                    &view,
-                    &window,
-                    &picker,
-                    &picker,
-                    &picker,
-                    &custom_accent,
-                    &users,
-                    &profile,
-                    &icons,
-                    &gallery,
-                    &window_state,
-                    &shortcuts,
-                    &content_scroll,
-                    &sidebar_scroll,
-                    &dock_scroll,
-                    &island_settings,
-                    &search,
-                    &connectivity,
-                    &maximized,
-                    &native,
-                )
+                let context = crate::views::context::ViewContext {
+                    size: size,
+                    config: config.clone(),
+                    integrations: integrations.clone(),
+                    appearance: appearance.clone(),
+                    view: view.clone(),
+                    window: window.clone(),
+                    wallpaper_color_picker: picker.clone(),
+                    desktop_icons_color_picker: picker.clone(),
+                    appearance_accent_picker: picker.clone(),
+                    appearance_custom_accent: custom_accent.clone(),
+                    users: users.clone(),
+                    profile: profile.clone(),
+                    icons: icons.clone(),
+                    wallpaper_gallery: gallery.clone(),
+                    window_settings: window_state.clone(),
+                    shortcut_settings: shortcuts.clone(),
+                    content_scroll: content_scroll.clone(),
+                    sidebar_scroll: sidebar_scroll.clone(),
+                    dock_scroll: dock_scroll.clone(),
+                    island_settings: island_settings.clone(),
+                    settings_search: search.clone(),
+                    connectivity: connectivity.clone(),
+                    maximized: maximized.clone(),
+                    native: native.clone(),
+                };
+                build(&context)
             })
         };
         let mut recorder = SceneRecorder::new();
@@ -435,31 +447,31 @@ fn connectivity_layout_matches_reference() {
             Section::About,
         ];
         let details = [
-            crate::views::native::Page::Displays,
-            crate::views::native::Page::Devices,
-            crate::views::native::Page::Printers,
-            crate::views::native::Page::AddPrinter,
-            crate::views::native::Page::Fonts,
-            crate::views::native::Page::InstalledApps,
-            crate::views::native::Page::App("test.desktop".into()),
-            crate::views::native::Page::FileTypes,
-            crate::views::native::Page::Startup,
-            crate::views::native::Page::AddStartup,
-            crate::views::native::Page::Password,
-            crate::views::native::Page::AddUser,
-            crate::views::native::Page::OnlineAccounts,
-            crate::views::native::Page::Fingerprint,
-            crate::views::native::Page::Camera,
-            crate::views::native::Page::Microphone,
-            crate::views::native::Page::Notifications,
-            crate::views::native::Page::HotCorners,
-            crate::views::native::Page::WindowRules,
-            crate::views::native::Page::Updates,
-            crate::views::native::Page::Storage,
-            crate::views::native::Page::Activity,
-            crate::views::native::Page::DateTime,
-            crate::views::native::Page::Language,
-            crate::views::native::Page::Reset,
+            crate::routes::detail::Page::Displays,
+            crate::routes::detail::Page::Devices,
+            crate::routes::detail::Page::Printers,
+            crate::routes::detail::Page::AddPrinter,
+            crate::routes::detail::Page::Fonts,
+            crate::routes::detail::Page::InstalledApps,
+            crate::routes::detail::Page::App("test.desktop".into()),
+            crate::routes::detail::Page::FileTypes,
+            crate::routes::detail::Page::Startup,
+            crate::routes::detail::Page::AddStartup,
+            crate::routes::detail::Page::Password,
+            crate::routes::detail::Page::AddUser,
+            crate::routes::detail::Page::OnlineAccounts,
+            crate::routes::detail::Page::Fingerprint,
+            crate::routes::detail::Page::Camera,
+            crate::routes::detail::Page::Microphone,
+            crate::routes::detail::Page::Notifications,
+            crate::routes::detail::Page::HotCorners,
+            crate::routes::detail::Page::WindowRules,
+            crate::routes::detail::Page::Updates,
+            crate::routes::detail::Page::Storage,
+            crate::routes::detail::Page::Activity,
+            crate::routes::detail::Page::DateTime,
+            crate::routes::detail::Page::Language,
+            crate::routes::detail::Page::Reset,
         ];
         for (name, base) in [
             ("light", Theme::light()),
@@ -516,7 +528,7 @@ fn connectivity_layout_matches_reference() {
                         "client clips {title}"
                     );
                 }
-                if crate::views::native::parent(&section) != section {
+                if crate::routes::destination::parent(&section) != section {
                     assert!(
                         scene.window_drag_at(Point { x: 306.0, y: 28.0 }).is_none(),
                         "back button swallowed by drag: {title}"
@@ -525,7 +537,7 @@ fn connectivity_layout_matches_reference() {
                         .hit_test(Point { x: 306.0, y: 28.0 })
                         .expect("compact back button")();
                     assert!(
-                        routes::current(&view) == crate::views::native::parent(&section),
+                        routes::current(&view) == crate::routes::destination::parent(&section),
                         "incorrect parent for {title}"
                     );
                 }

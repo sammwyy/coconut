@@ -1,15 +1,29 @@
-use crate::*;
+use crate::routes::destination::Section;
+use crate::{components, routes};
+use creamui_router::Router;
+
+use crate::icons::SettingsIcons;
+use creamui_core::layout::{
+    Dimension, FlexDirection, LengthPercentage, LengthPercentageAuto, Position, Style,
+};
+use creamui_core::{BoxedWidget, Styled};
+use creamui_macros::jsx;
+use creamui_reactive::Signal;
+use creamui_render::WindowHandle;
+use creamui_widgets::{Icon, IconSource, RawButton, RawView, Text};
+use std::cell::RefCell;
+use std::rc::Rc;
 
 fn sidebar_item(
     current: &Section,
-    section: Section,
+    section: routes::destination::Section,
     label: &str,
     icon: IconSource,
     color: creamui_theme::Color,
     view: &Router,
 ) -> BoxedWidget {
     let theme = creamui_theme::use_theme();
-    let active = crate::views::native::parent(current) == section;
+    let active = crate::routes::destination::parent(current) == section;
     let select = view.clone();
     let item = RawButton::new(
         Style {
@@ -160,5 +174,35 @@ pub(crate) fn window_controls(
             ..Default::default()
         })
         .with_children(buttons),
+    )
+}
+
+pub(crate) fn detail_header(
+    current: &Section,
+    nav: &creamui_router::Router,
+    width: f32,
+) -> BoxedWidget {
+    let parent = crate::routes::destination::parent(current);
+    let title = crate::routes::destination::page_title(current);
+    let back = nav.clone();
+    let decorations = creamui_render::use_window_decorations();
+    let controls = decorations.controls;
+    let right = if decorations.mode == creamui_render::WindowDecorationMode::Client {
+        128.0
+    } else if controls.width > 0 && controls.x as f32 > width / 2.0 {
+        (width - controls.x as f32 + 16.0).max(36.0)
+    } else {
+        36.0
+    };
+    let left = if controls.width > 0 && (controls.x as f32) < width / 2.0 {
+        ((controls.x + controls.width) as f32 - 256.0 + 16.0).max(36.0)
+    } else {
+        36.0
+    };
+    Box::new(
+        jsx! { <Flex direction={FlexDirection::Row} align={creamui_widgets::layout::Align::Center} gap={12.0} height={56.0} shrink={0.0} padding_left={left} padding_right={right}>
+            {crate::components::back_button(move || crate::routes::navigate(&back, &parent))}
+            {Box::new(Text::new(title).font_size(14.0).bold(true)) as BoxedWidget}
+        </Flex> },
     )
 }

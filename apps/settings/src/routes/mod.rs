@@ -1,5 +1,6 @@
 pub(crate) mod destination;
-use crate::views::native::Page;
+pub(crate) mod detail;
+use crate::routes::detail::Page;
 use creamui_router::{Router, RouterError};
 use destination::Section;
 
@@ -268,114 +269,128 @@ fn routes() -> Vec<RouteDefinition> {
         (
             "/hardware/displays",
             Section::Detail(Page::Displays),
-            || crate::views::native::detail_view(&Page::Displays),
+            crate::views::hardware::displays::route_view,
         ),
-        ("/hardware/devices", Section::Detail(Page::Devices), || {
-            crate::views::native::detail_view(&Page::Devices)
-        }),
+        (
+            "/hardware/devices",
+            Section::Detail(Page::Devices),
+            crate::views::hardware::devices::route_view,
+        ),
         (
             "/hardware/printers",
             Section::Detail(Page::Printers),
-            || crate::views::native::detail_view(&Page::Printers),
+            crate::views::hardware::printers::route_view,
         ),
         (
             "/hardware/printers/new",
             Section::Detail(Page::AddPrinter),
-            || crate::views::native::detail_view(&Page::AddPrinter),
+            crate::views::hardware::add_printer::route_view,
         ),
         (
             "/personalization/fonts",
             Section::Detail(Page::Fonts),
-            || crate::views::native::detail_view(&Page::Fonts),
+            crate::views::personalization::fonts::route_view,
         ),
         (
             "/applications/installed",
             Section::Detail(Page::InstalledApps),
-            || crate::views::native::detail_view(&Page::InstalledApps),
+            crate::views::applications::installed::route_view,
         ),
         (
             "/applications/installed/:app_id",
             Section::Detail(Page::App(String::new())),
-            || {
-                crate::views::native::detail_view(&Page::App(
-                    creamui_router::use_params()
-                        .remove("app_id")
-                        .unwrap_or_default(),
-                ))
-            },
+            crate::views::applications::application::route_view,
         ),
         (
             "/applications/file-types",
             Section::Detail(Page::FileTypes),
-            || crate::views::native::detail_view(&Page::FileTypes),
+            crate::views::applications::file_types::route_view,
         ),
         (
             "/applications/startup",
             Section::Detail(Page::Startup),
-            || crate::views::native::detail_view(&Page::Startup),
+            crate::views::applications::startup::route_view,
         ),
         (
             "/applications/startup/new",
             Section::Detail(Page::AddStartup),
-            || crate::views::native::detail_view(&Page::AddStartup),
+            crate::views::applications::add_startup::route_view,
         ),
         (
             "/users/me/password",
             Section::Detail(Page::Password),
-            || crate::views::native::detail_view(&Page::Password),
+            crate::views::users::password::route_view,
         ),
-        ("/users/new", Section::Detail(Page::AddUser), || {
-            crate::views::native::detail_view(&Page::AddUser)
-        }),
+        (
+            "/users/new",
+            Section::Detail(Page::AddUser),
+            crate::views::users::create::route_view,
+        ),
         (
             "/users/online-accounts",
             Section::Detail(Page::OnlineAccounts),
-            || crate::views::native::detail_view(&Page::OnlineAccounts),
+            crate::views::users::online_accounts::route_view,
         ),
         (
             "/privacy/fingerprint",
             Section::Detail(Page::Fingerprint),
-            || crate::views::native::detail_view(&Page::Fingerprint),
+            crate::views::privacy::fingerprint::route_view,
         ),
-        ("/privacy/camera", Section::Detail(Page::Camera), || {
-            crate::views::native::detail_view(&Page::Camera)
-        }),
+        (
+            "/privacy/camera",
+            Section::Detail(Page::Camera),
+            crate::views::privacy::camera::route_view,
+        ),
         (
             "/privacy/microphone",
             Section::Detail(Page::Microphone),
-            || crate::views::native::detail_view(&Page::Microphone),
+            crate::views::privacy::microphone::route_view,
         ),
         (
             "/desktop/notifications",
             Section::Detail(Page::Notifications),
-            || crate::views::native::detail_view(&Page::Notifications),
+            crate::views::desktop::notifications::route_view,
         ),
         (
             "/desktop/hot-corners",
             Section::Detail(Page::HotCorners),
-            || crate::views::native::detail_view(&Page::HotCorners),
+            crate::views::desktop::hot_corners::route_view,
         ),
-        ("/windows/rules", Section::Detail(Page::WindowRules), || {
-            crate::views::native::detail_view(&Page::WindowRules)
-        }),
-        ("/system/updates", Section::Detail(Page::Updates), || {
-            crate::views::native::detail_view(&Page::Updates)
-        }),
-        ("/system/storage", Section::Detail(Page::Storage), || {
-            crate::views::native::detail_view(&Page::Storage)
-        }),
-        ("/system/activity", Section::Detail(Page::Activity), || {
-            crate::views::native::detail_view(&Page::Activity)
-        }),
-        ("/system/date-time", Section::Detail(Page::DateTime), || {
-            crate::views::native::detail_view(&Page::DateTime)
-        }),
-        ("/system/language", Section::Detail(Page::Language), || {
-            crate::views::native::detail_view(&Page::Language)
-        }),
-        ("/system/reset", Section::Detail(Page::Reset), || {
-            crate::views::native::detail_view(&Page::Reset)
-        }),
+        (
+            "/windows/rules",
+            Section::Detail(Page::WindowRules),
+            crate::views::windows::rules::route_view,
+        ),
+        (
+            "/system/updates",
+            Section::Detail(Page::Updates),
+            crate::views::system::updates::route_view,
+        ),
+        (
+            "/system/storage",
+            Section::Detail(Page::Storage),
+            crate::views::system::storage::route_view,
+        ),
+        (
+            "/system/activity",
+            Section::Detail(Page::Activity),
+            crate::views::system::activity::route_view,
+        ),
+        (
+            "/system/date-time",
+            Section::Detail(Page::DateTime),
+            crate::views::system::date_time::route_view,
+        ),
+        (
+            "/system/language",
+            Section::Detail(Page::Language),
+            crate::views::system::language::route_view,
+        ),
+        (
+            "/system/reset",
+            Section::Detail(Page::Reset),
+            crate::views::system::reset::route_view,
+        ),
     ]
 }
 
@@ -384,7 +399,6 @@ impl Section {
         match self {
             Self::User(username) => format!("/users/{}", segment(username)),
             Self::Detail(Page::App(id)) => format!("/applications/installed/{}", segment(id)),
-            Self::CreateUser => "/users/new".into(),
             Self::Unavailable(_) => "/not-found".into(),
             other => routes()
                 .into_iter()

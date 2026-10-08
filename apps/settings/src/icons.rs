@@ -1,31 +1,17 @@
-use creamui_core::RgbaImage;
 use creamui_image::{ImageData, SvgSize};
 use creamui_widgets::{IconImage, IconSource, Symbol};
 
-/// Rasterized versions of the custom sidebar icons in `assets/icons/settings/`,
-/// decoded once at startup and cloned (cheaply — an `Rc` underneath) into the
-/// sidebar tree on every rebuild. Each is monochrome, so [`Icon::draw`]
-/// recolors it to match the active/hover state and theme the same way a
-/// built-in [`Symbol`] would.
+/// Monochrome icons decoded once and shared across renders.
 #[derive(Clone)]
 pub struct SettingsIcons {
     pub paintbrush: IconSource,
     pub wallpaper: IconSource,
     pub status: IconSource,
-    pub islands: IconSource,
     pub users: IconSource,
-    pub keyboard: IconSource,
-    pub mouse: IconSource,
-    pub cursor: IconSource,
     pub devices: IconSource,
     pub windows: IconSource,
     pub system: IconSource,
-    pub titlebar: IconSource,
-    pub workspaces: IconSource,
     pub shortcuts: IconSource,
-    pub music_note: IconSource,
-    pub eye: IconSource,
-    pub exclamation: IconSource,
     pub applications: IconSource,
     pub privacy: IconSource,
     pub accessibility: IconSource,
@@ -52,13 +38,9 @@ impl SettingsIcons {
             status: decode(include_bytes!(
                 "../../../assets/icons/settings/connectivity.svg"
             )),
-            islands: decode(include_bytes!("../../../assets/icons/settings/widgets.svg")),
             users: outline(
                 r#"<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2m20 0v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/><circle cx="9" cy="7" r="4"/>"#,
             ),
-            keyboard: decode(include_bytes!("../../../assets/icons/devices/keyboard.svg")),
-            mouse: decode(include_bytes!("../../../assets/icons/devices/mouse.svg")),
-            cursor: decode(include_bytes!("../../../assets/icons/settings/cursor.svg")),
             devices: outline(
                 r#"<rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v3m6-3v3M9 20v3m6-3v3M1 9h3m-3 6h3M20 9h3m-3 6h3"/>"#,
             ),
@@ -66,16 +48,9 @@ impl SettingsIcons {
                 r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18m-15-3h.01M9 6h.01"/>"#,
             ),
             system: decode(include_bytes!("../../../assets/icons/settings/system.svg")),
-            titlebar: decode(include_bytes!("../../../assets/icons/bar-top.svg")),
-            workspaces: decode(include_bytes!("../../../assets/icons/briefcase.svg")),
             shortcuts: outline(
                 r#"<rect x="2" y="4" width="20" height="16" rx="2"/><path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M6 12h.01M10 12h.01M14 12h.01M18 12h.01M7 16h10"/>"#,
             ),
-            music_note: decode(include_bytes!(
-                "../../../assets/icons/settings/music-note.svg"
-            )),
-            eye: decode(include_bytes!("../../../assets/icons/eye.svg")),
-            exclamation: decode(include_bytes!("../../../assets/icons/exclamation.svg")),
             applications: outline(
                 r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/>"#,
             ),
@@ -102,16 +77,6 @@ pub(crate) fn outline(paths: &str) -> IconSource {
     decode(format!(r##"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">{paths}</svg>"##).as_bytes())
 }
 
-/// A fully transparent 1×1 pixel: an `IconSource` for sidebar leaves that
-/// must supply one but are deliberately drawn with no visible icon (each
-/// panel in the dock list, distinguished by name alone).
-pub fn blank() -> IconSource {
-    IconSource::Image(IconImage {
-        image: RgbaImage::new(1, 1, vec![0, 0, 0, 0]).expect("1x1 transparent pixel is valid"),
-        monochrome: true,
-    })
-}
-
 fn decode(source: &[u8]) -> IconSource {
     match ImageData::from_svg(source, SvgSize::Max(64)) {
         Ok(image) => IconSource::Image(IconImage {
@@ -136,20 +101,11 @@ mod tests {
             &icons.paintbrush,
             &icons.wallpaper,
             &icons.status,
-            &icons.islands,
             &icons.users,
-            &icons.keyboard,
-            &icons.mouse,
-            &icons.cursor,
             &icons.devices,
             &icons.windows,
             &icons.system,
-            &icons.titlebar,
-            &icons.workspaces,
             &icons.shortcuts,
-            &icons.music_note,
-            &icons.eye,
-            &icons.exclamation,
             &icons.applications,
             &icons.privacy,
             &icons.accessibility,

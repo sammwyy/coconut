@@ -1,4 +1,9 @@
-use crate::*;
+use crate::components;
+
+use creamui_core::layout::FlexDirection;
+use creamui_core::BoxedWidget;
+use creamui_macros::jsx;
+use creamui_widgets::{Text, TextSize};
 
 pub(crate) fn unavailable_page(name: &str) -> BoxedWidget {
     components::section(

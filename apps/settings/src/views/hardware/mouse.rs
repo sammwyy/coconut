@@ -1,4 +1,4 @@
-use crate::*;
+use crate::components::pages::category_pages;
 
 pub(crate) fn route_view() -> creamui_core::BoxedWidget {
     let context = creamui_reactive::use_context::<crate::views::context::ViewContext>();

@@ -5,7 +5,7 @@ pub mod connectivity;
 pub mod context;
 pub mod desktop;
 pub mod hardware;
-pub mod native;
+pub mod layout;
 pub mod not_found;
 pub mod personalization;
 pub mod privacy;
