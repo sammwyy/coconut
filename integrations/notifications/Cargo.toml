@@ -1,0 +1,9 @@
+[package]
+name = "coconut-integration-notifications"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+
+[dependencies]
+coconut-api = { path = "../../crates/api" }
+dbus = "0.9"

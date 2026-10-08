@@ -19,6 +19,7 @@ pub fn detect() -> Registry {
         bluetooth: detect_bluetooth(),
         power_profile: detect_power_profile(),
         settings: detect_settings(),
+        notifications: detect_notifications(),
     }
 }
 
@@ -123,4 +124,11 @@ fn detect_power_profile() -> Rc<dyn coconut_api::power_profile::PowerProfileInte
         return Rc::new(item);
     }
     Rc::new(coconut_api::power_profile::Fallback)
+}
+
+fn detect_notifications() -> Rc<dyn coconut_api::notifications::NotificationsIntegration> {
+    #[cfg(all(feature = "notifications", target_os = "linux"))]
+    return Rc::new(coconut_integration_notifications::Notifications::default());
+    #[allow(unreachable_code)]
+    Rc::new(coconut_api::notifications::Fallback)
 }

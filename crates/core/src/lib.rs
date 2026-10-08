@@ -4,6 +4,7 @@ mod dock;
 pub mod geo;
 pub mod ipc;
 pub mod modules;
+mod popups;
 mod profile;
 
 pub use appearance::AppearanceConfig;
@@ -14,10 +15,28 @@ pub use dock::{
     ordered_islands, BackgroundSource, DockAlign, DockConfig, DockDirection, DockPosition,
     IslandEntry, SectionConfig, DEFAULT_THICKNESS,
 };
+pub use popups::{PopupAlign, PopupConfig, PopupEdge};
 pub use profile::UserProfile;
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+
+/// Battery levels at which the shell warns while running on battery power.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BatteryAlertsConfig {
+    pub low_percent: u8,
+    pub critical_percent: u8,
+}
+
+impl Default for BatteryAlertsConfig {
+    fn default() -> Self {
+        Self {
+            low_percent: 10,
+            critical_percent: 5,
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -26,6 +45,13 @@ pub struct ShellConfig {
     pub statusbar: DockConfig,
     pub dockbar: DockConfig,
     pub desktop: DesktopConfig,
+    pub status_updates: PopupConfig,
+    pub battery_alerts: BatteryAlertsConfig,
+    #[serde(
+        default = "PopupConfig::notifications",
+        deserialize_with = "popups::deserialize_notifications"
+    )]
+    pub notifications: PopupConfig,
 }
 
 impl Default for ShellConfig {
@@ -75,6 +101,9 @@ impl Default for ShellConfig {
                 ..DockConfig::default()
             },
             desktop: DesktopConfig::default(),
+            status_updates: PopupConfig::default(),
+            battery_alerts: BatteryAlertsConfig::default(),
+            notifications: PopupConfig::notifications(),
         }
     }
 }
@@ -89,8 +118,7 @@ const DEFAULT_SHELL_TOML: &str = r#"# Coconut configuration.
 #
 # Per-island settings (the clock's time format, tray visibility, etc.) live
 # in their own files under the "modules" directory next to this one, e.g.
-# modules/clock.toml — this file only describes the two system bars and what
-# sits in them.
+# modules/clock.toml.
 
 [appearance]
 # Freedesktop application icon and desktop sound themes used by Coconut.
@@ -184,6 +212,25 @@ gap = "10px"
 id = "app_launcher"
 [[dockbar.section.island]]
 id = "open_windows"
+
+[status_updates]
+enabled = true
+edge = "bottom"
+align = "center"
+offset = 120.0
+duration_ms = 1800
+
+# The shell warns once when charge falls through either level while unplugged.
+[battery_alerts]
+low_percent = 10
+critical_percent = 5
+
+[notifications]
+enabled = true
+edge = "top"
+align = "right"
+offset = 64.0
+duration_ms = 5000
 
 [desktop]
 # Path to a wallpaper image. Unset uses the built-in background.
@@ -379,6 +426,30 @@ mod tests {
         let parsed: ShellConfig = toml::from_str("[statusbar]\nposition = \"bottom\"\n").unwrap();
         assert_eq!(parsed.statusbar.position, DockPosition::Bottom);
         assert_eq!(parsed.dockbar, ShellConfig::default().dockbar);
+    }
+
+    #[test]
+    fn partial_popup_configuration_preserves_each_default_position() {
+        let parsed: ShellConfig = toml::from_str(
+            "[notifications]\nenabled = false\n[status_updates]\nduration_ms = 2500\n",
+        )
+        .unwrap();
+        assert_eq!(
+            parsed.notifications,
+            PopupConfig {
+                enabled: false,
+                ..PopupConfig::notifications()
+            }
+        );
+        assert_eq!(
+            parsed.status_updates,
+            PopupConfig {
+                duration_ms: 2500,
+                ..PopupConfig::default()
+            }
+        );
+        let roundtrip: ShellConfig = toml::from_str(&toml::to_string(&parsed).unwrap()).unwrap();
+        assert_eq!(parsed, roundtrip);
     }
 
     #[test]

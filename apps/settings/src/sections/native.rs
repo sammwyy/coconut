@@ -64,7 +64,7 @@ impl Page {
             Self::Fingerprint => "Fingerprint",
             Self::Camera => "Camera permissions",
             Self::Microphone => "Microphone permissions",
-            Self::Notifications => "Notifications",
+            Self::Notifications => "Notifications & popups",
             Self::HotCorners => "Hot corners",
             Self::WindowRules => "Window rules",
             Self::Updates => "Updates",
@@ -771,8 +771,8 @@ pub fn desktop(state: &State, config: &Signal<ShellConfig>, nav: &Signal<Section
                         nav,
                     ),
                     detail_link(
-                        "Notifications",
-                        "Desktop notification preferences",
+                        "Notifications & popups",
+                        "Application messages, volume and brightness indicators",
                         Page::Notifications,
                         nav,
                     ),
@@ -1290,6 +1290,9 @@ pub fn detail(
     appearance: &Signal<creamui_theme::ResolvedAppearance>,
     handle: &Rc<RefCell<Option<creamui_render::WindowHandle>>>,
 ) -> BoxedWidget {
+    if *which == Page::Notifications {
+        return super::popups::build(config);
+    }
     let s = state.snapshot.get();
     let refresh = state.clone();
     let body = match which {
@@ -1345,7 +1348,7 @@ pub fn detail(
             else { body.push(card("Audio input", vec![state.preference("Input device", "sound-input", "Default recording device"), state.preference("Mute microphone", "microphone-muted", "Mute the default audio source")])); }
             body
         }
-        Page::Notifications => vec![card("Preferences", vec![state.preference("Show notifications", "notifications", "Provided by the active notification service")])],
+        Page::Notifications => unreachable!(),
         Page::HotCorners => vec![unsupported("Hot corners", "Blair does not expose a hot-corner service. No synthetic preference is saved.")],
         Page::WindowRules => vec![window.rules(&state.rules)],
         Page::Updates => { let write = state.clone(); vec![value("Checks PackageKit when available, otherwise Flatpak applications. No packages are installed or removed automatically."), action("Check now", move || write.apply(Action::CheckUpdates))] },

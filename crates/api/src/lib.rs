@@ -6,6 +6,7 @@ pub mod bluetooth;
 pub mod brightness;
 pub mod desktop;
 pub mod network;
+pub mod notifications;
 pub mod power_profile;
 pub mod settings;
 pub mod volume;
@@ -88,6 +89,7 @@ pub struct IntegrationRegistry {
     pub bluetooth: Rc<dyn bluetooth::BluetoothIntegration>,
     pub power_profile: Rc<dyn power_profile::PowerProfileIntegration>,
     pub settings: Arc<dyn settings::SettingsIntegration>,
+    pub notifications: Rc<dyn notifications::NotificationsIntegration>,
 }
 
 pub type Registry = IntegrationRegistry;

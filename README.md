@@ -21,6 +21,8 @@ stay calm, responsive, and consistent.
 - Clock and weather widgets
 - A control center for network, brightness, volume, Bluetooth, battery, and
   power profiles
+- Floating volume and brightness indicators with configurable placement
+- D-Bus desktop notifications with icons, actions, replacement and expiration
 - Dedicated panels for the same system controls when you need more detail
 - Native desktop integrations for Blair and KDE Wayland, plus Windows 10
 
@@ -31,6 +33,24 @@ stay calm, responsive, and consistent.
 | `coconut` | Start the shell. |
 | `coconut settings` | Open Coconut Settings. |
 | `coconut-settings` | Open Coconut Settings directly. |
+
+## Notifications and status updates
+
+Open **Settings → Desktop → Notifications & popups** to set the screen edge,
+alignment, edge offset and duration separately for application notifications
+and volume/brightness indicators. Coconut also shows its own notifications
+when Wi-Fi or Bluetooth connects, disconnects, or is turned on/off. These use
+the notification preferences directly and work without the D-Bus notification
+service. Changes apply immediately. The same options
+are stored in `[notifications]` and `[status_updates]` in `shell.toml`:
+`enabled`, `edge` (`top`/`bottom`), `align` (`left`/`center`/`right`), `offset`
+(in logical pixels) and `duration_ms`.
+
+On Linux, Coconut provides `org.freedesktop.Notifications` on the session bus
+when no other notification service owns that name. Test it with
+`notify-send -i dialog-information "Coconut" "Notifications are ready"`.
+Application timeouts take precedence over the configured default; critical
+notifications stay visible until dismissed unless the application sets a timeout.
 
 ## Platform notes
 

@@ -100,6 +100,7 @@ fn connectivity_layout_matches_reference() {
             bluetooth: Rc::new(Bluetooth),
             power_profile: Rc::new(coconut_api::power_profile::Fallback),
             settings: std::sync::Arc::new(coconut_api::settings::Fallback),
+            notifications: Rc::new(coconut_api::notifications::Fallback),
         };
         let accounts = Vec::new();
         let profile = users::ProfileControllers::load(&accounts);

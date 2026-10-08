@@ -17,10 +17,12 @@ coconut-integration-pipewire = { path = "../../integrations/pipewire", optional 
 coconut-integration-kwin = { path = "../../integrations/kwin", optional = true }
 coconut-integration-blair = { path = "../../integrations/blair", optional = true }
 coconut-integration-windows = { path = "../../integrations/windows", optional = true }
+coconut-integration-notifications = { path = "../../integrations/notifications", optional = true }
 
 [features]
 default = [
     "system",
+    "notifications",
     "mpris",
     "upower",
     "bluez",
@@ -42,3 +44,4 @@ pipewire = ["dep:coconut-integration-pipewire"]
 kwin = ["dep:coconut-integration-kwin"]
 blair = ["dep:coconut-integration-blair"]
 windows = ["dep:coconut-integration-windows"]
+notifications = ["dep:coconut-integration-notifications"]

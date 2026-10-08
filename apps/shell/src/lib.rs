@@ -1,6 +1,9 @@
 mod bar;
+mod battery;
+mod connectivity;
 mod desktop;
 mod plugins;
+mod popups;
 mod process;
 
 use crate::bar::build_dock;
@@ -173,6 +176,24 @@ pub fn run() {
     AppBuilder::new()
         .keep_running()
         .on_started(move |app| {
+            let popups = popups::PopupHost::start(
+                app.clone(),
+                config.clone(),
+                volume_level.clone(),
+                brightness_level.clone(),
+                integrations.volume.clone(),
+                integrations.notifications.clone(),
+            );
+            popups.watch_connectivity(
+                integrations.network.clone(),
+                integrations.bluetooth.clone(),
+                network_revision.clone(),
+                bluetooth_revision.clone(),
+            );
+            popups.watch_battery(
+                integrations.battery.clone(),
+                battery_revision.clone(),
+            );
             let plugins = all_plugins();
             let init_ctx = PluginInitContext {
                 shared: shared.clone(),
@@ -285,6 +306,7 @@ pub fn run() {
                 desktop_work_area,
                 weather_state,
                 desktop_state,
+                popups,
             );
             let _ = bar_playback_backend;
         })
@@ -384,6 +406,7 @@ fn schedule_runtime_events(
     work_area: Signal<Option<DesktopWorkArea>>,
     weather_state: Signal<WeatherState>,
     desktop_state: desktop::DesktopState,
+    popups: Rc<popups::PopupHost>,
 ) {
     let next_app = app.clone();
     let next_events = events.clone();
@@ -397,6 +420,7 @@ fn schedule_runtime_events(
     let next_work_area = work_area.clone();
     let next_weather_state = weather_state.clone();
     let next_desktop_state = desktop_state.clone();
+    let next_popups = popups.clone();
     app.clone().spawn_background(
         move || {
             std::thread::sleep(Duration::from_millis(100));
@@ -411,6 +435,7 @@ fn schedule_runtime_events(
                     RuntimeEvent::ReloadTheme => {
                         let theme = reload_system_theme();
                         panel_host.set_theme(theme);
+                        popups.set_theme(theme);
                         for window in themed_windows.borrow().iter() {
                             window.set_theme(theme);
                         }
@@ -479,6 +504,7 @@ fn schedule_runtime_events(
                 next_work_area,
                 next_weather_state,
                 next_desktop_state,
+                next_popups,
             );
         },
     );

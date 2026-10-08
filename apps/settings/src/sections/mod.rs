@@ -6,6 +6,7 @@ pub mod general;
 pub mod island_settings;
 pub mod islands;
 pub mod native;
+pub mod popups;
 pub mod tray;
 pub mod wallpaper;
 pub mod window;

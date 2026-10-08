@@ -559,6 +559,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "coconut-integration-notifications"
+version = "0.1.0"
+dependencies = [
+ "coconut-api",
+ "dbus",
+]
+
+[[package]]
 name = "coconut-integration-pipewire"
 version = "0.1.0"
 dependencies = [
@@ -734,6 +742,7 @@ dependencies = [
  "coconut-integration-kwin",
  "coconut-integration-mpris",
  "coconut-integration-network-manager",
+ "coconut-integration-notifications",
  "coconut-integration-pipewire",
  "coconut-integration-power-profiles-daemon",
  "coconut-integration-system",
