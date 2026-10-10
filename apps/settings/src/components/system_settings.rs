@@ -51,7 +51,12 @@ impl State {
                     }
                 }
                 Some(Value::Number(v)) => format!("{v:.2}"),
-                Some(Value::Text(v)) => v.clone(),
+                Some(Value::Text(v)) => pref
+                    .choices
+                    .iter()
+                    .find(|choice| choice.id == *v)
+                    .map(|choice| choice.label.clone())
+                    .unwrap_or_else(|| v.clone()),
                 None => "Unavailable".into(),
             });
         }

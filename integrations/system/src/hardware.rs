@@ -1,7 +1,100 @@
 use super::*;
 use serde_json::Value as Json;
 
-pub fn discover(snapshot: &mut Snapshot) {
+// org.blair.Compositor1.DisplayInfo: physical mode, advertised modes and preview state.
+type BlairDisplay = (String, i32, i32, i32, Vec<(i32, i32, i32)>, bool, bool, u32);
+
+fn display_mode_id(width: i32, height: i32, refresh: i32) -> String {
+    format!("{width}x{height}@{refresh}")
+}
+
+fn display_mode_label(width: i32, height: i32, refresh: i32) -> String {
+    format!("{width} × {height} · {:.2} Hz", refresh as f64 / 1000.0)
+}
+
+fn accept_blair_displays(snapshot: &mut Snapshot, displays: Vec<BlairDisplay>) -> Vec<Entry> {
+    displays
+        .into_iter()
+        .map(
+            |(name, width, height, refresh, modes, writable, pending, seconds)| {
+                let mut choices: Vec<_> = modes
+                    .into_iter()
+                    .map(|(width, height, refresh)| Choice {
+                        id: display_mode_id(width, height, refresh),
+                        label: display_mode_label(width, height, refresh),
+                    })
+                    .collect();
+                choices.dedup_by(|a, b| a.id == b.id);
+                snapshot.preferences.insert(
+                    format!("display:{name}"),
+                    Preference {
+                        value: Some(Value::Text(display_mode_id(width, height, refresh))),
+                        writable: writable && !pending,
+                        choices,
+                        reason: if pending {
+                            "Confirm or revert the preview before trying another mode".into()
+                        } else if !writable {
+                            "This output follows the host window size".into()
+                        } else {
+                            String::new()
+                        },
+                    },
+                );
+                Entry {
+                    id: name.clone(),
+                    name,
+                    description: display_mode_label(width, height, refresh),
+                    enabled: true,
+                    properties: [
+                        ("pending-confirmation".into(), pending.to_string()),
+                        ("confirmation-seconds".into(), seconds.to_string()),
+                    ]
+                    .into(),
+                }
+            },
+        )
+        .collect()
+}
+
+pub fn display_action(method: &str, output: &str) -> Result<(), String> {
+    let connection = Connection::new_session().map_err(|error| error.to_string())?;
+    let _: () = connection
+        .with_proxy("org.blair.Compositor", "/org/blair/Compositor", TIMEOUT)
+        .method_call("org.blair.Compositor1", method, (output,))
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+fn parse_display_mode(mode: &str) -> Result<(i32, i32, i32), String> {
+    let parsed = mode
+        .split_once('@')
+        .and_then(|(size, refresh)| {
+            let (width, height) = size.split_once('x')?;
+            Some((
+                width.parse::<i32>().ok()?,
+                height.parse::<i32>().ok()?,
+                refresh.parse::<i32>().ok()?,
+            ))
+        })
+        .filter(|(width, height, refresh)| *width > 0 && *height > 0 && *refresh > 0);
+    parsed.ok_or_else(|| "Choose a supported display mode".into())
+}
+
+pub fn preview_display_mode(output: &str, mode: &str) -> Result<(), String> {
+    let (width, height, refresh) = parse_display_mode(mode)?;
+    let connection = Connection::new_session().map_err(|error| error.to_string())?;
+    let _: () = connection
+        .with_proxy("org.blair.Compositor", "/org/blair/Compositor", TIMEOUT)
+        .method_call(
+            "org.blair.Compositor1",
+            "ApplyDisplayMode",
+            (output, width, height, refresh),
+        )
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+pub fn discover_displays(snapshot: &mut Snapshot) {
     let displays = if snapshot.session.to_ascii_lowercase().contains("kde")
         && (std::env::var_os("WAYLAND_DISPLAY").is_some() || std::env::var_os("DISPLAY").is_some())
     {
@@ -16,10 +109,19 @@ pub fn discover(snapshot: &mut Snapshot) {
         if let Ok(connection) = Connection::new_session() {
             let proxy =
                 connection.with_proxy("org.blair.Compositor", "/org/blair/Compositor", TIMEOUT);
+            let info: Result<(Vec<BlairDisplay>,), _> =
+                proxy.method_call("org.blair.Compositor1", "DisplayInfo", ());
+            if let Ok((info,)) = info {
+                outputs = accept_blair_displays(snapshot, info);
+            }
             let names: Result<(Vec<String>,), _> =
                 proxy.method_call("org.blair.Compositor1", "Outputs", ());
             if let Ok((names,)) = names {
-                for name in names {
+                for name in names
+                    .into_iter()
+                    .filter(|name| !outputs.iter().any(|output| &output.id == name))
+                    .collect::<Vec<_>>()
+                {
                     let area: Result<(i32, i32, i32, i32), _> =
                         proxy.method_call("org.blair.Compositor1", "WorkArea", (name.clone(),));
                     let description = area
@@ -109,6 +211,10 @@ pub fn discover(snapshot: &mut Snapshot) {
         }
     }
     snapshot.collections.insert("displays".into(), outputs);
+}
+
+pub fn discover(snapshot: &mut Snapshot) {
+    discover_displays(snapshot);
     let mut usb = Vec::new();
     if let Ok(devices) = fs::read_dir("/sys/bus/usb/devices") {
         for device in devices.flatten() {
@@ -386,4 +492,74 @@ pub fn add_printer(name: &str, uri: &str) -> Result<(), String> {
         &["-p", name, "-E", "-v", uri, "-m", "everywhere"],
     )
     .map(|_| ())
+}
+
+#[cfg(test)]
+mod display_tests {
+    use super::*;
+
+    #[test]
+    fn blair_displays_report_physical_mode_and_writable_choices() {
+        let mut snapshot = Snapshot::default();
+        let displays = accept_blair_displays(
+            &mut snapshot,
+            vec![(
+                "Virtual-1".into(),
+                1366,
+                768,
+                75000,
+                vec![(1366, 768, 75000), (1920, 1080, 60000)],
+                true,
+                false,
+                0,
+            )],
+        );
+        assert_eq!(displays[0].description, "1366 × 768 · 75.00 Hz");
+        let pref = &snapshot.preferences["display:Virtual-1"];
+        assert!(pref.writable);
+        assert_eq!(pref.value, Some(Value::Text("1366x768@75000".into())));
+        assert_eq!(
+            parse_display_mode(&pref.choices[1].id).unwrap(),
+            (1920, 1080, 60000)
+        );
+    }
+
+    #[test]
+    fn preview_and_nested_modes_are_read_only() {
+        for (writable, pending) in [(true, true), (false, false)] {
+            let mut snapshot = Snapshot::default();
+            let displays = accept_blair_displays(
+                &mut snapshot,
+                vec![(
+                    "Virtual-1".into(),
+                    1920,
+                    1080,
+                    60000,
+                    vec![(1920, 1080, 60000)],
+                    writable,
+                    pending,
+                    if pending { 12 } else { 0 },
+                )],
+            );
+            assert!(!snapshot.preferences["display:Virtual-1"].writable);
+            assert_eq!(
+                displays[0].properties["pending-confirmation"],
+                pending.to_string()
+            );
+        }
+    }
+
+    #[test]
+    fn malformed_modes_are_rejected_before_dbus() {
+        for mode in [
+            "",
+            "1920x1080",
+            "1920x1080@0",
+            "0x1080@60000",
+            "1920x-1@60000",
+            "1920x1080@NaN",
+        ] {
+            assert!(parse_display_mode(mode).is_err(), "{mode}");
+        }
+    }
 }

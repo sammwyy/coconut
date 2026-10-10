@@ -125,6 +125,19 @@ pub(crate) fn unavailable(reason: impl Into<String>) -> Preference {
 }
 
 impl SettingsIntegration for LinuxSettings {
+    fn display_snapshot(&self) -> Snapshot {
+        let mut snapshot = Snapshot {
+            loaded: true,
+            session: if blair_available() {
+                "Blair".into()
+            } else {
+                std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_default()
+            },
+            ..Default::default()
+        };
+        hardware::discover_displays(&mut snapshot);
+        snapshot
+    }
     fn snapshot(&self) -> Snapshot {
         let mut result = Snapshot {
             loaded: true,
@@ -143,6 +156,12 @@ impl SettingsIntegration for LinuxSettings {
     }
     fn apply(&self, action: Action) -> Result<String, String> {
         match action {
+            Action::ConfirmDisplayMode { output } => {
+                hardware::display_action("ConfirmDisplayMode", &output)?
+            }
+            Action::RevertDisplayMode { output } => {
+                hardware::display_action("RevertDisplayMode", &output)?
+            }
             Action::Set { key, value } => set_preference(&key, value)?,
             Action::SetDefaultApp { mime, desktop_id } => {
                 applications::set_default(&mime, &desktop_id)?
@@ -476,8 +495,11 @@ fn discover_preferences(snapshot: &mut Snapshot) {
 }
 
 fn set_preference(key: &str, value: Value) -> Result<(), String> {
-    if key.starts_with("display:") {
-        return Err("Display mode changes require safe apply/revert support".into());
+    if let Some(output) = key.strip_prefix("display:") {
+        let Value::Text(mode) = value else {
+            return Err("Choose a supported display mode".into());
+        };
+        return hardware::preview_display_mode(output, &mode);
     }
     match (key, &value) {
         ("hostname", Value::Text(name)) => {

@@ -2,13 +2,19 @@ use coconut_api::settings::{Action, SettingsIntegration, Snapshot, Value};
 use creamui_reactive::Signal;
 use creamui_render::AppHandle;
 use creamui_widgets::{SelectController, TextController};
-use std::{cell::RefCell, collections::BTreeMap, rc::Rc, sync::Arc};
+use std::{
+    cell::{Cell, RefCell},
+    collections::BTreeMap,
+    rc::Rc,
+    sync::Arc,
+};
 
 #[derive(Clone)]
 pub struct State {
     pub snapshot: Signal<Snapshot>,
     pub status: Signal<String>,
     pub(crate) busy: Signal<bool>,
+    preview_generation: Rc<Cell<u64>>,
     app: Rc<RefCell<Option<AppHandle>>>,
     backend: Arc<dyn SettingsIntegration>,
     selects: Rc<RefCell<BTreeMap<String, SelectController>>>,
@@ -32,6 +38,7 @@ impl State {
             snapshot: Signal::new(Snapshot::default()),
             status: Signal::new(String::new()),
             busy: Signal::new(false),
+            preview_generation: Rc::new(Cell::new(0)),
             app: Rc::new(RefCell::new(None)),
             backend,
             selects: Rc::new(RefCell::new(BTreeMap::new())),
@@ -69,6 +76,55 @@ impl State {
             }
         }
         self.snapshot.set(snapshot);
+        self.watch_display_preview();
+    }
+    fn watch_display_preview(&self) {
+        let generation = self.preview_generation.get().wrapping_add(1);
+        self.preview_generation.set(generation);
+        if !self
+            .snapshot
+            .peek()
+            .entries("displays")
+            .iter()
+            .any(|display| {
+                display
+                    .properties
+                    .get("pending-confirmation")
+                    .is_some_and(|v| v == "true")
+            })
+        {
+            return;
+        }
+        let Some(app) = self.app.borrow().clone() else {
+            return;
+        };
+        let backend = self.backend.clone();
+        let state = self.clone();
+        app.spawn_background(
+            move || {
+                std::thread::sleep(std::time::Duration::from_secs(1));
+                backend.display_snapshot()
+            },
+            move |displays| {
+                if state.preview_generation.get() != generation {
+                    return;
+                }
+                if displays.loaded {
+                    state.accept_displays(displays);
+                }
+            },
+        );
+    }
+    fn accept_displays(&self, displays: Snapshot) {
+        let mut snapshot = self.snapshot.peek();
+        snapshot
+            .collections
+            .insert("displays".into(), displays.entries("displays").to_vec());
+        snapshot
+            .preferences
+            .retain(|key, _| !key.starts_with("display:"));
+        snapshot.preferences.extend(displays.preferences);
+        self.accept(snapshot);
     }
     pub fn refresh(&self) {
         if self.busy.peek() {
@@ -107,19 +163,38 @@ impl State {
         let Some(app) = self.app.borrow().clone() else {
             return;
         };
+        self.preview_generation
+            .set(self.preview_generation.get().wrapping_add(1));
         self.busy.set(true);
         self.status.set("Applying changes…".into());
         let backend = self.backend.clone();
         let state = self.clone();
+        let displays_only = matches!(
+            &action,
+            Action::ConfirmDisplayMode { .. } | Action::RevertDisplayMode { .. }
+        ) || matches!(&action, Action::Set { key, .. } if key.starts_with("display:"));
         app.spawn_background(
             move || {
                 let result = backend.apply(action);
-                let snapshot = backend.snapshot();
-                (result, snapshot, crate::services::accounts::list_accounts())
+                let snapshot = if displays_only {
+                    backend.display_snapshot()
+                } else {
+                    backend.snapshot()
+                };
+                (
+                    result,
+                    snapshot,
+                    (!displays_only).then(crate::services::accounts::list_accounts),
+                )
             },
             move |(result, snapshot, accounts)| {
-                state.accept(snapshot);
-                if let Some(target) = state.accounts.borrow().as_ref() {
+                if displays_only {
+                    state.accept_displays(snapshot);
+                } else {
+                    state.accept(snapshot);
+                }
+                if let (Some(target), Some(accounts)) = (state.accounts.borrow().as_ref(), accounts)
+                {
                     target.set(accounts);
                 }
                 state.busy.set(false);

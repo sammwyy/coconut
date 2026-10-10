@@ -58,6 +58,12 @@ impl Snapshot {
 
 #[derive(Clone)]
 pub enum Action {
+    ConfirmDisplayMode {
+        output: String,
+    },
+    RevertDisplayMode {
+        output: String,
+    },
     Set {
         key: String,
         value: Value,
@@ -99,6 +105,10 @@ pub enum Action {
 
 pub trait SettingsIntegration: Send + Sync {
     fn snapshot(&self) -> Snapshot;
+    /// Lightweight display refresh while a mode preview awaits confirmation.
+    fn display_snapshot(&self) -> Snapshot {
+        Snapshot::default()
+    }
     fn apply(&self, action: Action) -> Result<String, String>;
 }
 
