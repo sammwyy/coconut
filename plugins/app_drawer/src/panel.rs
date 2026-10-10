@@ -149,6 +149,10 @@ impl Panel for AppDrawerPanel {
         }
     }
 
+    fn autofocus(&self) -> bool {
+        true
+    }
+
     fn build(&self, ctx: &PanelRenderContext) -> BoxedWidget {
         let catalog = ctx.shared.get::<AppCatalog>().unwrap_or_else(|| {
             eprintln!(
@@ -192,6 +196,7 @@ fn build_drawer(catalog: AppCatalog, state: DrawerState, on_launch: Rc<dyn Fn()>
                     launch_app(&launch);
                     close();
                 })
+                .keyboard_focus(false)
                 .child(app_card(&app)),
             ));
         }
@@ -227,6 +232,7 @@ fn build_drawer(catalog: AppCatalog, state: DrawerState, on_launch: Rc<dyn Fn()>
         .unwrap_or_else(empty_button);
     let app_management = Box::new(
         RawButton::new(small_button_style(), || {})
+            .keyboard_focus(false)
             .child(Box::new(Icon::new(Symbol::Grid, shell_muted()).size(16.0)) as BoxedWidget),
     ) as BoxedWidget;
     let footer_actions = footer_actions(on_launch.clone());
@@ -309,6 +315,7 @@ fn category_tabs(state: DrawerState, categories: &[String]) -> BoxedWidget {
                 category.set(action_label.clone());
                 scroll.set(0.0);
             })
+            .keyboard_focus(false)
             .child(Box::new(jsx! {
                 <RawText color={if active { shell_accent() } else { shell_muted() }} font_size={11.0}>{label}</RawText>
             }) as BoxedWidget),
@@ -666,9 +673,11 @@ fn account_button() -> BoxedWidget {
     let mut style = small_button_style();
     style.layout.size = fixed(64.0, 32.0);
     Box::new(
-        RawButton::new(style, || open_settings("/users/me")).child(Box::new(
-            jsx! { <RawText color={shell_text()} font_size={11.0}>{"Account"}</RawText> },
-        ) as BoxedWidget),
+        RawButton::new(style, || open_settings("/users/me"))
+            .child(Box::new(
+                jsx! { <RawText color={shell_text()} font_size={11.0}>{"Account"}</RawText> },
+            ) as BoxedWidget)
+            .keyboard_focus(false),
     )
 }
 
@@ -688,6 +697,7 @@ fn footer_actions(on_close: Rc<dyn Fn()>) -> BoxedWidget {
                     handler();
                 }
             })
+            .keyboard_focus(false)
             .child(Box::new(Icon::new(symbol, shell_muted()).size(15.0)) as BoxedWidget),
         ) as BoxedWidget);
     }
@@ -697,6 +707,7 @@ fn footer_actions(on_close: Rc<dyn Fn()>) -> BoxedWidget {
 fn settings_button() -> BoxedWidget {
     Box::new(
         RawButton::new(settings_button_style(), || open_settings("/connectivity"))
+            .keyboard_focus(false)
             .child(Box::new(Icon::new(Symbol::Sliders, shell_muted()).size(18.0)) as BoxedWidget),
     )
 }

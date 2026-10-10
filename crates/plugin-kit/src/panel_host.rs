@@ -157,6 +157,7 @@ impl PanelHost {
                 size.width as u32,
                 size.height as u32,
                 self.theme.get(),
+                panel.autofocus(),
             ),
             popup,
             Color::rgba(0, 0, 0, 0),
@@ -256,7 +257,13 @@ fn popup_for(
 /// (parameterized on `theme` instead of reading `apps/shell`'s own
 /// process-global `system_theme()`, since `PanelHost` has no such static)
 /// from `apps/shell/src/lib.rs::popup_options`.
-fn popup_options(title: &str, width: u32, height: u32, theme: Theme) -> WindowOptions {
+fn popup_options(
+    title: &str,
+    width: u32,
+    height: u32,
+    theme: Theme,
+    autofocus: bool,
+) -> WindowOptions {
     WindowOptions {
         title: title.into(),
         width,
@@ -265,6 +272,7 @@ fn popup_options(title: &str, width: u32, height: u32, theme: Theme) -> WindowOp
         resizable: false,
         transparent: true,
         blur: Some(creamui_render::BlurRegion::Window),
+        focus_first: autofocus,
         theme,
         ..Default::default()
     }
@@ -277,7 +285,7 @@ mod tests {
     #[test]
     fn glass_popups_enable_native_blur_without_client_decorations() {
         let theme = crate::design::coconut_theme(Theme::light());
-        let options = popup_options("Network", 380, 620, theme);
+        let options = popup_options("Network", 380, 620, theme, true);
         assert!(options.transparent);
         assert!(matches!(
             options.blur,
@@ -285,6 +293,7 @@ mod tests {
         ));
         assert!(!options.decorations);
         assert!(!options.resizable);
+        assert!(options.focus_first);
         assert_eq!(options.theme, theme);
     }
 }

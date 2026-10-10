@@ -49,5 +49,6 @@ mod tests {
     fn plugin_and_panel_ids_match_the_launcher_s_open_panel_call() {
         assert_eq!(AppDrawerPlugin.id(), "app_drawer");
         assert_eq!(AppDrawerPanel.id(), "app_drawer");
+        assert!(AppDrawerPanel.autofocus());
     }
 }

@@ -42,4 +42,11 @@ pub trait Panel {
     /// The outer root should stay square — the compositor clips popup
     /// corners itself (`blair`'s `decorations.popup_corner_radius`).
     fn build(&self, ctx: &PanelRenderContext) -> BoxedWidget;
+
+    /// Focus the first keyboard-focusable control as soon as this popup
+    /// opens. Panels with a primary text field can opt in so typing works
+    /// immediately, without a preliminary click.
+    fn autofocus(&self) -> bool {
+        false
+    }
 }
