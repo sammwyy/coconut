@@ -431,7 +431,53 @@ fn connectivity_layout_matches_reference() {
                 }],
             );
         }
+        fixture.preferences.insert(
+            "hostname".into(),
+            Preference {
+                value: Some(Value::Text("test-device".into())),
+                writable: true,
+                ..Default::default()
+            },
+        );
         native.snapshot.set(fixture);
+        routes::open(&view, "/connectivity/network");
+        content_scroll.set(0.0);
+        recorder.begin(1120, 760, 1.0, Color::rgba(0, 0, 0, 0), theme.colors);
+        let network_scene = Renderer::new().render(root(size), size, &mut recorder);
+        let network_list = recorder.finish();
+        raster.render(&network_list, &Damage::Full);
+        if let Ok(path) = std::env::var("COCONUT_SETTINGS_NETWORK_SNAPSHOT") {
+            raster
+                .pixmap()
+                .save_png(path)
+                .expect("save Network preview");
+        }
+        assert!(matches!(
+            connectivity.current(),
+            crate::views::connectivity::View::Network
+        ));
+        assert!(
+            network_scene
+                .hit_test(Point {
+                    x: 1000.0,
+                    y: 134.0
+                })
+                .is_some(),
+            "hostname Edit button is aligned at the right of its row"
+        );
+        assert!(
+            network_scene
+                .hit_test(Point { x: 975.0, y: 293.0 })
+                .is_none(),
+            "unsupported DNS configuration is disabled"
+        );
+        network_scene
+            .hit_test(Point { x: 306.0, y: 28.0 })
+            .expect("Network back button")();
+        assert!(matches!(
+            connectivity.current(),
+            crate::views::connectivity::View::Overview
+        ));
         let roots = [
             Section::Connectivity,
             Section::Hardware,

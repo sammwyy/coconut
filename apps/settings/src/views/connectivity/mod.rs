@@ -12,6 +12,8 @@ use creamui_router::Router;
 use creamui_widgets::{Icon, RawButton, RawView, Switch, Symbol, Text, TextSize};
 use std::rc::Rc;
 
+mod network;
+
 #[derive(Clone, PartialEq)]
 pub enum View {
     Overview,
@@ -28,10 +30,14 @@ pub enum View {
 #[derive(Clone)]
 pub struct State {
     pub router: Router,
+    network: network::State,
 }
 impl State {
     pub fn new(router: Router) -> Self {
-        Self { router }
+        Self {
+            router,
+            network: network::State::default(),
+        }
     }
     pub fn current(&self) -> View {
         current(&self.router)
@@ -150,6 +156,14 @@ pub fn detail_header(state: &State, window_width: f32) -> BoxedWidget {
     Box::new(jsx! {
         <Flex direction={FlexDirection::Row} align={creamui_widgets::layout::Align::Center} gap={12.0} style={Style { flex_direction: FlexDirection::Row, flex_shrink: 0.0, size: creamui_core::layout::Size { width: Dimension::Percent(1.0), height: Dimension::Length(56.0) }, align_items: Some(creamui_core::layout::AlignItems::Center), padding: creamui_core::layout::Rect { left: LengthPercentage::Length(left_padding), right: LengthPercentage::Length(right_padding), top: LengthPercentage::Length(0.0), bottom: LengthPercentage::Length(0.0) }, ..Default::default() }}>
             {crate::components::back_button(move || navigate(&back, View::Overview))}
+            {if matches!(current(&state.router), View::Network) {
+                crate::components::icon_badge(
+                    creamui_reactive::use_context::<crate::views::context::ViewContext>().icons.network.clone(),
+                    crate::components::category_color(),
+                )
+            } else {
+                Box::new(RawView::new(Style { display: creamui_core::layout::Display::None, ..Default::default() })) as BoxedWidget
+            }}
             {Box::new(Text::new(label).font_size(14.0).bold(true)) as BoxedWidget}
         </Flex>
     })
@@ -171,7 +185,7 @@ pub fn build(
         View::BluetoothDevice(address) => bluetooth_device(bluetooth, state, &address),
         View::Ethernet => network_detail(network, state, NetworkDeviceKind::Ethernet),
         View::Vpn => network_detail(network, state, NetworkDeviceKind::Vpn),
-        View::Network => network_detail(network, state, NetworkDeviceKind::Wifi),
+        View::Network => network::build(network, &state.network, icons),
     }
 }
 

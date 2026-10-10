@@ -18,6 +18,11 @@ pub struct SettingsIcons {
     pub about: IconSource,
     pub search: IconSource,
     pub headphones: IconSource,
+    pub network: IconSource,
+    pub computer: IconSource,
+    pub server: IconSource,
+    pub lock: IconSource,
+    pub bypass: IconSource,
     pub minimize: IconSource,
     pub maximize: IconSource,
     pub close: IconSource,
@@ -64,6 +69,21 @@ impl SettingsIcons {
             search: outline(r#"<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>"#),
             headphones: outline(
                 r#"<path d="M3 14v-3a9 9 0 0 1 18 0v3"/><rect x="3" y="13" width="4" height="8" rx="2"/><rect x="17" y="13" width="4" height="8" rx="2"/>"#,
+            ),
+            network: outline(
+                r#"<rect x="9" y="2" width="6" height="5" rx="1"/><rect x="2" y="17" width="6" height="5" rx="1"/><rect x="16" y="17" width="6" height="5" rx="1"/><path d="M12 7v5M5 17v-5h14v5"/>"#,
+            ),
+            computer: outline(
+                r#"<rect x="5" y="3" width="14" height="12" rx="1"/><path d="m5 15-3 5h20l-3-5M9 18h6"/>"#,
+            ),
+            server: outline(
+                r#"<rect x="3" y="3" width="18" height="7" rx="2"/><rect x="3" y="14" width="18" height="7" rx="2"/><path d="M7 6.5h.01M7 17.5h.01M11 6.5h6M11 17.5h6"/>"#,
+            ),
+            lock: outline(
+                r#"<rect x="4" y="10" width="16" height="12" rx="2"/><path d="M8 10V6a4 4 0 0 1 8 0v4M12 15v3"/>"#,
+            ),
+            bypass: outline(
+                r#"<path d="m3 3 18 18M10 6a10 10 0 0 1 11 6 15 15 0 0 1-3 4M6 6a15 15 0 0 0-3 6 10 10 0 0 0 13 5M10 10a3 3 0 0 0 4 4"/>"#,
             ),
             minimize: outline(r#"<path d="M7 12h10"/>"#),
             maximize: outline(r#"<rect x="7" y="7" width="10" height="10" rx="1"/>"#),
@@ -112,6 +132,11 @@ mod tests {
             &icons.about,
             &icons.search,
             &icons.headphones,
+            &icons.network,
+            &icons.computer,
+            &icons.server,
+            &icons.lock,
+            &icons.bypass,
             &icons.minimize,
             &icons.maximize,
             &icons.close,
