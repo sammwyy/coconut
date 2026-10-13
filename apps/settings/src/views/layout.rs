@@ -119,13 +119,15 @@ pub(crate) fn build(context: &crate::views::context::ViewContext) -> BoxedWidget
     } else {
         let scroll: BoxedWidget = Box::new(
             creamui_widgets::RawScrollView::controlled(content_style, content_scroll.clone())
-                .scrollbar_width(2.0)
-                .scrollbar_margin(0.0)
+                // A 2 px, 15%-opaque thumb is imperceptible on many
+                // displays and impossible to grab reliably without a wheel.
+                .scrollbar_width(6.0)
+                .scrollbar_margin(6.0)
                 .scrollbar_color(creamui_theme::Color::rgba(
                     theme.colors.text_secondary.r,
                     theme.colors.text_secondary.g,
                     theme.colors.text_secondary.b,
-                    38,
+                    120,
                 ))
                 .child(Box::new(
                     RawView::new(Style {
