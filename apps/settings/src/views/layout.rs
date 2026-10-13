@@ -121,13 +121,16 @@ pub(crate) fn build(context: &crate::views::context::ViewContext) -> BoxedWidget
             creamui_widgets::RawScrollView::controlled(content_style, content_scroll.clone())
                 // A 2 px, 15%-opaque thumb is imperceptible on many
                 // displays and impossible to grab reliably without a wheel.
-                .scrollbar_width(6.0)
-                .scrollbar_margin(6.0)
+                .scrollbar_width(5.0)
+                .scrollbar_margin(4.0)
+                // The document scrolls beneath the draggable titlebar, but
+                // its affordance belongs to the page, not the window chrome.
+                .scrollbar_vertical_inset(48.0, 16.0)
                 .scrollbar_color(creamui_theme::Color::rgba(
                     theme.colors.text_secondary.r,
                     theme.colors.text_secondary.g,
                     theme.colors.text_secondary.b,
-                    120,
+                    110,
                 ))
                 .child(Box::new(
                     RawView::new(Style {
