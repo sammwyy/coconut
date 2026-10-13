@@ -13,7 +13,8 @@ use creamui_core::{
 use creamui_image::ImageData;
 use creamui_reactive::{create_effect, Effect, Signal};
 use creamui_render::{
-    platform::WindowRole, AppHandle, BlurRegion, PopupOptions, WindowHandle, WindowOptions,
+    platform::WindowRole, AppHandle, BlurRegion, PopupOptions, RenderBackend, WindowHandle,
+    WindowOptions,
 };
 use creamui_theme::{use_theme, Color};
 use creamui_widgets::{
@@ -72,6 +73,7 @@ struct ActiveNotification {
 pub(crate) struct PopupHost {
     app: AppHandle,
     config: Signal<ShellConfig>,
+    render_backend: RenderBackend,
     backend: Rc<dyn NotificationsIntegration>,
     status: Signal<Option<StatusUpdate>>,
     notifications: Signal<Vec<ActiveNotification>>,
@@ -91,6 +93,7 @@ impl PopupHost {
     pub(crate) fn start(
         app: AppHandle,
         config: Signal<ShellConfig>,
+        render_backend: RenderBackend,
         volume_level: Signal<f32>,
         brightness_level: Signal<f32>,
         volume: Rc<dyn coconut_api::volume::VolumeIntegration>,
@@ -99,6 +102,7 @@ impl PopupHost {
         let host = Rc::new(Self {
             app,
             config,
+            render_backend,
             backend,
             status: Signal::new(None),
             notifications: Signal::new(Vec::new()),
@@ -352,6 +356,7 @@ impl PopupHost {
                 blur: Some(BlurRegion::Content),
                 role: WindowRole::Overlay,
                 theme: super::system_theme(),
+                backend: self.render_backend,
                 ..Default::default()
             },
             Color::rgba(0, 0, 0, 0),
@@ -442,6 +447,7 @@ impl PopupHost {
                 decorations: false,
                 resizable: false,
                 theme: super::system_theme(),
+                backend: self.render_backend,
                 ..Default::default()
             },
             PopupOptions::new(
@@ -1084,6 +1090,7 @@ mod tests {
                 let host = PopupHost::start(
                     app.clone(),
                     config,
+                    RenderBackend::Gpu,
                     level.clone(),
                     Signal::new(0.7),
                     Rc::new(coconut_api::volume::Fallback),

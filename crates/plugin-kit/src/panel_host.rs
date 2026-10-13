@@ -2,7 +2,7 @@ use crate::{Panel, PanelRenderContext, PluginRegistry, SharedState};
 use coconut_core::DockPosition;
 use creamui_core::{Point, Rect};
 use creamui_render::platform::PopupPlacement;
-use creamui_render::{AppHandle, PopupOptions, WindowHandle, WindowOptions};
+use creamui_render::{AppHandle, PopupOptions, RenderBackend, WindowHandle, WindowOptions};
 use creamui_theme::{Color, Theme};
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -31,6 +31,7 @@ pub struct PanelHost {
     /// `RuntimeEvent::ReloadTheme` handler pushes a new theme to every
     /// live window today.
     theme: Cell<Theme>,
+    backend: RenderBackend,
     open_panels: RefCell<HashMap<&'static str, WindowHandle>>,
 }
 
@@ -44,13 +45,19 @@ struct DockAnchor {
 }
 
 impl PanelHost {
-    pub fn new(app: AppHandle, registry: Rc<PluginRegistry>, shared: SharedState) -> Rc<Self> {
+    pub fn new(
+        app: AppHandle,
+        registry: Rc<PluginRegistry>,
+        shared: SharedState,
+        backend: RenderBackend,
+    ) -> Rc<Self> {
         Rc::new(Self {
             app,
             registry,
             shared,
             docks: RefCell::new(HashMap::new()),
             theme: Cell::new(crate::design::coconut_theme(Theme::default())),
+            backend,
             open_panels: RefCell::new(HashMap::new()),
         })
     }
@@ -158,6 +165,7 @@ impl PanelHost {
                 size.height as u32,
                 self.theme.get(),
                 panel.autofocus(),
+                self.backend,
             ),
             popup,
             Color::rgba(0, 0, 0, 0),
@@ -263,6 +271,7 @@ fn popup_options(
     height: u32,
     theme: Theme,
     autofocus: bool,
+    backend: RenderBackend,
 ) -> WindowOptions {
     WindowOptions {
         title: title.into(),
@@ -274,6 +283,7 @@ fn popup_options(
         blur: Some(creamui_render::BlurRegion::Window),
         focus_first: autofocus,
         theme,
+        backend,
         ..Default::default()
     }
 }
@@ -285,7 +295,7 @@ mod tests {
     #[test]
     fn glass_popups_enable_native_blur_without_client_decorations() {
         let theme = crate::design::coconut_theme(Theme::light());
-        let options = popup_options("Network", 380, 620, theme, true);
+        let options = popup_options("Network", 380, 620, theme, true, RenderBackend::Cpu);
         assert!(options.transparent);
         assert!(matches!(
             options.blur,
@@ -295,5 +305,6 @@ mod tests {
         assert!(!options.resizable);
         assert!(options.focus_first);
         assert_eq!(options.theme, theme);
+        assert_eq!(options.backend, RenderBackend::Cpu);
     }
 }

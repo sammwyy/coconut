@@ -50,6 +50,13 @@ fn build(state: &State, config: &Signal<ShellConfig>, nav: &creamui_router::Rout
     let size: BoxedWidget = Box::new(Slider::new((c.dockbar.thickness - 32.0) / 64.0, move |v| {
         update_config(&write, |c| c.dockbar.thickness = 32.0 + v * 64.0)
     }));
+    let write = config.clone();
+    let gpu_acceleration: BoxedWidget =
+        Box::new(Switch::new(c.rendering.gpu_acceleration, move || {
+            update_config(&write, |c| {
+                c.rendering.gpu_acceleration = !c.rendering.gpu_acceleration
+            })
+        }));
     page(
         vec![
             card(
@@ -117,6 +124,15 @@ fn build(state: &State, config: &Signal<ShellConfig>, nav: &creamui_router::Rout
                         nav,
                     ),
                 ],
+            ),
+            card(
+                "Graphics",
+                vec![item(
+                    "Graphics acceleration",
+                    "Use the GPU to render Coconut. Restart Coconut and Settings to apply.",
+                    gpu_acceleration,
+                    || {},
+                )],
             ),
         ],
         state,

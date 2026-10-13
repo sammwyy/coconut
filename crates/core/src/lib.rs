@@ -40,9 +40,29 @@ impl Default for BatteryAlertsConfig {
     }
 }
 
+/// Chooses whether Coconut windows use CreamUI's GPU renderer or its
+/// CPU-only fallback. This is kept with the shell configuration so the
+/// desktop and its Settings app always start with the same renderer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RenderingConfig {
+    /// Prefer the GPU renderer. Turning this off is useful for incompatible
+    /// graphics drivers and for machines where the CPU renderer is desired.
+    pub gpu_acceleration: bool,
+}
+
+impl Default for RenderingConfig {
+    fn default() -> Self {
+        Self {
+            gpu_acceleration: true,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ShellConfig {
+    pub rendering: RenderingConfig,
     pub appearance: AppearanceConfig,
     pub statusbar: DockConfig,
     pub dockbar: DockConfig,
@@ -59,6 +79,7 @@ pub struct ShellConfig {
 impl Default for ShellConfig {
     fn default() -> Self {
         Self {
+            rendering: RenderingConfig::default(),
             appearance: AppearanceConfig::default(),
             statusbar: DockConfig {
                 position: DockPosition::Top,
@@ -121,6 +142,12 @@ const DEFAULT_SHELL_TOML: &str = r#"# Coconut configuration.
 # Per-island settings (the clock's time format, tray visibility, etc.) live
 # in their own files under the "modules" directory next to this one, e.g.
 # modules/clock.toml.
+
+[rendering]
+# Use the graphics card to render Coconut and Coconut Settings. Set this to
+# false to force CPU rendering, for example when diagnosing a GPU driver issue.
+# Restart Coconut and Settings after changing this option.
+gpu_acceleration = true
 
 [appearance]
 # Freedesktop application icon and desktop sound themes used by Coconut.
@@ -428,6 +455,14 @@ mod tests {
         let parsed: ShellConfig = toml::from_str("[statusbar]\nposition = \"bottom\"\n").unwrap();
         assert_eq!(parsed.statusbar.position, DockPosition::Bottom);
         assert_eq!(parsed.dockbar, ShellConfig::default().dockbar);
+        assert!(parsed.rendering.gpu_acceleration);
+    }
+
+    #[test]
+    fn rendering_can_be_switched_to_cpu() {
+        let parsed: ShellConfig =
+            toml::from_str("[rendering]\ngpu_acceleration = false\n").unwrap();
+        assert!(!parsed.rendering.gpu_acceleration);
     }
 
     #[test]

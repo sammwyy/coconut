@@ -31,7 +31,9 @@ use coconut_plugin_tray::{
 use coconut_plugin_weather::WeatherState;
 use creamui_core::{BoxedWidget, Point, Size};
 use creamui_reactive::Signal;
-use creamui_render::{AppBuilder, AppHandle, BlurRegion, WindowHandle, WindowOptions};
+use creamui_render::{
+    AppBuilder, AppHandle, BlurRegion, RenderBackend, WindowHandle, WindowOptions,
+};
 use creamui_theme::{Color, Theme};
 use std::rc::Rc;
 use std::{
@@ -51,6 +53,7 @@ pub fn run() {
 
     initialize_system_theme();
     let initial_config = ShellConfig::load();
+    let render_backend = render_backend(&initial_config);
     let config = Signal::new(initial_config.clone());
     let runtime_events = Arc::new(Mutex::new(coconut_core::ipc::listen_for_runtime_events()));
     let themed_windows: Rc<RefCell<Vec<WindowHandle>>> = Rc::new(RefCell::new(Vec::new()));
@@ -183,6 +186,7 @@ pub fn run() {
             let popups = popups::PopupHost::start(
                 app.clone(),
                 config.clone(),
+                render_backend,
                 volume_level.clone(),
                 brightness_level.clone(),
                 integrations.volume.clone(),
@@ -203,7 +207,12 @@ pub fn run() {
             let registry = Rc::new(PluginRegistry::build(&plugins, &init_ctx));
             warn_unknown_islands(&initial_config.bar_configs(), &registry);
 
-            let panel_host = PanelHost::new(app.clone(), registry.clone(), shared.clone());
+            let panel_host = PanelHost::new(
+                app.clone(),
+                registry.clone(),
+                shared.clone(),
+                render_backend,
+            );
             panel_host.set_theme(system_theme());
             let shortcut_config = ShortcutConfig::load();
             let shortcut_accelerators = shortcut_config
@@ -244,6 +253,7 @@ pub fn run() {
                     transparent: false,
                     role: creamui_render::platform::WindowRole::Desktop,
                     theme: system_theme(),
+                    backend: render_backend,
                     ..Default::default()
                 },
                 system_theme().colors.surface,
@@ -321,6 +331,7 @@ pub fn run() {
                 &ready_backend,
                 &themed_windows,
                 &dock_windows,
+                render_backend,
             );
 
             schedule_runtime_events(
@@ -337,6 +348,7 @@ pub fn run() {
                 weather_state,
                 desktop_state,
                 popups,
+                render_backend,
             );
             let _ = bar_playback_backend;
         })
@@ -353,6 +365,14 @@ fn island_present(bars: &[DockConfig], id: &str) -> bool {
         .any(|entry| entry.id == id)
 }
 
+fn render_backend(config: &ShellConfig) -> RenderBackend {
+    if config.rendering.gpu_acceleration {
+        RenderBackend::Gpu
+    } else {
+        RenderBackend::Cpu
+    }
+}
+
 /// Recreates the statusbar and dockbar windows after a bar configuration
 /// change. Their stable indexes keep popup anchors bound to the right bar.
 #[allow(clippy::too_many_arguments)]
@@ -365,6 +385,7 @@ fn append_bars(
     ready_backend: &Rc<dyn DesktopIntegration>,
     themed_windows: &Rc<RefCell<Vec<WindowHandle>>>,
     dock_windows: &Rc<RefCell<Vec<WindowHandle>>>,
+    render_backend: RenderBackend,
 ) {
     for window in dock_windows.borrow_mut().drain(..) {
         window.close();
@@ -406,6 +427,7 @@ fn append_bars(
                     .then_some(BlurRegion::Content),
                 role,
                 theme: system_theme(),
+                backend: render_backend,
                 ..Default::default()
             },
             Color::rgba(0, 0, 0, 0),
@@ -437,6 +459,7 @@ fn schedule_runtime_events(
     weather_state: Signal<WeatherState>,
     desktop_state: desktop::DesktopState,
     popups: Rc<popups::PopupHost>,
+    render_backend: RenderBackend,
 ) {
     let next_app = app.clone();
     let next_events = events.clone();
@@ -506,6 +529,7 @@ fn schedule_runtime_events(
                                 &ready_backend,
                                 &themed_windows,
                                 &dock_windows,
+                                render_backend,
                             );
                         }
                     }
@@ -535,6 +559,7 @@ fn schedule_runtime_events(
                 next_weather_state,
                 next_desktop_state,
                 next_popups,
+                render_backend,
             );
         },
     );

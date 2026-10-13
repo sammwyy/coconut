@@ -193,6 +193,9 @@ pub(crate) fn item(
         "Power mode" => {
             r#"<rect x="2" y="6" width="18" height="12" rx="2"/><path d="M23 10v4M11 8l-3 5h6l-3 4"/>"#
         }
+        "Graphics acceleration" => {
+            r#"<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M8 8h8v8H8zM10 1v2m4-2v2M10 21v2m4-2v2M1 10h2m-2 4h2m18-4h2m-2 4h2"/>"#
+        }
         "Wallpaper" => {
             r#"<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8" cy="8" r="1"/><path d="m3 17 6-6 5 5 3-3 4 4"/>"#
         }
