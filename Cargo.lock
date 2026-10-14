@@ -664,6 +664,7 @@ dependencies = [
  "creamui-render",
  "creamui-theme",
  "creamui-widgets",
+ "delib",
  "serde",
 ]
 
@@ -1177,6 +1178,12 @@ dependencies = [
  "libdbus-sys",
  "windows-sys 0.61.2",
 ]
+
+[[package]]
+name = "delib"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3930a3a80e20713a5861e2e4d27fc5f713ec073b6b10a96da0f030204dd1e57d"
 
 [[package]]
 name = "dispatch"
