@@ -10,9 +10,9 @@ use std::sync::{
 };
 use std::time::Duration;
 
-pub const THEME_PATH: &str = "/org/creamui/Theme";
-pub const THEME_INTERFACE: &str = "org.creamui.Theme";
-pub const THEME_RELOAD: &str = "ReloadTheme";
+pub use creamui_theme_watch::{
+    INTERFACE as THEME_INTERFACE, OBJECT_PATH as THEME_PATH, SIGNAL as THEME_RELOAD,
+};
 
 pub const SHELL_PATH: &str = "/org/coconut/Shell";
 pub const SHELL_INTERFACE: &str = "org.coconut.Shell";
@@ -41,7 +41,7 @@ pub enum RuntimeEvent {
 
 /// Emits `org.creamui.Theme.ReloadTheme` on the session bus.
 pub fn publish_theme_reload() -> Result<(), String> {
-    publish_signal(THEME_PATH, THEME_INTERFACE, THEME_RELOAD, ())
+    creamui_theme_watch::publish().map_err(|error| error.to_string())
 }
 
 /// Schedules `org.coconut.Shell.ConfigChanged` with the complete TOML document.
