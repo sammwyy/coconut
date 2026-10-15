@@ -33,6 +33,7 @@ fn path(key: &str) -> Option<(&'static str, &'static str)> {
         "zoom" => Some(("accessibility", "zoom")),
         "zoom-factor" => Some(("accessibility", "zoom_factor")),
         "lock-after-sleep" => Some(("session", "lock_after_sleep")),
+        "idle-dim" => Some(("power", "idle_dim")),
         _ => None,
     }
 }
@@ -58,6 +59,22 @@ fn compatible_locker() -> Option<String> {
     None
 }
 
+fn native_backlight_available() -> bool {
+    std::fs::read_dir("/sys/class/backlight")
+        .ok()
+        .into_iter()
+        .flatten()
+        .filter_map(Result::ok)
+        .map(|entry| entry.path().join("brightness"))
+        .any(|brightness| {
+            brightness.is_file()
+                && std::fs::OpenOptions::new()
+                    .write(true)
+                    .open(brightness)
+                    .is_ok()
+        })
+}
+
 pub fn discover(snapshot: &mut Snapshot) {
     match creamui_theme_loader::read_system_accessibility() {
         Ok(preferences) => {
@@ -81,11 +98,27 @@ pub fn discover(snapshot: &mut Snapshot) {
                 "zoom",
                 "zoom-factor",
                 "lock-after-sleep",
+                "idle-dim",
             ] {
                 let (section, property) = path(key).unwrap();
                 let value = config
                     .get(section)
                     .and_then(|section| section.get(property));
+                let (writable, reason) = if key == "lock-after-sleep"
+                    && compatible_locker().is_none()
+                {
+                    (
+                        false,
+                        "Install swaylock, gtklock, or waylock to enable session locking".into(),
+                    )
+                } else if key == "idle-dim" && !native_backlight_available() {
+                    (
+                        false,
+                        "No writable kernel backlight is available for Blair to dim".into(),
+                    )
+                } else {
+                    (true, String::new())
+                };
                 let preference = Preference {
                     value: value.and_then(|value| match value {
                         toml::Value::String(value) => Some(Value::Text(value.clone())),
@@ -93,12 +126,8 @@ pub fn discover(snapshot: &mut Snapshot) {
                         toml::Value::Float(value) => Some(Value::Number(*value)),
                         _ => None,
                     }),
-                    writable: key != "lock-after-sleep" || compatible_locker().is_some(),
-                    reason: if key == "lock-after-sleep" && compatible_locker().is_none() {
-                        "Install swaylock, gtklock, or waylock to enable session locking".into()
-                    } else {
-                        String::new()
-                    },
+                    writable,
+                    reason,
                     ..Default::default()
                 };
                 snapshot.preferences.insert(key.into(), preference);
@@ -155,7 +184,7 @@ pub fn set(key: &str, value: Value) -> Result<(), String> {
         ("cursor-theme" | "icon-theme", Value::Text(value)) if !value.trim().is_empty() => {
             toml::Value::String(value)
         }
-        ("sticky-keys" | "visual-alerts" | "zoom", Value::Bool(value)) => {
+        ("sticky-keys" | "visual-alerts" | "zoom" | "idle-dim", Value::Bool(value)) => {
             toml::Value::Boolean(value)
         }
         ("zoom-factor", Value::Number(value))
