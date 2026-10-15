@@ -108,6 +108,25 @@ impl ShortcutState {
             shortcuts: self.bindings.get(),
             custom_shortcuts: self.custom_bindings.get(),
         };
+        for (index, accelerator) in config
+            .shortcuts
+            .iter()
+            .map(|binding| &binding.accelerator)
+            .chain(
+                config
+                    .custom_shortcuts
+                    .iter()
+                    .map(|binding| &binding.accelerator),
+            )
+            .enumerate()
+        {
+            if !accelerator.is_empty() {
+                if let Err(error) = blair_protocol::ShortcutAccelerator::parse(accelerator) {
+                    self.status.set(format!("Shortcut {}: {error}", index + 1));
+                    return;
+                }
+            }
+        }
         match config.save() {
             Ok(()) => {
                 self.saved.set(config);
@@ -1368,10 +1387,23 @@ impl Widget for ShortcutRecorder {
         let record = self.on_record.clone();
         Some(Rc::new(move |input| {
             let key = match input.key {
+                Key::Char(' ') => "Space".to_owned(),
+                Key::Char(',') => "Comma".to_owned(),
+                Key::Char('+') => "Plus".to_owned(),
                 Key::Char(key) => key.to_ascii_uppercase().to_string(),
                 Key::Enter => "Return".to_owned(),
                 Key::Escape => "Escape".to_owned(),
-                _ => return,
+                Key::Tab => "Tab".to_owned(),
+                Key::Backspace => "Backspace".to_owned(),
+                Key::Delete => "Delete".to_owned(),
+                Key::Left => "Left".to_owned(),
+                Key::Right => "Right".to_owned(),
+                Key::Up => "Up".to_owned(),
+                Key::Down => "Down".to_owned(),
+                Key::PageUp => "PageUp".to_owned(),
+                Key::PageDown => "PageDown".to_owned(),
+                Key::Home => "Home".to_owned(),
+                Key::End => "End".to_owned(),
             };
             let mut parts = Vec::new();
             if input.modifiers.ctrl {
