@@ -1,4 +1,5 @@
 use super::*;
+use std::os::unix::fs::PermissionsExt;
 
 pub fn configuration() -> Result<toml::Value, String> {
     let connection = Connection::new_session().map_err(|error| error.to_string())?;
@@ -31,12 +32,30 @@ fn path(key: &str) -> Option<(&'static str, &'static str)> {
         "visual-alerts" => Some(("accessibility", "visual_alerts")),
         "zoom" => Some(("accessibility", "zoom")),
         "zoom-factor" => Some(("accessibility", "zoom_factor")),
+        "lock-after-sleep" => Some(("session", "lock_after_sleep")),
         _ => None,
     }
 }
 
 pub fn supports(key: &str) -> bool {
     path(key).is_some() || matches!(key, "contrast" | "text-scale")
+}
+
+fn compatible_locker() -> Option<String> {
+    let paths = std::env::var_os("PATH")?;
+    for name in ["swaylock", "gtklock", "waylock"] {
+        for directory in std::env::split_paths(&paths) {
+            let candidate = directory.join(name);
+            if candidate.is_file()
+                && candidate
+                    .metadata()
+                    .is_ok_and(|metadata| metadata.permissions().mode() & 0o111 != 0)
+            {
+                return Some(candidate.to_string_lossy().into_owned());
+            }
+        }
+    }
+    None
 }
 
 pub fn discover(snapshot: &mut Snapshot) {
@@ -61,6 +80,7 @@ pub fn discover(snapshot: &mut Snapshot) {
                 "visual-alerts",
                 "zoom",
                 "zoom-factor",
+                "lock-after-sleep",
             ] {
                 let (section, property) = path(key).unwrap();
                 let value = config
@@ -73,7 +93,12 @@ pub fn discover(snapshot: &mut Snapshot) {
                         toml::Value::Float(value) => Some(Value::Number(*value)),
                         _ => None,
                     }),
-                    writable: true,
+                    writable: key != "lock-after-sleep" || compatible_locker().is_some(),
+                    reason: if key == "lock-after-sleep" && compatible_locker().is_none() {
+                        "Install swaylock, gtklock, or waylock to enable session locking".into()
+                    } else {
+                        String::new()
+                    },
                     ..Default::default()
                 };
                 snapshot.preferences.insert(key.into(), preference);
@@ -101,6 +126,29 @@ pub fn set(key: &str, value: Value) -> Result<(), String> {
         creamui_theme_loader::write_system_accessibility(preferences)
             .map_err(|error| error.to_string())?;
         return creamui_theme_watch::publish().map_err(|error| error.to_string());
+    }
+    if key == "lock-after-sleep" {
+        let Value::Bool(enabled) = value else {
+            return Err("Invalid session lock preference".into());
+        };
+        let mut config = configuration()?;
+        if enabled {
+            let locker = compatible_locker()
+                .ok_or("No compatible Wayland locker was found (swaylock, gtklock, or waylock)")?;
+            put(
+                &mut config,
+                "session",
+                "locker",
+                toml::Value::String(locker),
+            )?;
+        }
+        put(
+            &mut config,
+            "session",
+            "lock_after_sleep",
+            toml::Value::Boolean(enabled),
+        )?;
+        return save(&config);
     }
     let (section, property) = path(key).ok_or("Unknown Blair preference")?;
     let value = match (key, value) {
