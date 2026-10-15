@@ -9,6 +9,8 @@ use std::{
     sync::Arc,
 };
 
+type AppearanceChanged = Rc<dyn Fn(creamui_theme::ResolvedAppearance)>;
+
 #[derive(Clone)]
 pub struct State {
     pub snapshot: Signal<Snapshot>,
@@ -20,6 +22,7 @@ pub struct State {
     selects: Rc<RefCell<BTreeMap<String, SelectController>>>,
     pending: Rc<RefCell<BTreeMap<String, Value>>>,
     accounts: Rc<RefCell<Option<Signal<Vec<crate::services::accounts::Account>>>>>,
+    appearance_changed: Rc<RefCell<Option<AppearanceChanged>>>,
     pub search: TextController,
     pub hostname: TextController,
     pub timezone: TextController,
@@ -44,6 +47,7 @@ impl State {
             selects: Rc::new(RefCell::new(BTreeMap::new())),
             pending: Rc::new(RefCell::new(BTreeMap::new())),
             accounts: Rc::new(RefCell::new(None)),
+            appearance_changed: Rc::new(RefCell::new(None)),
             search: TextController::new(""),
             hostname: TextController::new(""),
             timezone: TextController::new(""),
@@ -61,6 +65,12 @@ impl State {
         *self.app.borrow_mut() = Some(app);
         *self.accounts.borrow_mut() = Some(accounts);
         self.refresh();
+    }
+    pub(crate) fn on_appearance_change(
+        &self,
+        callback: impl Fn(creamui_theme::ResolvedAppearance) + 'static,
+    ) {
+        *self.appearance_changed.borrow_mut() = Some(Rc::new(callback));
     }
     fn accept(&self, snapshot: Snapshot) {
         if self.hostname.value().is_empty() {
@@ -222,9 +232,15 @@ impl State {
             &action,
             Action::ConfirmDisplayMode { .. } | Action::RevertDisplayMode { .. }
         ) || matches!(&action, Action::Set { key, .. } if key.starts_with("display:"));
+        let reload_appearance = matches!(&action, Action::Set { key, .. } if matches!(key.as_str(), "contrast" | "text-scale"));
         app.spawn_background(
             move || {
                 let result = backend.apply(action);
+                let appearance = (reload_appearance && result.is_ok()).then(|| {
+                    creamui_theme_loader::SystemThemeLoader::new()
+                        .load()
+                        .map_err(|error| error.to_string())
+                });
                 let snapshot = if displays_only {
                     backend.display_snapshot()
                 } else {
@@ -234,9 +250,10 @@ impl State {
                     result,
                     snapshot,
                     (!displays_only).then(crate::services::accounts::list_accounts),
+                    appearance,
                 )
             },
-            move |(result, snapshot, accounts)| {
+            move |(result, snapshot, accounts, appearance)| {
                 if displays_only {
                     state.accept_displays(snapshot);
                 } else {
@@ -250,6 +267,18 @@ impl State {
                 state
                     .status
                     .set(result.unwrap_or_else(|error| format!("Could not apply: {error}")));
+                if let Some(appearance) = appearance {
+                    match appearance {
+                        Ok(appearance) => {
+                            if let Some(callback) = state.appearance_changed.borrow().as_ref() {
+                                callback(appearance);
+                            }
+                        }
+                        Err(error) => state
+                            .status
+                            .set(format!("Could not reload appearance: {error}")),
+                    }
+                }
                 state.flush_pending();
             },
         );

@@ -36,10 +36,22 @@ fn path(key: &str) -> Option<(&'static str, &'static str)> {
 }
 
 pub fn supports(key: &str) -> bool {
-    path(key).is_some()
+    path(key).is_some() || matches!(key, "contrast" | "text-scale")
 }
 
 pub fn discover(snapshot: &mut Snapshot) {
+    match creamui_theme_loader::read_system_accessibility() {
+        Ok(preferences) => {
+            snapshot
+                .preferences
+                .insert("contrast".into(), boolean(preferences.high_contrast, true));
+            snapshot.preferences.insert(
+                "text-scale".into(),
+                number(f64::from(preferences.text_scale), true),
+            );
+        }
+        Err(error) => snapshot.errors.push(error.to_string()),
+    }
     match configuration() {
         Ok(config) => {
             for key in [
@@ -74,6 +86,22 @@ pub fn discover(snapshot: &mut Snapshot) {
 }
 
 pub fn set(key: &str, value: Value) -> Result<(), String> {
+    if matches!(key, "contrast" | "text-scale") {
+        let mut preferences =
+            creamui_theme_loader::read_system_accessibility().map_err(|error| error.to_string())?;
+        match (key, value) {
+            ("contrast", Value::Bool(value)) => preferences.high_contrast = value,
+            ("text-scale", Value::Number(value))
+                if value.is_finite() && (0.75..=2.0).contains(&value) =>
+            {
+                preferences.text_scale = value as f32
+            }
+            _ => return Err("Invalid accessibility preference".into()),
+        }
+        creamui_theme_loader::write_system_accessibility(preferences)
+            .map_err(|error| error.to_string())?;
+        return creamui_theme_watch::publish().map_err(|error| error.to_string());
+    }
     let (section, property) = path(key).ok_or("Unknown Blair preference")?;
     let value = match (key, value) {
         ("cursor-theme" | "icon-theme", Value::Text(value)) if !value.trim().is_empty() => {

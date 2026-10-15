@@ -88,6 +88,14 @@ pub fn run() {
 
     AppBuilder::new()
         .on_started(move |app| {
+            let appearance = state.appearance.clone();
+            let window = state.window.clone();
+            state.native.on_appearance_change(move |next| {
+                if let Some(handle) = window.borrow().as_ref() {
+                    handle.set_theme(coconut_plugin_kit::design::coconut_appearance(&next));
+                }
+                appearance.set(next);
+            });
             state.native.start(app.clone(), state.users.clone());
             state.window_settings.start(app.clone());
             watch_connectivity(app.clone(), network_changes, connectivity_revision.clone());

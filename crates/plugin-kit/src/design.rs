@@ -13,7 +13,6 @@ pub const PILL_RADIUS: f32 = 16.0;
 
 /// Apply Coconut's geometry and typography without replacing CreamUI's palette.
 pub fn coconut_theme(mut theme: Theme) -> Theme {
-    theme.typography.body = 13.0;
     theme.font_family = FONT_FAMILY;
     theme.spacing_large = 28.0;
     theme.button_radius = CONTROL_RADIUS;
@@ -73,6 +72,9 @@ pub fn load_fonts() {
 
 pub fn island_surface(theme: Theme) -> Color {
     let color = theme.colors.surface;
+    if theme.high_contrast {
+        return color;
+    }
     Color::rgba(
         color.r,
         color.g,
@@ -89,6 +91,9 @@ pub fn island_surface(theme: Theme) -> Color {
 
 pub fn dock_surface(theme: Theme) -> Color {
     let color = theme.colors.surface;
+    if theme.high_contrast {
+        return color;
+    }
     Color::rgba(
         color.r,
         color.g,
@@ -204,6 +209,37 @@ mod tests {
                 "{label}: layout and paint must resolve the same face"
             );
         }
+    }
+
+    #[test]
+    fn themed_shell_labels_measure_larger_with_accessibility_text_scaling() {
+        use creamui_core::Widget;
+        let measure = |scale: f32| {
+            creamui_reactive::with_context_scope(|| {
+                load_fonts();
+                let mut theme = Theme::dark();
+                theme.text_scale = scale;
+                theme.typography.body *= scale;
+                creamui_reactive::provide_context(creamui_theme::ThemeProvider::new(
+                    coconut_theme(theme),
+                ));
+                let label = creamui_widgets::Text::new("Brightness and volume").font_size(13.0);
+                label.measure().unwrap()(
+                    creamui_core::layout::Size {
+                        width: None,
+                        height: None,
+                    },
+                    creamui_core::layout::Size {
+                        width: creamui_core::layout::AvailableSpace::MaxContent,
+                        height: creamui_core::layout::AvailableSpace::MaxContent,
+                    },
+                )
+            })
+        };
+        let normal = measure(1.0);
+        let large = measure(1.5);
+        assert!(large.width > normal.width * 1.4);
+        assert!(large.height > normal.height * 1.4);
     }
     #[test]
     fn dark_is_neutral_and_midnight_remains_darker_after_reload() {
