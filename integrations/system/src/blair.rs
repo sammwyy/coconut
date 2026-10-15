@@ -27,6 +27,8 @@ fn path(key: &str) -> Option<(&'static str, &'static str)> {
     match key {
         "cursor-theme" => Some(("cursor", "theme")),
         "icon-theme" => Some(("appearance", "icon_theme")),
+        "sticky-keys" => Some(("accessibility", "sticky_keys")),
+        "visual-alerts" => Some(("accessibility", "visual_alerts")),
         _ => None,
     }
 }
@@ -38,14 +40,17 @@ pub fn supports(key: &str) -> bool {
 pub fn discover(snapshot: &mut Snapshot) {
     match configuration() {
         Ok(config) => {
-            for key in ["cursor-theme", "icon-theme"] {
+            for key in ["cursor-theme", "icon-theme", "sticky-keys", "visual-alerts"] {
                 let (section, property) = path(key).unwrap();
                 let value = config
                     .get(section)
-                    .and_then(|section| section.get(property))
-                    .and_then(toml::Value::as_str);
+                    .and_then(|section| section.get(property));
                 let preference = Preference {
-                    value: value.map(|value| Value::Text(value.into())),
+                    value: value.and_then(|value| match value {
+                        toml::Value::String(value) => Some(Value::Text(value.clone())),
+                        toml::Value::Boolean(value) => Some(Value::Bool(*value)),
+                        _ => None,
+                    }),
                     writable: true,
                     ..Default::default()
                 };
@@ -60,14 +65,15 @@ pub fn discover(snapshot: &mut Snapshot) {
 
 pub fn set(key: &str, value: Value) -> Result<(), String> {
     let (section, property) = path(key).ok_or("Unknown Blair preference")?;
-    let Value::Text(value) = value else {
-        return Err("Choose a theme name".into());
+    let value = match (key, value) {
+        ("cursor-theme" | "icon-theme", Value::Text(value)) if !value.trim().is_empty() => {
+            toml::Value::String(value)
+        }
+        ("sticky-keys" | "visual-alerts", Value::Bool(value)) => toml::Value::Boolean(value),
+        _ => return Err("Invalid Blair preference value".into()),
     };
-    if value.trim().is_empty() {
-        return Err("Theme name cannot be empty".into());
-    }
     let mut config = configuration()?;
-    put(&mut config, section, property, toml::Value::String(value))?;
+    put(&mut config, section, property, value)?;
     save(&config)
 }
 

@@ -468,6 +468,9 @@ fn discover_preferences(snapshot: &mut Snapshot) {
         "notifications",
         "idle-dim",
     ] {
+        if snapshot.session == "Blair" && blair::supports(key) {
+            continue;
+        }
         let (schema, property, invert) = gnome_mapping(key).unwrap();
         let pref = if gnome {
             command("gsettings", &["get", schema, property])
