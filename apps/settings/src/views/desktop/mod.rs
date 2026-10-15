@@ -23,6 +23,11 @@ pub(crate) fn overview() -> creamui_core::BoxedWidget {
 fn build(state: &State, config: &Signal<ShellConfig>, nav: &creamui_router::Router) -> BoxedWidget {
     let c = config.get();
     let write = config.clone();
+    let auto_hide = c.dockbar.auto_hide;
+    let auto_hide_control: BoxedWidget = Box::new(Switch::new(auto_hide, move || {
+        update_config(&write, |config| config.dockbar.auto_hide = !auto_hide)
+    }));
+    let write = config.clone();
     let panel: BoxedWidget = Box::new(Switch::new(c.statusbar.enabled, move || {
         update_config(&write, |c| c.statusbar.enabled = !c.statusbar.enabled)
     }));
@@ -75,7 +80,12 @@ fn build(state: &State, config: &Signal<ShellConfig>, nav: &creamui_router::Rout
                 "Dock",
                 vec![
                     item("Dock position", "Screen edge", position, || {}),
-                    unsupported("Auto-hide dock", "Automatic hiding is not available yet"),
+                    item(
+                        "Auto-hide dock",
+                        "Reveal at the screen edge; keep visible while a panel is open",
+                        auto_hide_control,
+                        || {},
+                    ),
                     item(
                         "Dock size",
                         format!("{:.0} px", c.dockbar.thickness),

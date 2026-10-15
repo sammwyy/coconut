@@ -1,3 +1,4 @@
+mod auto_hide;
 mod bar;
 mod battery;
 mod connectivity;
@@ -411,6 +412,15 @@ fn append_bars(
             (length, thickness + margin)
         };
         let dock = dock.clone();
+        let visibility = auto_hide::AutoHide::new(
+            dock.auto_hide,
+            (width, height),
+            position,
+            app.clone(),
+            panel_host.clone(),
+        );
+        let visibility_ready = visibility.clone();
+        let (initial_width, initial_height) = visibility.initial_size();
         let registry = registry.clone();
         let shared = shared.clone();
         let open_panel = panel_host.dispatcher_for(index);
@@ -421,8 +431,8 @@ fn append_bars(
         app.append_window(
             WindowOptions {
                 title: "Coconut".into(),
-                width,
-                height,
+                width: initial_width,
+                height: initial_height,
                 decorations: false,
                 resizable: false,
                 transparent: true,
@@ -435,12 +445,22 @@ fn append_bars(
             },
             Color::rgba(0, 0, 0, 0),
             move |window: WindowHandle| {
+                visibility_ready.install(window.clone());
                 ready_backend.prepare_window(&window);
                 themed_windows.borrow_mut().push(window.clone());
                 dock_windows.borrow_mut().push(window.clone());
                 panel_host.set_dock(index, window, position, thickness as f32);
             },
             move |viewport: Size| -> BoxedWidget {
+                if !visibility.expanded.get() {
+                    return Box::new(creamui_widgets::RawView::new(creamui_core::layout::Style {
+                        size: creamui_core::layout::Size {
+                            width: creamui_core::layout::Dimension::Percent(1.0),
+                            height: creamui_core::layout::Dimension::Percent(1.0),
+                        },
+                        ..Default::default()
+                    }));
+                }
                 build_dock(viewport, &dock, &registry, &shared, &open_panel)
             },
         );

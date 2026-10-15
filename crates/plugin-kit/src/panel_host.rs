@@ -33,6 +33,8 @@ pub struct PanelHost {
     theme: Cell<Theme>,
     backend: RenderBackend,
     open_panels: RefCell<HashMap<&'static str, WindowHandle>>,
+    panel_revision: creamui_reactive::Signal<u64>,
+    pending_panel: Cell<bool>,
 }
 
 /// A dock's popup-anchor window plus the position/thickness [`popup_for`]
@@ -59,6 +61,8 @@ impl PanelHost {
             theme: Cell::new(crate::design::coconut_theme(Theme::default())),
             backend,
             open_panels: RefCell::new(HashMap::new()),
+            panel_revision: creamui_reactive::Signal::new(0),
+            pending_panel: Cell::new(false),
         })
     }
 
@@ -94,6 +98,16 @@ impl PanelHost {
         }
     }
 
+    pub fn has_open_panel(&self) -> bool {
+        self.panel_revision.get();
+        self.pending_panel.get()
+            || self
+                .open_panels
+                .borrow()
+                .values()
+                .any(WindowHandle::is_open)
+    }
+
     /// Returns the `open_panel(id, at)` closure bound to `dock_index`.
     pub fn dispatcher_for(self: &Rc<Self>, dock_index: usize) -> Rc<dyn Fn(&'static str, Point)> {
         let host = Rc::clone(self);
@@ -107,9 +121,12 @@ impl PanelHost {
             eprintln!("plugin-kit: unknown panel id '{id}'; ignoring open request");
             return;
         };
-        if let Some(handle) = self.open_panels.borrow_mut().remove(id) {
+        let previous = self.open_panels.borrow_mut().remove(id);
+        if let Some(handle) = previous {
             if handle.is_open() {
                 handle.close();
+                self.panel_revision
+                    .update(|revision| *revision = revision.wrapping_add(1));
                 return;
             }
         }
@@ -122,6 +139,9 @@ impl PanelHost {
             .map(|(_, window)| window)
             .filter(|window| window.is_open())
             .collect();
+        self.pending_panel.set(true);
+        self.panel_revision
+            .update(|revision| *revision = revision.wrapping_add(1));
         if others.is_empty() {
             self.do_open(dock_index, id, at, panel);
             return;
@@ -146,6 +166,9 @@ impl PanelHost {
         panel: Rc<dyn Panel>,
     ) {
         let Some(anchor) = self.docks.borrow().get(&dock_index).cloned() else {
+            self.pending_panel.set(false);
+            self.panel_revision
+                .update(|revision| *revision = revision.wrapping_add(1));
             eprintln!(
                 "plugin-kit: no dock registered at index {dock_index}; ignoring open request"
             );
@@ -171,8 +194,21 @@ impl PanelHost {
             Color::rgba(0, 0, 0, 0),
             move |window| {
                 window.set_always_on_top(true);
-                close_on_focus_lost(&window);
+                let host = Rc::downgrade(&host_for_ready);
+                let handle = window.clone();
+                window.on_focus_lost(move || {
+                    handle.close();
+                    if let Some(host) = host.upgrade() {
+                        host.open_panels.borrow_mut().remove(id);
+                        host.panel_revision
+                            .update(|revision| *revision = revision.wrapping_add(1));
+                    }
+                });
                 host_for_ready.open_panels.borrow_mut().insert(id, window);
+                host_for_ready.pending_panel.set(false);
+                host_for_ready
+                    .panel_revision
+                    .update(|revision| *revision = revision.wrapping_add(1));
             },
             move |resolved_size| {
                 let close_host = Rc::clone(&host_for_close);
@@ -180,6 +216,9 @@ impl PanelHost {
                     if let Some(window) = close_host.open_panels.borrow_mut().remove(id) {
                         window.close();
                     }
+                    close_host
+                        .panel_revision
+                        .update(|revision| *revision = revision.wrapping_add(1));
                 });
                 panel.build(&PanelRenderContext {
                     size: resolved_size,
@@ -191,14 +230,6 @@ impl PanelHost {
             },
         );
     }
-}
-
-/// Registers a callback that closes `window` as soon as it loses focus —
-/// the standard dismiss-on-click-outside behavior for every popup. Moved
-/// verbatim from `apps/shell/src/lib.rs::close_on_focus_lost`.
-fn close_on_focus_lost(window: &WindowHandle) {
-    let handle = window.clone();
-    window.on_focus_lost(move || handle.close());
 }
 
 /// Computes the anchored, gravity-aware [`PopupOptions`] for a panel opened

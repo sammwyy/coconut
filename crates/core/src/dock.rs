@@ -83,6 +83,7 @@ pub struct DockConfig {
     /// as it was.
     #[serde(default = "default_true")]
     pub enabled: bool,
+    pub auto_hide: bool,
     pub position: DockPosition,
     pub direction: Option<DockDirection>,
     pub align: DockAlign,
@@ -156,6 +157,7 @@ impl Default for DockConfig {
     fn default() -> Self {
         Self {
             enabled: true,
+            auto_hide: false,
             position: DockPosition::default(),
             direction: None,
             align: DockAlign::default(),
