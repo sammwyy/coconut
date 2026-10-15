@@ -120,9 +120,14 @@ impl State {
                 }))
             }
             Some(Value::Number(number))
-                if matches!(key.as_str(), "volume" | "brightness" | "text-scale") =>
+                if matches!(
+                    key.as_str(),
+                    "volume" | "brightness" | "text-scale" | "zoom-factor"
+                ) =>
             {
-                let (base, scale) = if key == "text-scale" {
+                let (base, scale) = if key == "zoom-factor" {
+                    (1.0, 7.0)
+                } else if key == "text-scale" {
                     (0.75, 1.25)
                 } else {
                     (0.0, 1.0)

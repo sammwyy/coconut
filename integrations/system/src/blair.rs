@@ -29,6 +29,8 @@ fn path(key: &str) -> Option<(&'static str, &'static str)> {
         "icon-theme" => Some(("appearance", "icon_theme")),
         "sticky-keys" => Some(("accessibility", "sticky_keys")),
         "visual-alerts" => Some(("accessibility", "visual_alerts")),
+        "zoom" => Some(("accessibility", "zoom")),
+        "zoom-factor" => Some(("accessibility", "zoom_factor")),
         _ => None,
     }
 }
@@ -40,7 +42,14 @@ pub fn supports(key: &str) -> bool {
 pub fn discover(snapshot: &mut Snapshot) {
     match configuration() {
         Ok(config) => {
-            for key in ["cursor-theme", "icon-theme", "sticky-keys", "visual-alerts"] {
+            for key in [
+                "cursor-theme",
+                "icon-theme",
+                "sticky-keys",
+                "visual-alerts",
+                "zoom",
+                "zoom-factor",
+            ] {
                 let (section, property) = path(key).unwrap();
                 let value = config
                     .get(section)
@@ -49,6 +58,7 @@ pub fn discover(snapshot: &mut Snapshot) {
                     value: value.and_then(|value| match value {
                         toml::Value::String(value) => Some(Value::Text(value.clone())),
                         toml::Value::Boolean(value) => Some(Value::Bool(*value)),
+                        toml::Value::Float(value) => Some(Value::Number(*value)),
                         _ => None,
                     }),
                     writable: true,
@@ -69,7 +79,14 @@ pub fn set(key: &str, value: Value) -> Result<(), String> {
         ("cursor-theme" | "icon-theme", Value::Text(value)) if !value.trim().is_empty() => {
             toml::Value::String(value)
         }
-        ("sticky-keys" | "visual-alerts", Value::Bool(value)) => toml::Value::Boolean(value),
+        ("sticky-keys" | "visual-alerts" | "zoom", Value::Bool(value)) => {
+            toml::Value::Boolean(value)
+        }
+        ("zoom-factor", Value::Number(value))
+            if value.is_finite() && (1.0..=8.0).contains(&value) =>
+        {
+            toml::Value::Float(value)
+        }
         _ => return Err("Invalid Blair preference value".into()),
     };
     let mut config = configuration()?;

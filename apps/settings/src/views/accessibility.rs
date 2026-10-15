@@ -20,6 +20,11 @@ fn build(state: &State, window: &crate::views::windows::WindowState) -> BoxedWid
                         "Increase contrast between interface elements",
                     ),
                     state.preference("Screen zoom", "zoom", "Magnify the desktop"),
+                    state.preference(
+                        "Magnification",
+                        "zoom-factor",
+                        "Desktop zoom factor, from 1 to 8",
+                    ),
                     state.preference("Text size", "text-scale", "Interface text scaling"),
                     window.reduce_motion(state.preference(
                         "Reduce motion",
