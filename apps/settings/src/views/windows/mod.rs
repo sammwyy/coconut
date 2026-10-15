@@ -289,6 +289,38 @@ impl WindowState {
             })
         }))
     }
+    fn focus_policy_control(&self) -> BoxedWidget {
+        if !self.available {
+            return value("Unavailable");
+        }
+        let follows = str_at(&self.config.get(), &["focus", "policy"], "click") == "sloppy";
+        let writer = self.writer();
+        Box::new(Switch::new(follows, move || {
+            writer.update(|config| {
+                put(
+                    config,
+                    &["focus", "policy"],
+                    toml::Value::String(if follows { "click" } else { "sloppy" }.into()),
+                )
+            });
+        }))
+    }
+    fn centered_control(&self) -> BoxedWidget {
+        if !self.available {
+            return value("Unavailable");
+        }
+        let centered = bool_at(&self.config.get(), &["window", "center_new_windows"], true);
+        let writer = self.writer();
+        Box::new(Switch::new(centered, move || {
+            writer.update(|config| {
+                put(
+                    config,
+                    &["window", "center_new_windows"],
+                    toml::Value::Boolean(!centered),
+                )
+            });
+        }))
+    }
     pub fn effects_control(&self) -> BoxedWidget {
         if !self.available {
             return Box::new(Text::secondary("Unavailable").size(TextSize::Sm));
@@ -994,7 +1026,7 @@ pub fn build_touchpad(_: Size, state: &WindowState) -> BoxedWidget {
 
 pub fn build_focus(_: Size, state: &WindowState) -> BoxedWidget {
     let c = state.config.get();
-    let controls = [
+    let mut controls: Vec<BoxedWidget> = [
         ("Raise on focus", "raise_on_focus", true),
         ("Focus new windows", "focus_new_windows", true),
         ("Focus previous on close", "focus_previous_on_close", true),
@@ -1012,6 +1044,7 @@ pub fn build_focus(_: Size, state: &WindowState) -> BoxedWidget {
         )
     })
     .collect();
+    controls.insert(0, row("Focus follows mouse", state.focus_policy_control()));
     finish(
         state,
         "Focus",
@@ -1643,7 +1676,12 @@ fn build(
             card(
                 "Behavior & layout",
                 vec![
-                    unsupported("Focus follows mouse", "Only click-to-focus is available"),
+                    item(
+                        "Focus follows mouse",
+                        "Focus the window under the pointer",
+                        window.focus_policy_control(),
+                        || {},
+                    ),
                     item(
                         "Default layout",
                         "Applied to new windows",
@@ -1656,9 +1694,11 @@ fn build(
                         window.gaps_control(),
                         || {},
                     ),
-                    unsupported(
+                    item(
                         "Center new floating windows",
-                        "Centered placement is not available yet",
+                        "Place new floating windows in the center of their work area",
+                        window.centered_control(),
+                        || {},
                     ),
                 ],
             ),
