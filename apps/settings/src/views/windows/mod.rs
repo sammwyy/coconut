@@ -1072,6 +1072,105 @@ pub fn build_focus(_: Size, state: &WindowState) -> BoxedWidget {
     )
 }
 
+pub fn build_hot_corners(_: Size, state: &WindowState) -> BoxedWidget {
+    const ACTIONS: &[(&str, &str)] = &[
+        ("none", "Off"),
+        ("next_workspace", "Next workspace"),
+        ("previous_workspace", "Previous workspace"),
+        ("show_desktop", "Show desktop"),
+        ("exec", "Run command"),
+    ];
+    const CORNERS: &[(&str, &[&str], &[&str])] = &[
+        (
+            "Top left",
+            &["hot_corners", "top_left", "action"],
+            &["hot_corners", "top_left", "command"],
+        ),
+        (
+            "Top right",
+            &["hot_corners", "top_right", "action"],
+            &["hot_corners", "top_right", "command"],
+        ),
+        (
+            "Bottom left",
+            &["hot_corners", "bottom_left", "action"],
+            &["hot_corners", "bottom_left", "command"],
+        ),
+        (
+            "Bottom right",
+            &["hot_corners", "bottom_right", "action"],
+            &["hot_corners", "bottom_right", "command"],
+        ),
+    ];
+    let config = state.config.get();
+    let enabled = bool_at(&config, &["hot_corners", "enabled"], true);
+    let writer = state.writer();
+    let mut groups = vec![setting_group(
+        "Activation",
+        "Leave a corner before activating it again. Commands run in your session.",
+        vec![
+            row(
+                "Enable hot corners",
+                Box::new(Switch::new(enabled, move || {
+                    writer.update(|config| {
+                        put(
+                            config,
+                            &["hot_corners", "enabled"],
+                            toml::Value::Boolean(!enabled),
+                        )
+                    })
+                })),
+            ),
+            integer_field(
+                state,
+                "Dwell time (ms)",
+                &["hot_corners", "dwell_ms"],
+                0,
+                Some(10_000),
+            ),
+            integer_field(
+                state,
+                "Corner size (px)",
+                &["hot_corners", "threshold"],
+                1,
+                Some(64),
+            ),
+        ],
+    )];
+    for &(label, action_path, command_path) in CORNERS {
+        let selected = choice_at(&config, action_path, ACTIONS, "none");
+        let writer = state.writer();
+        let command = str_at(&config, command_path, "").to_owned();
+        groups.push(setting_group(
+            label,
+            "Set a command before choosing Run command.",
+            vec![
+                row(
+                    "Action",
+                    choice_control(state, action_path, ACTIONS, selected),
+                ),
+                row(
+                    "Command",
+                    Box::new(
+                        TextInput::new(command, move |value| {
+                            writer.update(|config| {
+                                put(config, command_path, toml::Value::String(value))
+                            });
+                        })
+                        .placeholder("foot"),
+                    ),
+                ),
+            ],
+        ));
+    }
+    finish(
+        state,
+        "Hot corners",
+        "Choose an action for each screen corner.",
+        groups,
+    )
+}
+
 pub fn build_shortcuts(_: Size, state: &ShortcutState) -> BoxedWidget {
     let mut body = vec![
         shortcut_group("System", built_in_shortcuts(state)),

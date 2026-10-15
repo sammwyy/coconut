@@ -1,4 +1,4 @@
-use crate::components::{section, update_config};
+use crate::components::section;
 use coconut_core::ShellConfig;
 use coconut_plugin_kit::installed_icon_themes;
 use creamui_core::layout::FlexDirection;
@@ -24,7 +24,7 @@ pub fn icon_packs(_: Size, config: &Signal<ShellConfig>) -> BoxedWidget {
         installed_icon_themes(),
         &selected,
         config,
-        |shell| &mut shell.appearance.icon_theme,
+        "icon-theme",
     )
 }
 
@@ -36,7 +36,7 @@ pub fn sound_themes(_: Size, config: &Signal<ShellConfig>) -> BoxedWidget {
         list_packs("sounds"),
         &selected,
         config,
-        |shell| &mut shell.appearance.sound_theme,
+        "sound-theme",
     )
 }
 
@@ -48,7 +48,7 @@ pub fn cursor_themes(_: Size, config: &Signal<ShellConfig>) -> BoxedWidget {
         list_cursor_packs(),
         &selected,
         config,
-        |shell| &mut shell.appearance.cursor_theme,
+        "cursor-theme",
     )
 }
 
@@ -58,8 +58,23 @@ fn packs(
     mut packs: Vec<String>,
     selected: &str,
     config: &Signal<ShellConfig>,
-    field: impl Fn(&mut ShellConfig) -> &mut String + Copy + 'static,
+    preference: &'static str,
 ) -> BoxedWidget {
+    let context = creamui_reactive::use_context::<crate::views::context::ViewContext>();
+    let native = context.native.clone();
+    let snapshot = native.snapshot.get();
+    let selected = snapshot
+        .preferences
+        .get(preference)
+        .and_then(|preference| preference.value.as_ref())
+        .and_then(|value| {
+            if let coconut_api::settings::Value::Text(value) = value {
+                Some(value.as_str())
+            } else {
+                None
+            }
+        })
+        .unwrap_or(selected);
     if !packs.iter().any(|pack| pack == selected) {
         packs.insert(0, selected.to_owned());
     }
@@ -70,6 +85,8 @@ fn packs(
             let active = pack == selected;
             let set_pack = config.clone();
             let selected_pack = pack.clone();
+            let native = native.clone();
+            let disabled = native.busy.get();
             let preview = if active {
                 theme.colors.accent
             } else {
@@ -81,7 +98,8 @@ fn packs(
                     background={theme.colors.surface_elevated}
                     border={(if active { theme.colors.accent } else { theme.colors.border }, if active { 2.0 } else { 1.0 })}
                     corner_radius={theme.card_radius}
-                    on_click={move || update_config(&set_pack, |shell| *field(shell) = selected_pack.clone())}
+                    disabled={disabled}
+                    on_click={move || native.apply_appearance(set_pack.clone(), preference, selected_pack.clone())}
                 >
                     <Flex direction={FlexDirection::Column} size={(CARD_W, CARD_H)} padding={10.0} gap={10.0} align={Align::Start} justify={Justify::Between}>
                         <Flex size={(42.0, 42.0)} background={preview} corner_radius={theme.radius_medium} />
@@ -94,9 +112,12 @@ fn packs(
     section(
         title,
         subtitle,
-        vec![Box::new(jsx! {
-            <Flex direction={FlexDirection::Row} wrap={Wrap::Wrap} gap={theme.spacing_medium} children={cards} />
-        })],
+        vec![
+            Box::new(jsx! {
+                <Flex direction={FlexDirection::Row} wrap={Wrap::Wrap} gap={theme.spacing_medium} children={cards} />
+            }),
+            Box::new(Text::secondary(native.status.get()).size(TextSize::Sm)),
+        ],
     )
 }
 

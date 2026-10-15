@@ -153,6 +153,55 @@ impl State {
             },
         );
     }
+    pub(crate) fn apply_appearance(
+        &self,
+        config: Signal<coconut_core::ShellConfig>,
+        key: &'static str,
+        theme: String,
+    ) {
+        let requested = theme.clone();
+        let save_shell = move || {
+            crate::components::update_config(&config, |config| match key {
+                "cursor-theme" => config.appearance.cursor_theme = theme.clone(),
+                "icon-theme" => config.appearance.icon_theme = theme.clone(),
+                "sound-theme" => config.appearance.sound_theme = theme.clone(),
+                _ => unreachable!("known appearance preference"),
+            })
+        };
+        if self.snapshot.peek().session != "Blair" || key == "sound-theme" {
+            save_shell();
+            return;
+        }
+        if self.busy.peek() {
+            return;
+        }
+        let Some(app) = self.app.borrow().clone() else {
+            return;
+        };
+        let backend = self.backend.clone();
+        let state = self.clone();
+        self.busy.set(true);
+        self.status.set("Applying appearance…".into());
+        app.spawn_background(
+            move || {
+                backend.apply(Action::Set {
+                    key: key.into(),
+                    value: Value::Text(requested),
+                })
+            },
+            move |result| {
+                state.busy.set(false);
+                match result {
+                    Ok(_) => {
+                        save_shell();
+                        state.status.set("Appearance applied".into());
+                    }
+                    Err(error) => state.status.set(format!("Could not apply: {error}")),
+                }
+                state.refresh();
+            },
+        );
+    }
     pub(crate) fn apply(&self, action: Action) {
         if self.busy.peek() {
             if let Action::Set { key, value } = action {
