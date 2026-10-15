@@ -2,6 +2,7 @@ use crate::components::{group, row, section, section_label};
 use crate::routes::destination::Section;
 use crate::{components::system_settings::*, routes::detail::Page, services::settings::State};
 use blair_client::BlairClient;
+use blair_protocol::InputCapabilities;
 use coconut_core::{CustomShortcut, ShellShortcut, ShortcutAction, ShortcutConfig};
 use creamui_core::layout::{FlexDirection, Style};
 use creamui_core::{BoxedWidget, Key, KeyInput, Size, Styled, Widget};
@@ -75,6 +76,13 @@ pub struct WindowState {
     inactive_border_picker: ColorPickerController,
     numeric_inputs: RefCell<HashMap<String, TextController>>,
     layout_select: SelectController,
+    input_capabilities: Signal<InputCapabilityState>,
+}
+
+#[derive(Clone, Default)]
+struct InputCapabilityState {
+    capabilities: Option<InputCapabilities>,
+    error: Option<String>,
 }
 
 pub struct ShortcutState {
@@ -396,6 +404,34 @@ fn load_configuration() -> Result<String, String> {
     })
 }
 
+fn load_input_capabilities() -> Result<InputCapabilities, String> {
+    let runtime = blair_runtime()?;
+    runtime.block_on(async {
+        BlairClient::connect()
+            .await
+            .map_err(|error| error.to_string())?
+            .input_capabilities()
+            .await
+            .map_err(|error| error.to_string())
+    })
+}
+
+fn set_input_capabilities(
+    target: &Signal<InputCapabilityState>,
+    result: Result<InputCapabilities, String>,
+) {
+    target.set(match result {
+        Ok(capabilities) => InputCapabilityState {
+            capabilities: Some(capabilities),
+            error: None,
+        },
+        Err(error) => InputCapabilityState {
+            capabilities: None,
+            error: Some(error),
+        },
+    });
+}
+
 fn save_configuration(configuration: &str) -> Result<(), String> {
     let runtime = blair_runtime()?;
     let saved = runtime.block_on(async {
@@ -418,6 +454,7 @@ struct Writer {
     status: Signal<String>,
     app: Rc<RefCell<Option<creamui_render::AppHandle>>>,
     busy: Signal<bool>,
+    input_capabilities: Signal<InputCapabilityState>,
 }
 
 impl WindowState {
@@ -451,6 +488,7 @@ impl WindowState {
             layout_select: SelectController::new(usize::from(
                 str_at(&config, &["window", "layout"], "floating") == "tiling",
             )),
+            input_capabilities: Signal::new(InputCapabilityState::default()),
             confirmed: Signal::new(config.clone()),
             config: Signal::new(config),
             available,
@@ -479,6 +517,7 @@ impl WindowState {
             status: self.status.clone(),
             app: self.app.clone(),
             busy: self.busy.clone(),
+            input_capabilities: self.input_capabilities.clone(),
         }
     }
     fn hot_reload(&self) -> bool {
@@ -501,7 +540,11 @@ impl WindowState {
         Box::new(Text::secondary(self.status.get()).size(TextSize::Sm))
     }
     pub fn start(&self, app: creamui_render::AppHandle) {
-        *self.app.borrow_mut() = Some(app);
+        *self.app.borrow_mut() = Some(app.clone());
+        let input_capabilities = self.input_capabilities.clone();
+        app.spawn_background(load_input_capabilities, move |result| {
+            set_input_capabilities(&input_capabilities, result);
+        });
     }
     pub fn layout_control(&self) -> BoxedWidget {
         if !self.available {
@@ -680,6 +723,7 @@ impl Writer {
         self.busy.set(true);
         self.status.set("Applying with Blair…".into());
         let writer = self.clone();
+        let refresh_app = app.clone();
         let attempted = candidate.clone();
         app.spawn_background(
             move || {
@@ -705,6 +749,10 @@ impl Writer {
                         writer.confirmed.set(applied.clone());
                         writer.config.set(next.clone());
                         writer.status.set("Changes applied by Blair".into());
+                        let input_capabilities = writer.input_capabilities.clone();
+                        refresh_app.spawn_background(load_input_capabilities, move |result| {
+                            set_input_capabilities(&input_capabilities, result);
+                        });
                         if next != applied {
                             writer.save();
                         }
@@ -1227,36 +1275,49 @@ pub fn build_keyboard(_: Size, state: &WindowState) -> BoxedWidget {
 
 pub fn build_mouse(_: Size, state: &WindowState) -> BoxedWidget {
     let c = state.config.get();
+    let capabilities = state.input_capabilities.get();
+    let supported = capabilities
+        .capabilities
+        .as_ref()
+        .is_some_and(|info| info.devices.iter().any(|device| device.sensitivity));
     let mouse_sensitivity = at(&c, &["input", "mouse", "sensitivity"])
         .and_then(toml::Value::as_float)
         .unwrap_or(0.0);
-    let writer = state.writer();
-    let sensitivity_control: BoxedWidget = Box::new(
-        TextInput::new(mouse_sensitivity.to_string(), move |value| {
-            if let Ok(value) = value.parse::<f64>() {
-                if value.is_finite() && (-1.0..=1.0).contains(&value) {
-                    writer.update(|c| {
-                        put(
-                            c,
-                            &["input", "mouse", "sensitivity"],
-                            toml::Value::Float(value),
-                        )
-                    });
+    let sensitivity_control: BoxedWidget = if supported {
+        let writer = state.writer();
+        Box::new(
+            TextInput::new(mouse_sensitivity.to_string(), move |value| {
+                if let Ok(value) = value.parse::<f64>() {
+                    if value.is_finite() && (-1.0..=1.0).contains(&value) {
+                        writer.update(|c| {
+                            put(
+                                c,
+                                &["input", "mouse", "sensitivity"],
+                                toml::Value::Float(value),
+                            )
+                        });
+                    }
                 }
-            }
-        })
-        .placeholder("0.0"),
-    );
+            })
+            .placeholder("0.0"),
+        )
+    } else {
+        unavailable_input_control(&capabilities, "pointer sensitivity")
+    };
     finish(
         state,
         "Mouse",
-        "Sensitivity is a precise value from -1.0 (slower) to 1.0 (faster).",
+        &input_capability_description(
+            &capabilities,
+            "Sensitivity is a precise value from -1.0 (slower) to 1.0 (faster).",
+        ),
         vec![group(vec![row("Sensitivity", sensitivity_control)])],
     )
 }
 
 pub fn build_touchpad(_: Size, state: &WindowState) -> BoxedWidget {
     let c = state.config.get();
+    let capabilities = state.input_capabilities.get();
     let touchpad_controls = [
         ("Tap to click", "tap"),
         ("Natural scrolling", "natural_scroll"),
@@ -1265,21 +1326,68 @@ pub fn build_touchpad(_: Size, state: &WindowState) -> BoxedWidget {
     .into_iter()
     .map(|(label, key)| {
         let value = bool_at(&c, &["input", "touchpad", key], key != "natural_scroll");
-        let writer = state.writer();
-        row(
-            label,
+        let supported = capabilities.capabilities.as_ref().is_some_and(|info| {
+            info.devices.iter().any(|device| match key {
+                "tap" => device.tap,
+                "natural_scroll" => device.natural_scroll,
+                "disable_while_typing" => device.disable_while_typing,
+                _ => false,
+            })
+        });
+        let control: BoxedWidget = if supported {
+            let writer = state.writer();
             Box::new(Switch::new(value, move || {
                 writer.update(|c| put(c, &["input", "touchpad", key], toml::Value::Boolean(!value)))
-            })) as BoxedWidget,
-        )
+            }))
+        } else {
+            unavailable_input_control(&capabilities, label)
+        };
+        row(label, control)
     })
     .collect();
     finish(
         state,
         "Touchpad",
-        "These only affect touchpad devices.",
+        &input_capability_description(&capabilities, "These only affect touchpad devices."),
         vec![group(touchpad_controls)],
     )
+}
+
+fn unavailable_input_control(state: &InputCapabilityState, setting: &str) -> BoxedWidget {
+    let message = match &state.error {
+        Some(error) => format!("Unavailable: {error}"),
+        None => match &state.capabilities {
+            Some(info) if info.backend == "winit" => "Controlled by the host compositor".into(),
+            Some(_) => format!("No connected device supports {setting}"),
+            None => "Checking connected input devices…".into(),
+        },
+    };
+    Box::new(Text::secondary(message).size(TextSize::Sm))
+}
+
+fn input_capability_description(state: &InputCapabilityState, fallback: &str) -> String {
+    match &state.error {
+        Some(error) => format!("{fallback} Could not inspect Blair input capabilities: {error}"),
+        None => match &state.capabilities {
+            None => format!("{fallback} Checking connected input devices…"),
+            Some(info) => {
+                let devices = info.devices.len();
+                let errors = if info.errors.is_empty() {
+                    String::new()
+                } else {
+                    format!(" Last input error: {}", info.errors.join("; "))
+                };
+                if info.backend == "winit" {
+                    format!("{fallback} This nested session receives pointer settings from its host compositor.{errors}")
+                } else {
+                    format!(
+                        "{fallback} Blair detected {devices} input device{}.{errors}",
+                        if devices == 1 { "" } else { "s" }
+                    )
+                }
+            }
+        },
+    }
 }
 
 pub fn build_focus(_: Size, state: &WindowState) -> BoxedWidget {
