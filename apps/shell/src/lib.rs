@@ -66,7 +66,9 @@ pub fn run() {
     let shared = SharedState::default();
     shared.insert(bar::ModuleConfigRevision(Signal::new(0)));
     shared.insert(WindowIconResolver(Signal::new(
-        coconut_plugin_kit::IconResolver::new(initial_config.appearance.icon_theme.clone()),
+        coconut_plugin_kit::ApplicationIconResolver::new(
+            initial_config.appearance.icon_theme.clone(),
+        ),
     )));
 
     let windows = Signal::new(integrations.desktop.windows());
@@ -506,7 +508,9 @@ fn schedule_runtime_events(
                             if let Some(resolver) = shared.get::<WindowIconResolver>() {
                                 resolver
                                     .0
-                                    .set(coconut_plugin_kit::IconResolver::new(icon_theme.clone()));
+                                    .set(coconut_plugin_kit::ApplicationIconResolver::new(
+                                        icon_theme.clone(),
+                                    ));
                             }
                             if let Some(catalog) = shared.get::<AppCatalog>() {
                                 catalog.start_loading(&app, icon_theme.clone());

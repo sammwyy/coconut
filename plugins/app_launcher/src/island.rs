@@ -5,7 +5,7 @@ use coconut_plugin_kit::chrome::{
     shell_island_border as shell_border, shell_selected, shell_text,
 };
 use coconut_plugin_kit::{
-    design, pixel_icon, ConfigField, ConfigValue, IconRequest, IconResolver, Island,
+    design, pixel_icon, ApplicationIconResolver, ConfigField, ConfigValue, Island,
     IslandRenderContext, NumberRange,
 };
 use creamui_core::layout::{FlexDirection, Style as LayoutStyle};
@@ -61,7 +61,7 @@ impl Default for WindowListState {
 pub struct LauncherOpenSignal(pub Signal<bool>);
 
 #[derive(Clone)]
-pub struct WindowIconResolver(pub Signal<IconResolver>);
+pub struct WindowIconResolver(pub Signal<ApplicationIconResolver>);
 
 impl Default for LauncherOpenSignal {
     fn default() -> Self {
@@ -204,7 +204,7 @@ fn window_list_widget(
     scale: f32,
     show_background: bool,
     compact: bool,
-    resolver: Option<&IconResolver>,
+    resolver: Option<&ApplicationIconResolver>,
 ) -> BoxedWidget {
     let count = windows.len().min(MAX_TASKS);
     let mut strip = Flex::row().gap(6.0 * scale).align(Align::Center);
@@ -238,7 +238,7 @@ fn side_window_list(
     refresh_windows: Rc<dyn Fn()>,
     scale: f32,
     show_background: bool,
-    resolver: Option<&IconResolver>,
+    resolver: Option<&ApplicationIconResolver>,
 ) -> BoxedWidget {
     let mut column = Flex::column()
         .padding(4.0 * scale)
@@ -297,7 +297,7 @@ fn task_icon(
     window: &OpenWindow,
     scale: f32,
     compact: bool,
-    resolver: Option<&IconResolver>,
+    resolver: Option<&ApplicationIconResolver>,
 ) -> BoxedWidget {
     if compact {
         return Box::new(
@@ -322,20 +322,17 @@ fn task_icon(
     })
 }
 
-fn app_icon(window: &OpenWindow, size: f32, resolver: Option<&IconResolver>) -> BoxedWidget {
+fn app_icon(
+    window: &OpenWindow,
+    size: f32,
+    resolver: Option<&ApplicationIconResolver>,
+) -> BoxedWidget {
     let data = if window.app_name.is_empty() {
         None
     } else {
         resolver.and_then(|resolver| {
             resolver
-                .resolve(IconRequest {
-                    names: vec![
-                        window.app_name.clone(),
-                        window.app_name.to_ascii_lowercase(),
-                    ],
-                    size: size.ceil() as u32,
-                    scale: 1,
-                })
+                .resolve(&window.app_name, size.ceil() as u32, 1)
                 .and_then(|path| cached_icon_data(&path))
         })
     }

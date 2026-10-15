@@ -14,6 +14,7 @@ use creamui_render::{AppHandle, WindowHandle};
 use creamui_theme::{use_theme, Color, ColorScheme};
 use creamui_widgets::layout::{fixed, Align, Justify};
 use creamui_widgets::{clamp_to_lines, row_height_family, RawButton, RawView};
+use delib::xdg::XdgPaths;
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::fs;
@@ -775,9 +776,7 @@ fn desktop_directory_from_config() -> Option<PathBuf> {
 }
 
 fn xdg_user_dir(name: &str) -> Option<PathBuf> {
-    let config = std::env::var_os("XDG_CONFIG_HOME")
-        .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")))?;
+    let config = XdgPaths::default().config_home;
     let contents = fs::read_to_string(config.join("user-dirs.dirs")).ok()?;
     let value = contents
         .lines()

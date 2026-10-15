@@ -11,6 +11,7 @@ use creamui_widgets::layout::{fixed, Align, Justify, Wrap};
 use creamui_widgets::{
     tab_styles, ColorPicker, ColorPickerController, Tab, TabSizing, Tabs, Text, TextSize,
 };
+use delib::xdg::XdgPaths;
 use image_rs::codecs::jpeg::JpegEncoder;
 use std::cell::{Cell, RefCell};
 use std::collections::hash_map::DefaultHasher;
@@ -403,9 +404,7 @@ fn pictures_directory() -> Option<PathBuf> {
 
 #[cfg(not(any(target_os = "windows", target_os = "macos")))]
 fn pictures_directory_from_user_dirs() -> Option<PathBuf> {
-    let config = std::env::var_os("XDG_CONFIG_HOME")
-        .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")))?;
+    let config = XdgPaths::default().config_home;
     let contents = fs::read_to_string(config.join("user-dirs.dirs")).ok()?;
     let value = contents
         .lines()

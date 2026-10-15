@@ -434,10 +434,7 @@ fn config_dir() -> PathBuf {
 
 #[cfg(not(target_os = "windows"))]
 fn config_dir() -> PathBuf {
-    std::env::var_os("XDG_CONFIG_HOME")
-        .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")))
-        .unwrap_or_else(|| PathBuf::from("."))
+    delib::xdg::XdgPaths::default().config_home
 }
 
 #[cfg(test)]

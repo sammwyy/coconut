@@ -27,6 +27,7 @@ mod state;
 
 pub use chrome::{apply_opacity, with_island_chrome, IslandChrome};
 pub use config::{ConfigValue, IslandConfig};
+pub use delib::application_icons::ApplicationIconResolver;
 pub use delib::desktop_entry::{installed_applications, DesktopEntry};
 pub use delib::xdg::XdgPaths;
 pub use gap::{parse_gap, Gap};

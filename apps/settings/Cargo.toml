@@ -37,3 +37,4 @@ dbus = "0.9"
 rfd = "0.17"
 toml = "0.9"
 tokio = { version = "1", features = ["rt"] }
+delib = { version = "0.1.0", path = "../../../delib" }

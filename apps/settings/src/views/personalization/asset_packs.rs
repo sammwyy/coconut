@@ -8,6 +8,7 @@ use creamui_reactive::Signal;
 use creamui_theme::use_theme;
 use creamui_widgets::layout::{fixed, Align, Justify, Wrap};
 use creamui_widgets::{Text, TextSize};
+use delib::xdg::XdgPaths;
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::PathBuf;
@@ -140,15 +141,7 @@ fn list_cursor_packs() -> Vec<String> {
 }
 
 fn xdg_data_directories() -> Vec<PathBuf> {
-    let mut directories = std::env::var_os("XDG_DATA_HOME")
-        .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".local/share")))
-        .into_iter()
-        .collect::<Vec<_>>();
-    let system =
-        std::env::var_os("XDG_DATA_DIRS").unwrap_or_else(|| "/usr/local/share:/usr/share".into());
-    directories.extend(std::env::split_paths(&system));
-    directories
+    XdgPaths::default().data_search_paths()
 }
 
 pub(crate) fn icons_view() -> creamui_core::BoxedWidget {

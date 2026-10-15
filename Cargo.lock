@@ -482,6 +482,7 @@ name = "coconut-core"
 version = "0.1.0"
 dependencies = [
  "dbus",
+ "delib",
  "serde",
  "serde_json",
  "toml 0.9.12+spec-1.1.0",
@@ -494,6 +495,7 @@ dependencies = [
  "coconut-api",
  "creamui-render",
  "dbus",
+ "delib",
 ]
 
 [[package]]
@@ -758,6 +760,7 @@ dependencies = [
  "creamui-theme-loader",
  "creamui-widgets",
  "dbus",
+ "delib",
  "image",
  "percent-encoding",
  "rfd",
@@ -1104,6 +1107,7 @@ name = "creamui-theme-loader"
 version = "0.2.0"
 dependencies = [
  "creamui-theme",
+ "delib",
  "serde",
  "toml 0.9.12+spec-1.1.0",
 ]

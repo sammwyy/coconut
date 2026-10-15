@@ -108,14 +108,7 @@ impl ShortcutConfig {
 }
 
 fn path() -> std::path::PathBuf {
-    std::env::var_os("XDG_CONFIG_HOME")
-        .map(std::path::PathBuf::from)
-        .or_else(|| {
-            std::env::var_os("HOME").map(|home| std::path::PathBuf::from(home).join(".config"))
-        })
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("coconut")
-        .join("shortcuts.toml")
+    super::config_dir().join("coconut").join("shortcuts.toml")
 }
 
 impl ShellShortcut {

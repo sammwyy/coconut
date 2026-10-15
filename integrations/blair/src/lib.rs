@@ -7,10 +7,9 @@
 use coconut_api::desktop::{DesktopIntegration, DesktopWorkArea, OpenWindow, WindowChangeListener};
 use creamui_render::WindowHandle;
 use dbus::{blocking::SyncConnection, channel::MatchingReceiver, message::MatchRule, MessageType};
-use std::collections::HashMap;
-use std::fs;
-use std::path::{Path, PathBuf};
-use std::sync::{mpsc, Arc, Mutex, OnceLock};
+use delib::{application_icons::ApplicationIconResolver, icons::system_icon_theme};
+use std::cell::RefCell;
+use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
@@ -216,121 +215,11 @@ fn query_work_area(connection: &SyncConnection) -> Option<DesktopWorkArea> {
     })
 }
 
-fn application_icon(app_id: &str) -> Option<PathBuf> {
-    static ICONS: OnceLock<HashMap<String, PathBuf>> = OnceLock::new();
-    let icon_name = desktop_icon_name(app_id)?;
-    let icons = ICONS.get_or_init(build_icon_index);
-    resolve_icon(&icon_name, icons)
-}
-
-fn desktop_icon_name(app_id: &str) -> Option<String> {
-    let file_name = if app_id.ends_with(".desktop") {
-        app_id.to_owned()
-    } else {
-        format!("{app_id}.desktop")
-    };
-    xdg_data_directories()
-        .into_iter()
-        .map(|directory| directory.join("applications").join(&file_name))
-        .find(|path| path.is_file())
-        .and_then(|path| desktop_entry_icon(&path))
-}
-
-fn desktop_entry_icon(path: &Path) -> Option<String> {
-    let contents = fs::read_to_string(path).ok()?;
-    let mut in_entry = false;
-    for line in contents.lines().map(str::trim) {
-        if line.starts_with('[') {
-            in_entry = line == "[Desktop Entry]";
-        } else if in_entry {
-            if let Some(value) = line.strip_prefix("Icon=") {
-                return (!value.is_empty()).then_some(value.to_owned());
-            }
-        }
+fn application_icon(app_id: &str) -> Option<std::path::PathBuf> {
+    thread_local! {
+        static ICONS: RefCell<ApplicationIconResolver> = RefCell::new(
+            ApplicationIconResolver::new(system_icon_theme())
+        );
     }
-    None
-}
-
-fn resolve_icon(icon: &str, index: &HashMap<String, PathBuf>) -> Option<PathBuf> {
-    let path = PathBuf::from(icon);
-    if is_icon(&path) {
-        return Some(path);
-    }
-    let name = path
-        .file_stem()
-        .and_then(|name| name.to_str())
-        .unwrap_or(icon);
-    index.get(&name.to_ascii_lowercase()).cloned()
-}
-
-fn build_icon_index() -> HashMap<String, PathBuf> {
-    let mut icons = HashMap::new();
-    for directory in xdg_data_directories() {
-        collect_icons(&directory.join("icons"), &mut icons);
-        collect_icons(&directory.join("pixmaps"), &mut icons);
-        collect_icons(&directory.join("flatpak/appstream"), &mut icons);
-    }
-    collect_icons(Path::new("/var/lib/flatpak/appstream"), &mut icons);
-    icons
-}
-
-fn collect_icons(directory: &Path, icons: &mut HashMap<String, PathBuf>) {
-    let Ok(entries) = fs::read_dir(directory) else {
-        return;
-    };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.is_dir() {
-            collect_icons(&path, icons);
-        } else if is_icon(&path) {
-            if let Some(name) = path.file_stem().and_then(|name| name.to_str()) {
-                icons.entry(name.to_ascii_lowercase()).or_insert(path);
-            }
-        }
-    }
-}
-
-fn xdg_data_directories() -> Vec<PathBuf> {
-    let mut directories = Vec::new();
-    if let Some(home) = std::env::var_os("XDG_DATA_HOME") {
-        directories.push(PathBuf::from(home));
-    } else if let Some(home) = std::env::var_os("HOME") {
-        directories.push(PathBuf::from(home).join(".local/share"));
-    }
-    let data_dirs =
-        std::env::var_os("XDG_DATA_DIRS").unwrap_or_else(|| "/usr/local/share:/usr/share".into());
-    directories.extend(std::env::split_paths(&data_dirs));
-    directories
-}
-
-fn is_icon(path: &Path) -> bool {
-    path.is_file()
-        && path
-            .extension()
-            .and_then(|extension| extension.to_str())
-            .is_some_and(|extension| {
-                matches!(
-                    extension.to_ascii_lowercase().as_str(),
-                    "png" | "jpg" | "jpeg" | "webp" | "svg"
-                )
-            })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::desktop_entry_icon;
-    use std::fs;
-
-    #[test]
-    fn reads_icon_only_from_the_desktop_entry_group() {
-        let path =
-            std::env::temp_dir().join(format!("coconut-blair-icon-{}.desktop", std::process::id()));
-        fs::write(
-            &path,
-            "Icon=wrong\n[Desktop Entry]\nName=Example\nIcon=example-icon\n",
-        )
-        .unwrap();
-        assert_eq!(desktop_entry_icon(&path), Some("example-icon".to_owned()));
-        fs::remove_file(path).unwrap();
-    }
+    ICONS.with(|icons| icons.borrow().resolve(app_id, 64, 1))
 }

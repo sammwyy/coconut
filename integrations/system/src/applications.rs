@@ -5,8 +5,8 @@ use delib::{
 };
 use std::path::{Path, PathBuf};
 
-fn config_dir() -> Result<PathBuf, String> {
-    Ok(XdgPaths::default().config_home)
+fn config_dir() -> PathBuf {
+    XdgPaths::default().config_home
 }
 fn data_dirs() -> Vec<PathBuf> {
     let paths = XdgPaths::default();
@@ -149,15 +149,8 @@ fn installed() -> Vec<Entry> {
 }
 fn startup() -> Vec<Entry> {
     let mut entries = BTreeMap::new();
-    if let Ok(config) = config_dir() {
-        scan_desktops(&config.join("autostart"), "", 0, &mut entries);
-    }
-    for dir in std::env::var("XDG_CONFIG_DIRS")
-        .unwrap_or_else(|_| "/etc/xdg".into())
-        .split(':')
-        .filter(|dir| !dir.is_empty())
-    {
-        scan_desktops(&PathBuf::from(dir).join("autostart"), "", 0, &mut entries);
+    for directory in XdgPaths::default().config_search_paths() {
+        scan_desktops(&directory.join("autostart"), "", 0, &mut entries);
     }
     entries.into_values().collect()
 }
@@ -237,10 +230,7 @@ pub fn discover(snapshot: &mut Snapshot) {
         snapshot.facts.insert("startup-service".into(), "XDG autostart entries, consumed by the session manager. Desktop-specific restrictions still apply. Changes create a per-user override and preserve system entries.".into());
     }
     let mut defaults = BTreeMap::new();
-    let paths = config_dir()
-        .ok()
-        .into_iter()
-        .map(|dir| dir.join("mimeapps.list"))
+    let paths = std::iter::once(config_dir().join("mimeapps.list"))
         .chain(data_dirs().into_iter().map(|dir| dir.join("mimeapps.list")));
     for path in paths {
         let content = read(path);
@@ -335,7 +325,7 @@ fn write_startup(entry: Entry, enabled: bool) -> Result<(), String> {
         .get("path")
         .ok_or("The application entry is unavailable")?;
     let source = fs::read_to_string(source).map_err(|e| e.to_string())?;
-    let directory = config_dir()?.join("autostart");
+    let directory = config_dir().join("autostart");
     fs::create_dir_all(&directory).map_err(|e| e.to_string())?;
     let target = directory.join(&entry.id);
     if fs::symlink_metadata(&target).is_ok_and(|metadata| metadata.file_type().is_symlink()) {
