@@ -482,6 +482,7 @@ dependencies = [
 name = "coconut-core"
 version = "0.1.0"
 dependencies = [
+ "blair-protocol",
  "creamui-theme-watch",
  "dbus",
  "delib",
@@ -808,6 +809,7 @@ dependencies = [
  "serde",
  "tokio",
  "toml 0.9.12+spec-1.1.0",
+ "zbus",
 ]
 
 [[package]]

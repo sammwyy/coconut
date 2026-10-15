@@ -219,18 +219,7 @@ pub fn run() {
             );
             panel_host.set_theme(system_theme());
             let shortcut_config = ShortcutConfig::load();
-            let shortcut_accelerators = shortcut_config
-                .shortcuts
-                .iter()
-                .map(|shortcut| shortcut.accelerator.clone())
-                .chain(
-                    shortcut_config
-                        .custom_shortcuts
-                        .iter()
-                        .map(|shortcut| shortcut.accelerator.clone()),
-                )
-                .collect::<Vec<_>>();
-            let shortcut_listener = shortcuts::ShortcutListener::start(&shortcut_accelerators);
+            let shortcut_listener = shortcuts::ShortcutListener::start(shortcut_config);
             schedule_shortcuts(
                 app.clone(),
                 shortcut_listener,
@@ -626,9 +615,6 @@ fn schedule_shortcuts(
     panel_host: Rc<PanelHost>,
 ) {
     let Some(listener) = listener else { return };
-    let shortcut_config = ShortcutConfig::load();
-    let bindings = shortcut_config.shortcuts;
-    let custom_shortcuts = shortcut_config.custom_shortcuts;
     let next_app = app.clone();
     let next_listener = listener.clone();
     let next_desktop = desktop.clone();
@@ -639,20 +625,19 @@ fn schedule_shortcuts(
     let next_panel_host = panel_host.clone();
     app.spawn_background(
         move || listener.next(),
-        move |index| {
-            let Some(index) = index else {
+        move |event| {
+            let Some(event) = event else {
                 return;
             };
-            if index >= bindings.len() {
-                let Some(shortcut) = custom_shortcuts.get(index - bindings.len()) else {
-                    return;
-                };
+            if let shortcuts::ShortcutEvent::Custom(shortcut) = &event {
                 if !shortcut.command.trim().is_empty() {
                     let mut command = std::process::Command::new(&shortcut.command);
                     if !shortcut.argument.trim().is_empty() {
                         command.arg(&shortcut.argument);
                     }
-                    let _ = command.spawn();
+                    if let Err(error) = command.spawn() {
+                        eprintln!("shortcuts: could not launch {}: {error}", shortcut.command);
+                    }
                 }
                 schedule_shortcuts(
                     next_app,
@@ -666,7 +651,7 @@ fn schedule_shortcuts(
                 );
                 return;
             }
-            let Some(action) = bindings.get(index).map(|binding| binding.action) else {
+            let shortcuts::ShortcutEvent::BuiltIn(action) = event else {
                 return;
             };
             match action {

@@ -47,7 +47,8 @@ serde = { version = "1", features = ["derive"] }
 blair-client = { path = "../../../blair/crates/client" }
 blair-protocol = { path = "../../../blair/crates/protocol" }
 coconut-integration-kwin = { path = "../../integrations/kwin" }
-tokio = { version = "1", features = ["rt", "macros"] }
+tokio = { version = "1", features = ["rt", "macros", "sync"] }
+zbus = { version = "5", default-features = false, features = ["tokio"] }
 
 [target.'cfg(not(target_os = "windows"))'.dependencies]
 coconut-registry = { path = "../../crates/registry" }

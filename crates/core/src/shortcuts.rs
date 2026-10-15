@@ -76,6 +76,50 @@ impl Default for ShortcutConfig {
 }
 
 impl ShortcutConfig {
+    pub fn validate(&self) -> Result<(), String> {
+        if self
+            .accelerators()
+            .filter(|accelerator| !accelerator.is_empty())
+            .count()
+            > 256
+        {
+            return Err("At most 256 active shell shortcuts are supported".into());
+        }
+        let mut parsed = Vec::new();
+        for (index, accelerator) in self.accelerators().enumerate() {
+            if accelerator.is_empty() {
+                continue;
+            }
+            let mut binding = blair_protocol::ShortcutAccelerator::parse(accelerator)
+                .map_err(|error| format!("Shortcut {}: {error}", index + 1))?;
+            binding.keys.sort_unstable();
+            if parsed.contains(&binding) {
+                return Err(format!(
+                    "Shortcut {} duplicates an earlier binding",
+                    index + 1
+                ));
+            }
+            parsed.push(binding);
+        }
+        for (index, shortcut) in self.custom_shortcuts.iter().enumerate() {
+            if !shortcut.accelerator.is_empty() && shortcut.command.trim().is_empty() {
+                return Err(format!("Custom shortcut {} has no command", index + 1));
+            }
+        }
+        Ok(())
+    }
+
+    pub fn accelerators(&self) -> impl Iterator<Item = &str> {
+        self.shortcuts
+            .iter()
+            .map(|binding| binding.accelerator.as_str())
+            .chain(
+                self.custom_shortcuts
+                    .iter()
+                    .map(|binding| binding.accelerator.as_str()),
+            )
+    }
+
     pub fn load() -> Self {
         let path = path();
         match std::fs::read_to_string(&path) {
@@ -100,15 +144,42 @@ impl ShortcutConfig {
         if let Some(parent) = target.parent() {
             std::fs::create_dir_all(parent)?;
         }
+        self.validate().map_err(std::io::Error::other)?;
+        let temporary = target.with_extension(format!("toml.{}.tmp", std::process::id()));
         std::fs::write(
-            target,
+            &temporary,
             toml::to_string_pretty(self).map_err(std::io::Error::other)?,
-        )
+        )?;
+        std::fs::rename(temporary, target)
     }
 }
 
 fn path() -> std::path::PathBuf {
     super::config_dir().join("coconut").join("shortcuts.toml")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validates_defaults_and_rejects_duplicates_unknown_keys_and_empty_commands() {
+        let mut config = ShortcutConfig::default();
+        assert!(config.validate().is_ok());
+        config.custom_shortcuts.push(CustomShortcut {
+            accelerator: "Logo".into(),
+            command: "terminal".into(),
+            argument: String::new(),
+        });
+        assert!(config.validate().unwrap_err().contains("duplicates"));
+        config.custom_shortcuts[0].accelerator = "Super+F35".into();
+        assert!(config.validate().unwrap_err().contains("unsupported"));
+        config.custom_shortcuts[0].accelerator = "Ctrl+Alt+T".into();
+        config.custom_shortcuts[0].command.clear();
+        assert!(config.validate().unwrap_err().contains("no command"));
+        config.custom_shortcuts[0].accelerator.clear();
+        assert!(config.validate().is_ok());
+    }
 }
 
 impl ShellShortcut {

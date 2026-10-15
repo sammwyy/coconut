@@ -98,6 +98,7 @@ pub fn run() {
             });
             state.native.start(app.clone(), state.users.clone());
             state.window_settings.start(app.clone());
+            state.shortcut_settings.start(app.clone());
             watch_connectivity(app.clone(), network_changes, connectivity_revision.clone());
             watch_connectivity(
                 app.clone(),
@@ -122,7 +123,9 @@ pub fn run() {
                 creamui_theme::Color::rgba(0, 0, 0, 0),
                 {
                     let window = state.window.clone();
+                    let shortcuts = state.shortcut_settings.clone();
                     move |handle| {
+                        shortcuts.attach_window(handle.clone());
                         handle
                             .set_compositor_integration(Some(CompositorIntegrationRequest::Hybrid));
                         *window.borrow_mut() = Some(handle);
@@ -133,6 +136,7 @@ pub fn run() {
                         connectivity_revision.get();
                         let location = state.view.url();
                         if *last_location.borrow() != location {
+                            state.shortcut_settings.cancel_capture();
                             state.content_scroll.set(0.0);
                             state.dock_scroll.set(0.0);
                             *last_location.borrow_mut() = location;

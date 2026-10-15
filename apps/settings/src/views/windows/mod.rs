@@ -83,12 +83,19 @@ pub struct ShortcutState {
     capturing: Signal<Option<ShortcutCapture>>,
     status: Signal<String>,
     saved: Signal<ShortcutConfig>,
+    app: Rc<RefCell<Option<creamui_render::AppHandle>>>,
+    busy: Signal<bool>,
+    window: Rc<RefCell<Option<creamui_render::WindowHandle>>>,
+    recorded_modifiers: Rc<RefCell<creamui_render::platform::Modifiers>>,
+    compositor_bindings: Signal<Option<Vec<blair_protocol::ShortcutBinding>>>,
+    compositor_saved: Signal<Vec<blair_protocol::ShortcutBinding>>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum ShortcutCapture {
     BuiltIn(usize),
     Custom(usize),
+    Compositor(usize),
 }
 
 impl ShortcutState {
@@ -100,41 +107,273 @@ impl ShortcutState {
             custom_bindings: Signal::new(config.custom_shortcuts),
             capturing: Signal::new(None),
             status: Signal::new(String::new()),
+            app: Rc::new(RefCell::new(None)),
+            busy: Signal::new(false),
+            window: Rc::new(RefCell::new(None)),
+            recorded_modifiers: Rc::new(RefCell::new(Default::default())),
+            compositor_bindings: Signal::new(None),
+            compositor_saved: Signal::new(Vec::new()),
         }
     }
 
+    pub fn start(&self, app: creamui_render::AppHandle) {
+        *self.app.borrow_mut() = Some(app.clone());
+        let status = self.status.clone();
+        app.spawn_background(shortcut_service_status, move |result| match result {
+            Ok(Some(message)) => status.set(message),
+            Ok(None) => {}
+            Err(error) => status.set(format!(
+                "Could not read shortcut registration status: {error}"
+            )),
+        });
+        let state = self.clone_handles();
+        app.spawn_background(
+            || {
+                blair_runtime()?.block_on(async {
+                    BlairClient::connect()
+                        .await
+                        .map_err(|error| error.to_string())?
+                        .configured_shortcuts()
+                        .await
+                        .map_err(|error| error.to_string())
+                })
+            },
+            move |result: Result<Vec<blair_protocol::ShortcutBinding>, String>| {
+                if let Ok(bindings) = result {
+                    state.compositor_saved.set(bindings.clone());
+                    state.compositor_bindings.set(Some(bindings));
+                }
+            },
+        );
+    }
+
+    pub fn attach_window(&self, window: creamui_render::WindowHandle) {
+        *self.window.borrow_mut() = Some(window.clone());
+        let state = self.clone_handles();
+        window.on_keyboard_input(move |event, modifiers| state.record_native(event, modifiers));
+        let state = self.clone_handles();
+        window.on_focus_lost(move || state.cancel_capture());
+    }
+
+    fn begin_capture(&self, target: ShortcutCapture) {
+        self.cancel_capture();
+        if let Some(window) = self.window.borrow().as_ref() {
+            if let Err(error) = window.set_shortcuts_inhibited(true) {
+                self.status
+                    .set(format!("Cannot safely record global shortcuts: {error}"));
+                return;
+            }
+        }
+        self.status.set("Press a shortcut; Escape cancels".into());
+        self.capturing.set(Some(target));
+    }
+
+    pub fn cancel_capture(&self) {
+        if self.capturing.peek().is_some() {
+            if let Some(window) = self.window.borrow().as_ref() {
+                if let Err(error) = window.set_shortcuts_inhibited(false) {
+                    eprintln!("settings: could not release shortcut capture: {error}");
+                }
+            }
+        }
+        self.capturing.set(None);
+        *self.recorded_modifiers.borrow_mut() = Default::default();
+    }
+
+    fn finish_capture(&self, accelerator: String) {
+        if let Err(error) = blair_protocol::ShortcutAccelerator::parse(&accelerator) {
+            self.status.set(error);
+            return;
+        }
+        match self.capturing.peek() {
+            Some(ShortcutCapture::BuiltIn(index)) => self.bindings.update(|items| {
+                if let Some(item) = items.get_mut(index) {
+                    item.accelerator = accelerator;
+                }
+            }),
+            Some(ShortcutCapture::Custom(index)) => self.custom_bindings.update(|items| {
+                if let Some(item) = items.get_mut(index) {
+                    item.accelerator = accelerator;
+                }
+            }),
+            Some(ShortcutCapture::Compositor(index)) => self.compositor_bindings.update(|items| {
+                if let Some(item) = items.as_mut().and_then(|items| items.get_mut(index)) {
+                    item.accelerator = accelerator;
+                }
+            }),
+            None => return,
+        }
+        self.cancel_capture();
+        self.status.set(String::new());
+    }
+
+    fn record_native(
+        &self,
+        event: creamui_render::platform::KeyEvent,
+        modifiers: creamui_render::platform::Modifiers,
+    ) -> bool {
+        use creamui_render::platform::Key;
+        if self.capturing.peek().is_none() || event.synthetic {
+            return false;
+        }
+        let mut held = *self.recorded_modifiers.borrow();
+        held.ctrl |= modifiers.ctrl;
+        held.alt |= modifiers.alt;
+        held.shift |= modifiers.shift;
+        held.logo |= modifiers.logo;
+        let modifier = match event.key {
+            Key::Control => Some(&mut held.ctrl),
+            Key::Alt => Some(&mut held.alt),
+            Key::Shift => Some(&mut held.shift),
+            Key::Super => Some(&mut held.logo),
+            _ => None,
+        };
+        if let Some(modifier) = modifier {
+            *modifier = true;
+            *self.recorded_modifiers.borrow_mut() = held;
+            if !event.pressed {
+                self.finish_capture(native_accelerator(None, held));
+            }
+            return true;
+        }
+        if !event.pressed {
+            return true;
+        }
+        if event.key == Key::Escape
+            && !modifiers.ctrl
+            && !modifiers.alt
+            && !modifiers.shift
+            && !modifiers.logo
+        {
+            self.cancel_capture();
+            self.status.set(String::new());
+            return true;
+        }
+        let key = match event.key {
+            Key::Character(value) => match value.as_str() {
+                " " => "Space".into(),
+                "," => "Comma".into(),
+                "+" => "Plus".into(),
+                _ => value.to_ascii_uppercase(),
+            },
+            Key::Media(name) => name,
+            Key::Space => "Space".into(),
+            Key::Enter => "Return".into(),
+            Key::Back => {
+                self.status.set("Unsupported key".into());
+                return true;
+            }
+            Key::Other => {
+                self.status.set("Unsupported key".into());
+                return true;
+            }
+            key => format!("{key:?}"),
+        };
+        self.finish_capture(native_accelerator(Some(&key), modifiers));
+        true
+    }
+
     fn save(&self) {
+        if self.busy.get() {
+            return;
+        }
         let config = ShortcutConfig {
             shortcuts: self.bindings.get(),
             custom_shortcuts: self.custom_bindings.get(),
         };
-        for (index, accelerator) in config
-            .shortcuts
-            .iter()
-            .map(|binding| &binding.accelerator)
-            .chain(
-                config
-                    .custom_shortcuts
-                    .iter()
-                    .map(|binding| &binding.accelerator),
-            )
-            .enumerate()
-        {
-            if !accelerator.is_empty() {
-                if let Err(error) = blair_protocol::ShortcutAccelerator::parse(accelerator) {
-                    self.status.set(format!("Shortcut {}: {error}", index + 1));
-                    return;
+        if let Err(error) = config.validate() {
+            self.status.set(error);
+            return;
+        }
+        self.cancel_capture();
+        let Some(app) = self.app.borrow().clone() else {
+            return;
+        };
+        let state = self.clone_handles();
+        let saved = config.clone();
+        self.busy.set(true);
+        app.spawn_background(
+            move || apply_shell_shortcuts(&config),
+            move |result| {
+                state.busy.set(false);
+                match result {
+                    Ok(message) => {
+                        state.saved.set(saved);
+                        state.status.set(message);
+                    }
+                    Err(error) => state.status.set(error),
                 }
-            }
+            },
+        );
+    }
+}
+
+fn native_accelerator(key: Option<&str>, modifiers: creamui_render::platform::Modifiers) -> String {
+    let mut parts = Vec::new();
+    if modifiers.ctrl {
+        parts.push("Ctrl");
+    }
+    if modifiers.alt {
+        parts.push("Alt");
+    }
+    if modifiers.shift {
+        parts.push("Shift");
+    }
+    if modifiers.logo {
+        parts.push("Super");
+    }
+    if let Some(key) = key {
+        parts.push(key);
+    }
+    parts.join("+")
+}
+
+fn shortcut_service_status() -> Result<Option<String>, String> {
+    let bus = dbus::blocking::Connection::new_session().map_err(|error| error.to_string())?;
+    let proxy = bus.with_proxy(
+        "org.coconut.Shortcuts",
+        "/org/coconut/Shortcuts",
+        std::time::Duration::from_secs(5),
+    );
+    let result: Result<(String,), dbus::Error> =
+        proxy.method_call("org.coconut.Shortcuts1", "Status", ());
+    match result {
+        Ok((status,)) => Ok(Some(status)),
+        Err(error) if missing_shortcut_service(&error) => Ok(None),
+        Err(error) => Err(error.to_string()),
+    }
+}
+
+fn missing_shortcut_service(error: &dbus::Error) -> bool {
+    matches!(
+        error.name(),
+        Some(
+            "org.freedesktop.DBus.Error.ServiceUnknown"
+                | "org.freedesktop.DBus.Error.NameHasNoOwner"
+        )
+    )
+}
+
+fn apply_shell_shortcuts(config: &ShortcutConfig) -> Result<String, String> {
+    config.validate()?;
+    let bus = dbus::blocking::Connection::new_session().map_err(|error| error.to_string())?;
+    let proxy = bus.with_proxy(
+        "org.coconut.Shortcuts",
+        "/org/coconut/Shortcuts",
+        std::time::Duration::from_secs(30),
+    );
+    let document = toml::to_string(config).map_err(|error| error.to_string())?;
+    let result: Result<(), dbus::Error> =
+        proxy.method_call("org.coconut.Shortcuts1", "Apply", (document,));
+    match result {
+        Ok(()) => Ok("Shortcuts saved and applied".into()),
+        Err(error) if missing_shortcut_service(&error) => {
+            config
+                .save()
+                .map_err(|error| format!("Could not save: {error}"))?;
+            Ok("Shortcuts saved. They will apply when Coconut starts in Blair.".into())
         }
-        match config.save() {
-            Ok(()) => {
-                self.saved.set(config);
-                self.status
-                    .set("Shortcuts saved. Restart Coconut to apply them.".to_owned());
-            }
-            Err(error) => self.status.set(format!("Could not save: {error}")),
-        }
+        Err(error) => Err(format!("Shortcuts were not applied: {error}")),
     }
 }
 
@@ -1184,7 +1423,7 @@ pub fn build_shortcuts(_: Size, state: &ShortcutState) -> BoxedWidget {
         "Restore defaults",
         ButtonState::Normal,
         move || {
-            reset_state.capturing.set(None);
+            reset_state.cancel_capture();
             reset_state.bindings.set(ShellShortcut::defaults());
         },
     ));
@@ -1198,7 +1437,11 @@ pub fn build_shortcuts(_: Size, state: &ShortcutState) -> BoxedWidget {
             ButtonVariant::Primary,
             ButtonSize::Sm,
             "Save shortcuts",
-            ButtonState::Normal,
+            if state.busy.get() {
+                ButtonState::Loading
+            } else {
+                ButtonState::Normal
+            },
             move || save_state.save(),
         )) as BoxedWidget);
     }
@@ -1208,6 +1451,29 @@ pub fn build_shortcuts(_: Size, state: &ShortcutState) -> BoxedWidget {
     let status = state.status.get();
     if !status.is_empty() {
         body.push(Box::new(Text::secondary(status).size(TextSize::Sm)) as BoxedWidget);
+    }
+    if state.capturing.get().is_some() {
+        let cancel = state.clone_handles();
+        body.push(Box::new(Button::styled(
+            ButtonVariant::Secondary,
+            ButtonSize::Sm,
+            "Cancel recording",
+            ButtonState::Normal,
+            move || cancel.cancel_capture(),
+        )));
+    }
+    if let Some(bindings) = state.compositor_bindings.get() {
+        body.push(shortcut_group(
+            "Compositor (saved in Blair)",
+            compositor_shortcuts(state, bindings),
+        ));
+    } else {
+        body.push(Box::new(
+            Text::secondary(
+                "Persistent compositor bindings require Blair's configuration service.",
+            )
+            .size(TextSize::Sm),
+        ));
     }
     Box::new(jsx! {
         <Flex direction={FlexDirection::Column} gap={28.0} children={body} />
@@ -1222,6 +1488,12 @@ impl ShortcutState {
             capturing: self.capturing.clone(),
             status: self.status.clone(),
             saved: self.saved.clone(),
+            app: self.app.clone(),
+            busy: self.busy.clone(),
+            window: self.window.clone(),
+            recorded_modifiers: self.recorded_modifiers.clone(),
+            compositor_bindings: self.compositor_bindings.clone(),
+            compositor_saved: self.compositor_saved.clone(),
         }
     }
 }
@@ -1252,9 +1524,8 @@ fn built_in_shortcut_editor(
     state: &ShortcutState,
 ) -> BoxedWidget {
     let capture = state.capturing.get() == Some(ShortcutCapture::BuiltIn(index));
-    let bindings = state.bindings.clone();
-    let capturing = state.capturing.clone();
-    let start_capture = capturing.clone();
+    let capture_state = state.clone_handles();
+    let record_state = state.clone_handles();
     let label = shortcut_label(&binding.accelerator);
     let recorder = shortcut_recorder(
         if capture {
@@ -1265,11 +1536,8 @@ fn built_in_shortcut_editor(
             &label
         },
         capture,
-        move || start_capture.set(Some(ShortcutCapture::BuiltIn(index))),
-        move |accelerator| {
-            bindings.update(|items| items[index].accelerator = accelerator);
-            capturing.set(None);
-        },
+        move || capture_state.begin_capture(ShortcutCapture::BuiltIn(index)),
+        move |accelerator| record_state.finish_capture(accelerator),
     );
 
     Box::new(jsx! {
@@ -1337,7 +1605,7 @@ fn custom_shortcuts(state: &ShortcutState) -> BoxedWidget {
     };
     let mut rows = vec![];
     let add = state.custom_bindings.clone();
-    let capturing = state.capturing.clone();
+    let capture_state = state.clone_handles();
     rows.push(Box::new(jsx! {
         <Flex direction={FlexDirection::Row} align={creamui_widgets::layout::Align::Center} gap={12.0} padding={"12px 16px"}>
             {shortcut_badge(crate::icons::outline(r#"<path d="M9 7V4.5A2.5 2.5 0 1 0 6.5 7H17.5A2.5 2.5 0 1 0 15 4.5V19.5A2.5 2.5 0 1 0 17.5 17H6.5A2.5 2.5 0 1 0 9 19.5Z"/>"#))}
@@ -1346,7 +1614,7 @@ fn custom_shortcuts(state: &ShortcutState) -> BoxedWidget {
                 {Box::new(Text::secondary(detail).font_size(12.0)) as BoxedWidget}
             </Flex>
             {Box::new(Button::styled(ButtonVariant::Primary, ButtonSize::Sm, "Add shortcut", ButtonState::Normal, move || {
-                capturing.set(None);
+                capture_state.cancel_capture();
                 add.update(|items| items.push(CustomShortcut {
                     accelerator: String::new(), command: String::new(), argument: String::new(),
                 }));
@@ -1368,9 +1636,8 @@ fn custom_shortcut_editor(
     state: &ShortcutState,
 ) -> BoxedWidget {
     let capture = state.capturing.get() == Some(ShortcutCapture::Custom(index));
-    let bindings = state.custom_bindings.clone();
-    let capturing = state.capturing.clone();
-    let start_capture = capturing.clone();
+    let capture_state = state.clone_handles();
+    let record_state = state.clone_handles();
     let label = shortcut_label(&binding.accelerator);
     let recorder = shortcut_recorder(
         if capture {
@@ -1381,11 +1648,8 @@ fn custom_shortcut_editor(
             &label
         },
         capture,
-        move || start_capture.set(Some(ShortcutCapture::Custom(index))),
-        move |accelerator| {
-            bindings.update(|items| items[index].accelerator = accelerator);
-            capturing.set(None);
-        },
+        move || capture_state.begin_capture(ShortcutCapture::Custom(index)),
+        move |accelerator| record_state.finish_capture(accelerator),
     );
     let command_bindings = state.custom_bindings.clone();
     let command: BoxedWidget = Box::new(
@@ -1402,7 +1666,7 @@ fn custom_shortcut_editor(
         .placeholder("Argument (optional)"),
     );
     let remove = state.custom_bindings.clone();
-    let capturing = state.capturing.clone();
+    let capture_state = state.clone_handles();
     Box::new(jsx! {
         <Flex direction={FlexDirection::Column} gap={12.0} padding={16.0}>
             <Flex direction={FlexDirection::Row} align={creamui_widgets::layout::Align::Center} gap={12.0}>
@@ -1413,12 +1677,225 @@ fn custom_shortcut_editor(
             {argument}
             <Flex direction={FlexDirection::Row} justify={creamui_widgets::layout::Justify::End}>
                 {Box::new(Button::styled(ButtonVariant::Destructive, ButtonSize::Sm, "Remove", ButtonState::Normal, move || {
-                    capturing.set(None);
+                    capture_state.cancel_capture();
                     remove.update(|items| { if index < items.len() { items.remove(index); } });
                 })) as BoxedWidget}
             </Flex>
         </Flex>
     })
+}
+
+fn compositor_shortcuts(
+    state: &ShortcutState,
+    bindings: Vec<blair_protocol::ShortcutBinding>,
+) -> BoxedWidget {
+    use blair_protocol::{ShortcutArgument, ShortcutBinding, ShortcutCommand};
+    let mut rows = Vec::new();
+    for (index, binding) in bindings.iter().cloned().enumerate() {
+        let capture = state.capturing.get() == Some(ShortcutCapture::Compositor(index));
+        let start = state.clone_handles();
+        let record = state.clone_handles();
+        let label = shortcut_label(&binding.accelerator);
+        let recorder = shortcut_recorder(
+            if capture {
+                "Press shortcut…"
+            } else if label.is_empty() {
+                "Record shortcut"
+            } else {
+                &label
+            },
+            capture,
+            move || start.begin_capture(ShortcutCapture::Compositor(index)),
+            move |accelerator| record.finish_capture(accelerator),
+        );
+        let items = state.compositor_bindings.clone();
+        let action = SegmentedControl::new(
+            ShortcutCommand::ALL
+                .iter()
+                .position(|command| *command == binding.command)
+                .unwrap_or(0),
+            move |selected| {
+                items.update(|items| {
+                    if let Some(binding) = items.as_mut().and_then(|items| items.get_mut(index)) {
+                        binding.command = ShortcutCommand::ALL[selected];
+                        binding.argument = match binding.command.argument() {
+                            ShortcutArgument::None => None,
+                            ShortcutArgument::Workspace => Some("1".into()),
+                            ShortcutArgument::Command => Some(String::new()),
+                        };
+                    }
+                });
+            },
+        )
+        .option("Close")
+        .option("Workspace")
+        .option("Move to")
+        .option("Command");
+        let mut controls: Vec<BoxedWidget> = vec![recorder, Box::new(action)];
+        if binding.command.argument() != ShortcutArgument::None {
+            let items = state.compositor_bindings.clone();
+            controls.push(Box::new(
+                TextInput::new(binding.argument.unwrap_or_default(), move |argument| {
+                    items.update(|items| {
+                        if let Some(binding) = items.as_mut().and_then(|items| items.get_mut(index))
+                        {
+                            binding.argument = Some(argument);
+                        }
+                    });
+                })
+                .placeholder(
+                    if binding.command.argument() == ShortcutArgument::Workspace {
+                        "Workspace number"
+                    } else {
+                        "Command"
+                    },
+                ),
+            ));
+        }
+        let remove = state.clone_handles();
+        controls.push(Box::new(Button::styled(
+            ButtonVariant::Destructive,
+            ButtonSize::Sm,
+            "Remove",
+            ButtonState::Normal,
+            move || {
+                remove.cancel_capture();
+                remove.compositor_bindings.update(|items| {
+                    if let Some(items) = items {
+                        if index < items.len() {
+                            items.remove(index);
+                        }
+                    }
+                });
+            },
+        )));
+        rows.push(Box::new(jsx! { <Flex direction={FlexDirection::Column} gap={12.0} padding={16.0} children={controls} /> }) as BoxedWidget);
+    }
+    let add = state.clone_handles();
+    rows.push(Box::new(Button::styled(
+        ButtonVariant::Secondary,
+        ButtonSize::Sm,
+        "Add compositor shortcut",
+        ButtonState::Normal,
+        move || {
+            add.cancel_capture();
+            add.compositor_bindings.update(|items| {
+                if let Some(items) = items {
+                    items.push(ShortcutBinding {
+                        accelerator: String::new(),
+                        command: ShortcutCommand::Close,
+                        argument: None,
+                    });
+                }
+            });
+        },
+    )));
+    if bindings != state.compositor_saved.get() {
+        let save = state.clone_handles();
+        rows.push(Box::new(Button::styled(
+            ButtonVariant::Primary,
+            ButtonSize::Sm,
+            "Save compositor shortcuts",
+            if state.busy.get() {
+                ButtonState::Loading
+            } else {
+                ButtonState::Normal
+            },
+            move || save.save_compositor(),
+        )));
+    }
+    group(rows)
+}
+
+fn validate_compositor_shortcuts(
+    bindings: &[blair_protocol::ShortcutBinding],
+) -> Result<(), String> {
+    use blair_protocol::ShortcutArgument;
+    if bindings.len() > 256 {
+        return Err("At most 256 compositor shortcuts are supported".into());
+    }
+    let mut accelerators = Vec::new();
+    for (index, binding) in bindings.iter().enumerate() {
+        let mut accelerator = blair_protocol::ShortcutAccelerator::parse(&binding.accelerator)
+            .map_err(|error| format!("Compositor shortcut {}: {error}", index + 1))?;
+        accelerator.keys.sort_unstable();
+        if accelerators.contains(&accelerator) {
+            return Err(format!(
+                "Compositor shortcut {} duplicates an earlier binding",
+                index + 1
+            ));
+        }
+        accelerators.push(accelerator);
+        let valid = match binding.command.argument() {
+            ShortcutArgument::None => binding.argument.is_none(),
+            ShortcutArgument::Workspace => binding
+                .argument
+                .as_deref()
+                .and_then(|value| value.parse::<u32>().ok())
+                .is_some_and(|value| value > 0),
+            ShortcutArgument::Command => binding
+                .argument
+                .as_deref()
+                .is_some_and(|value| !value.trim().is_empty()),
+        };
+        if !valid {
+            return Err(format!(
+                "Invalid argument for compositor shortcut {}",
+                index + 1
+            ));
+        }
+    }
+    Ok(())
+}
+
+impl ShortcutState {
+    fn save_compositor(&self) {
+        if self.busy.get() {
+            return;
+        }
+        let Some(bindings) = self.compositor_bindings.get() else {
+            return;
+        };
+        if let Err(error) = validate_compositor_shortcuts(&bindings) {
+            self.status.set(error);
+            return;
+        }
+        let Some(app) = self.app.borrow().clone() else {
+            return;
+        };
+        self.cancel_capture();
+        self.busy.set(true);
+        let saved = bindings.clone();
+        let state = self.clone_handles();
+        app.spawn_background(
+            move || {
+                blair_runtime()?.block_on(async {
+                    let client = BlairClient::connect()
+                        .await
+                        .map_err(|error| error.to_string())?;
+                    match client.set_configured_shortcuts(&bindings).await {
+                        Ok(true) => Ok(()),
+                        Ok(false) => {
+                            Err("Blair rejected the bindings or could not persist them".to_owned())
+                        }
+                        Err(error) => Err(error.to_string()),
+                    }
+                })
+            },
+            move |result: Result<(), String>| {
+                state.busy.set(false);
+                match result {
+                    Ok(()) => {
+                        state.compositor_saved.set(saved);
+                        state
+                            .status
+                            .set("Compositor shortcuts saved and applied".into());
+                    }
+                    Err(error) => state.status.set(error),
+                }
+            },
+        );
+    }
 }
 
 fn shortcut_recorder(
@@ -1452,12 +1929,14 @@ fn shortcut_recorder(
     Box::new(ShortcutRecorder {
         inner: button,
         on_record: Rc::new(on_record),
+        capturing,
     })
 }
 
 struct ShortcutRecorder {
     inner: RawButton,
     on_record: Rc<dyn Fn(String)>,
+    capturing: bool,
 }
 
 impl Widget for ShortcutRecorder {
@@ -1483,8 +1962,12 @@ impl Widget for ShortcutRecorder {
         self.inner.cursor_icon()
     }
     fn on_key(&self) -> Option<Rc<dyn Fn(KeyInput)>> {
+        let capturing = self.capturing;
         let record = self.on_record.clone();
         Some(Rc::new(move |input| {
+            if !capturing {
+                return;
+            }
             let key = match input.key {
                 Key::Char(' ') => "Space".to_owned(),
                 Key::Char(',') => "Comma".to_owned(),
@@ -1646,6 +2129,128 @@ mod shortcut_tests {
     use creamui_render::SceneRecorder;
     use creamui_theme::{Theme, ThemeProvider};
 
+    fn test_state() -> ShortcutState {
+        let config = ShortcutConfig::default();
+        ShortcutState {
+            saved: Signal::new(config.clone()),
+            bindings: Signal::new(config.shortcuts),
+            custom_bindings: Signal::new(config.custom_shortcuts),
+            capturing: Signal::new(None),
+            status: Signal::new(String::new()),
+            app: Rc::new(RefCell::new(None)),
+            busy: Signal::new(false),
+            window: Rc::new(RefCell::new(None)),
+            recorded_modifiers: Rc::new(RefCell::new(Default::default())),
+            compositor_bindings: Signal::new(None),
+            compositor_saved: Signal::new(Vec::new()),
+        }
+    }
+
+    #[test]
+    fn native_recorder_handles_tab_functions_media_modifiers_and_cancellation() {
+        use creamui_render::platform::{Key, KeyEvent, Modifiers};
+        creamui_reactive::with_context_scope(|| {
+            let state = test_state();
+            let event = |key, pressed| KeyEvent {
+                key,
+                pressed,
+                synthetic: false,
+            };
+            assert!(!state.record_native(event(Key::Tab, true), Modifiers::default()));
+            for (key, modifiers, expected) in [
+                (
+                    Key::Tab,
+                    Modifiers {
+                        alt: true,
+                        ..Default::default()
+                    },
+                    "Alt+Tab",
+                ),
+                (
+                    Key::F12,
+                    Modifiers {
+                        ctrl: true,
+                        ..Default::default()
+                    },
+                    "Ctrl+F12",
+                ),
+                (
+                    Key::Media("XF86AudioRaiseVolume".into()),
+                    Modifiers::default(),
+                    "XF86AudioRaiseVolume",
+                ),
+            ] {
+                state.begin_capture(ShortcutCapture::BuiltIn(0));
+                assert!(state.record_native(event(key, true), modifiers));
+                assert_eq!(state.bindings.peek()[0].accelerator, expected);
+                assert!(state.capturing.peek().is_none());
+            }
+            state.begin_capture(ShortcutCapture::BuiltIn(0));
+            state.record_native(event(Key::Super, true), Modifiers::default());
+            assert!(state.capturing.peek().is_some());
+            state.record_native(event(Key::Super, false), Modifiers::default());
+            assert_eq!(state.bindings.peek()[0].accelerator, "Super");
+            state.begin_capture(ShortcutCapture::BuiltIn(0));
+            state.record_native(event(Key::Control, true), Modifiers::default());
+            state.record_native(
+                event(Key::Alt, true),
+                Modifiers {
+                    ctrl: true,
+                    ..Default::default()
+                },
+            );
+            state.record_native(event(Key::Control, false), Modifiers::default());
+            assert_eq!(state.bindings.peek()[0].accelerator, "Ctrl+Alt");
+            state.begin_capture(ShortcutCapture::BuiltIn(0));
+            state.record_native(
+                event(Key::Character("λ".into()), true),
+                Modifiers {
+                    ctrl: true,
+                    ..Default::default()
+                },
+            );
+            assert!(state.capturing.peek().is_some());
+            assert!(state.status.peek().contains("unsupported"));
+            state.record_native(event(Key::Escape, true), Modifiers::default());
+            assert!(state.capturing.peek().is_none());
+            assert_eq!(state.bindings.peek()[0].accelerator, "Ctrl+Alt");
+        });
+    }
+
+    #[test]
+    fn compositor_editor_validates_arguments_and_records_into_persistent_bindings() {
+        use blair_protocol::{ShortcutBinding, ShortcutCommand};
+        creamui_reactive::with_context_scope(|| {
+            let state = test_state();
+            let mut bindings = vec![ShortcutBinding {
+                accelerator: "Super+1".into(),
+                command: ShortcutCommand::Workspace,
+                argument: Some("1".into()),
+            }];
+            assert!(validate_compositor_shortcuts(&bindings).is_ok());
+            bindings[0].argument = Some("0".into());
+            assert!(validate_compositor_shortcuts(&bindings).is_err());
+            bindings[0].command = ShortcutCommand::Execute;
+            bindings[0].argument = Some(" ".into());
+            assert!(validate_compositor_shortcuts(&bindings).is_err());
+            bindings[0].argument = Some("terminal".into());
+            assert!(validate_compositor_shortcuts(&bindings).is_ok());
+            bindings.push(bindings[0].clone());
+            assert!(validate_compositor_shortcuts(&bindings)
+                .unwrap_err()
+                .contains("duplicates"));
+            bindings.pop();
+            state.compositor_bindings.set(Some(bindings));
+            state.begin_capture(ShortcutCapture::Compositor(0));
+            state.finish_capture("Super+Return".into());
+            assert_eq!(
+                state.compositor_bindings.peek().unwrap()[0].accelerator,
+                "Super+Return"
+            );
+            assert_eq!(state.bindings.peek(), state.saved.peek().shortcuts);
+        });
+    }
+
     fn frame(content: BoxedWidget, size: Size) -> BoxedWidget {
         Box::new(jsx! {
             <Flex direction={FlexDirection::Column} size={(size.width, size.height)}>
@@ -1660,14 +2265,7 @@ mod shortcut_tests {
             crate::components::load_settings_fonts();
             let theme = crate::components::settings_theme(Theme::light());
             creamui_reactive::provide_context(ThemeProvider::new(theme));
-            let config = ShortcutConfig::default();
-            let state = ShortcutState {
-                saved: Signal::new(config.clone()),
-                bindings: Signal::new(config.shortcuts),
-                custom_bindings: Signal::new(config.custom_shortcuts),
-                capturing: Signal::new(None),
-                status: Signal::new(String::new()),
-            };
+            let state = test_state();
             let size = Size {
                 width: 688.0,
                 height: 1000.0,
