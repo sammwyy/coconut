@@ -121,11 +121,12 @@ fn serve(
                     Ok(message.method_return().append1(INTROSPECTION))
                 }
                 Some(INTERFACE) => match message.member().as_deref() {
-                    Some("GetCapabilities") => {
-                        Ok(message
-                            .method_return()
-                            .append1(vec!["body", "icon-static", "actions"]))
-                    }
+                    Some("GetCapabilities") => Ok(message.method_return().append1(vec![
+                        "body",
+                        "icon-static",
+                        "actions",
+                        "sound",
+                    ])),
                     Some("GetServerInformation") => Ok(message
                         .method_return()
                         .append2("Coconut", "Coconut")
@@ -188,6 +189,15 @@ fn serve(
                                     .map(|pair| (pair[0].clone(), pair[1].clone()))
                                     .collect();
                                 let notification = Notification {
+                                    suppress_sound: hints
+                                        .get("suppress-sound")
+                                        .and_then(|value| value.0.as_i64())
+                                        .unwrap_or(0)
+                                        != 0,
+                                    sound_name: hints
+                                        .get("sound-name")
+                                        .and_then(|value| value.0.as_str())
+                                        .map(str::to_owned),
                                     id,
                                     app_name,
                                     icon,
@@ -340,7 +350,9 @@ mod tests {
         assert!(is_name_already_owned(
             "another notification service already owns the session bus name"
         ));
-        assert!(!is_name_already_owned("failed to connect to the session bus"));
+        assert!(!is_name_already_owned(
+            "failed to connect to the session bus"
+        ));
     }
 
     #[test]

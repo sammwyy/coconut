@@ -19,6 +19,8 @@ pub struct Notification {
     pub actions: Vec<(String, String)>,
     pub resident: bool,
     pub expire_timeout: i32,
+    pub suppress_sound: bool,
+    pub sound_name: Option<String>,
 }
 
 pub enum NotificationEvent {

@@ -6,6 +6,7 @@ mod plugins;
 mod popups;
 mod process;
 mod shortcuts;
+mod sounds;
 
 use crate::bar::build_dock;
 use crate::plugins::all_plugins;

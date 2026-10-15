@@ -173,6 +173,12 @@ impl PopupHost {
 
     fn show_status(&self, icon: &'static str, label: &'static str, level: f32) {
         if self.config.peek().status_updates.enabled {
+            if label == "Volume" {
+                crate::sounds::play(
+                    self.config.peek().appearance.sound_theme,
+                    "audio-volume-change".into(),
+                );
+            }
             self.status.set(Some(StatusUpdate {
                 icon,
                 label,
@@ -214,6 +220,8 @@ impl PopupHost {
         self.show_notification(ActiveNotification {
             id: NotificationId::Shell(id),
             notification: Rc::new(Notification {
+                suppress_sound: false,
+                sound_name: None,
                 id: 0,
                 app_name: "Coconut".into(),
                 icon: String::new(),
@@ -238,6 +246,9 @@ impl PopupHost {
         if !self.config.peek().notifications.enabled {
             entry.id.close(self.backend.as_ref(), 2);
             return;
+        }
+        if let Some(event) = crate::sounds::notification_event(&entry.notification) {
+            crate::sounds::play(self.config.peek().appearance.sound_theme, event.into());
         }
         self.notifications.update(|entries| {
             if let Some(existing) = entries.iter_mut().find(|old| old.id == entry.id) {
@@ -874,6 +885,8 @@ mod tests {
 
     fn notification() -> Notification {
         Notification {
+            suppress_sound: false,
+            sound_name: None,
             id: 1,
             app_name: "Files".into(),
             icon: String::new(),
@@ -903,6 +916,29 @@ mod tests {
         );
         n.expire_timeout = 0;
         assert_eq!(notification_duration(&n, 5000), None);
+    }
+
+    #[test]
+    fn notification_sounds_respect_suppression_event_names_and_urgency() {
+        let mut notification = notification();
+        assert_eq!(
+            crate::sounds::notification_event(&notification),
+            Some("message-new-instant")
+        );
+        notification.sound_name = Some("message-new-email".into());
+        assert_eq!(
+            crate::sounds::notification_event(&notification),
+            Some("message-new-email")
+        );
+        notification.suppress_sound = true;
+        assert_eq!(crate::sounds::notification_event(&notification), None);
+        notification.suppress_sound = false;
+        notification.sound_name = Some("../../outside-theme".into());
+        notification.urgency = 2;
+        assert_eq!(
+            crate::sounds::notification_event(&notification),
+            Some("dialog-warning")
+        );
     }
 
     #[test]
