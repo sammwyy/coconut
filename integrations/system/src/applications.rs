@@ -1,31 +1,21 @@
 use super::*;
+use delib::{
+    desktop_entry::{installed_applications, DesktopEntry},
+    xdg::XdgPaths,
+};
 use std::path::{Path, PathBuf};
 
 fn config_dir() -> Result<PathBuf, String> {
-    std::env::var_os("XDG_CONFIG_HOME")
-        .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")))
-        .ok_or("User configuration directory is unavailable".into())
+    Ok(XdgPaths::default().config_home)
 }
 fn data_dirs() -> Vec<PathBuf> {
-    let mut dirs = Vec::new();
-    if let Some(dir) = std::env::var_os("XDG_DATA_HOME")
-        .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".local/share")))
-    {
-        dirs.push(dir.join("applications"));
-        dirs.push(dir.join("flatpak/exports/share/applications"));
-    }
-    dirs.extend(
-        std::env::var("XDG_DATA_DIRS")
-            .unwrap_or_else(|_| "/usr/local/share:/usr/share".into())
-            .split(':')
-            .filter(|dir| !dir.is_empty())
-            .map(|dir| PathBuf::from(dir).join("applications")),
-    );
+    let paths = XdgPaths::default();
+    let mut dirs = paths.application_dirs();
+    dirs.push(paths.data_home.join("flatpak/exports/share/applications"));
     dirs.push(PathBuf::from("/var/lib/flatpak/exports/share/applications"));
     dirs
 }
+#[cfg(test)]
 fn desktop_values(source: &str) -> BTreeMap<String, String> {
     let mut values = BTreeMap::new();
     let mut in_entry = false;
@@ -44,18 +34,40 @@ fn desktop_values(source: &str) -> BTreeMap<String, String> {
     values
 }
 fn entry(path: &Path, id: String) -> Option<Entry> {
-    let values = desktop_values(&fs::read_to_string(path).ok()?);
-    if values.get("Type").is_some_and(|v| v != "Application") {
+    let desktop = DesktopEntry::parse_file(path).ok()?.with_id(id.clone());
+    if desktop
+        .entry_type()
+        .is_some_and(|kind| kind != "Application")
+    {
         return None;
     }
-    let name = values.get("Name")?.clone();
-    let mut properties = values;
+    let name = desktop
+        .name(std::env::var("LANG").ok().as_deref())?
+        .to_owned();
+    let mut properties =
+        desktop
+            .mime_types()
+            .into_iter()
+            .fold(BTreeMap::new(), |mut values, mime| {
+                values
+                    .entry("MimeType".into())
+                    .or_insert_with(String::new)
+                    .push_str(&format!("{mime};"));
+                values
+            });
+    properties.insert("Exec".into(), desktop.exec().unwrap_or_default().into());
     properties.insert("path".into(), path.to_string_lossy().into());
+    properties.insert("Hidden".into(), desktop.hidden().to_string());
+    properties.insert("NoDisplay".into(), desktop.no_display().to_string());
+    let description = desktop
+        .comment(std::env::var("LANG").ok().as_deref())
+        .unwrap_or_default()
+        .to_owned();
     Some(Entry {
         id,
         name,
-        description: properties.get("Comment").cloned().unwrap_or_default(),
-        enabled: properties.get("Hidden").is_none_or(|v| v != "true"),
+        description,
+        enabled: !desktop.hidden(),
         properties,
     })
 }
@@ -87,8 +99,40 @@ fn scan_desktops(dir: &Path, prefix: &str, depth: usize, entries: &mut BTreeMap<
 }
 fn installed() -> Vec<Entry> {
     let mut entries = BTreeMap::new();
-    for dir in data_dirs() {
-        scan_desktops(&dir, "", 0, &mut entries);
+    for desktop in installed_applications(&XdgPaths::default()) {
+        let Some(id) = desktop.id().map(str::to_owned) else {
+            continue;
+        };
+        if desktop
+            .entry_type()
+            .is_some_and(|kind| kind != "Application")
+        {
+            continue;
+        }
+        let Some(name) = desktop.name(std::env::var("LANG").ok().as_deref()) else {
+            continue;
+        };
+        let mut properties = BTreeMap::new();
+        properties.insert("path".into(), desktop.path().to_string_lossy().into_owned());
+        if !desktop.mime_types().is_empty() {
+            properties.insert("MimeType".into(), desktop.mime_types().join(";"));
+        }
+        properties.insert("Exec".into(), desktop.exec().unwrap_or_default().into());
+        properties.insert("Hidden".into(), desktop.hidden().to_string());
+        properties.insert("NoDisplay".into(), desktop.no_display().to_string());
+        entries.insert(
+            id.clone(),
+            Entry {
+                id,
+                name: name.into(),
+                description: desktop
+                    .comment(std::env::var("LANG").ok().as_deref())
+                    .unwrap_or_default()
+                    .into(),
+                enabled: !desktop.hidden(),
+                properties,
+            },
+        );
     }
     let mut entries: Vec<_> = entries
         .into_values()

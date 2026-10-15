@@ -808,7 +808,21 @@ fn open_path(path: PathBuf) {
 
 #[cfg(not(target_os = "windows"))]
 fn open_path(path: PathBuf) {
-    let _ = crate::process::spawn_detached(Command::new("xdg-open").arg(path));
+    let mime = if path.is_dir() {
+        "inode/directory".to_owned()
+    } else {
+        mime_guess::from_path(&path)
+            .first_or_octet_stream()
+            .essence_str()
+            .to_owned()
+    };
+    let Some((_, argv)) = delib::mimeapps::MimeApps::default().command_for(&mime, &[path]) else {
+        return;
+    };
+    let Some((program, args)) = argv.split_first() else {
+        return;
+    };
+    let _ = crate::process::spawn_detached(Command::new(program).args(args));
 }
 
 fn launch(program: String, args: Vec<String>, terminal: bool) {

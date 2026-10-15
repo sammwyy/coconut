@@ -519,6 +519,7 @@ dependencies = [
  "coconut-api",
  "creamui-render",
  "dbus",
+ "delib",
  "serde",
  "serde_json",
 ]
@@ -568,6 +569,7 @@ version = "0.1.0"
 dependencies = [
  "coconut-api",
  "dbus",
+ "delib",
  "libc",
  "serde_json",
  "toml 0.9.12+spec-1.1.0",
@@ -794,6 +796,8 @@ dependencies = [
  "creamui-theme",
  "creamui-theme-loader",
  "creamui-widgets",
+ "delib",
+ "mime_guess",
  "serde",
  "tokio",
  "toml 0.9.12+spec-1.1.0",
@@ -1182,8 +1186,6 @@ dependencies = [
 [[package]]
 name = "delib"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3930a3a80e20713a5861e2e4d27fc5f713ec073b6b10a96da0f030204dd1e57d"
 
 [[package]]
 name = "dispatch"
@@ -2347,6 +2349,22 @@ dependencies = [
  "log",
  "objc",
  "paste",
+]
+
+[[package]]
+name = "mime"
+version = "0.3.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6877bb514081ee2a7ff5ef9de3281f14a4dd4bceac4c09388074a6b5df8a139a"
+
+[[package]]
+name = "mime_guess"
+version = "2.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f7c44f8e672c00fe5308fa235f821cb4198414e1c77935c1ab6948d3fd78550e"
+dependencies = [
+ "mime",
+ "unicase",
 ]
 
 [[package]]
@@ -4265,6 +4283,12 @@ dependencies = [
  "tempfile",
  "windows-sys 0.61.2",
 ]
+
+[[package]]
+name = "unicase"
+version = "2.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "357cc3acc6a036009fd6c973ed009037c732d60d0b4f6c673e9041497482a28f"
 
 [[package]]
 name = "unicode-bidi"

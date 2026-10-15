@@ -34,7 +34,8 @@ use coconut_plugin_kit::chrome::{
     shell_on_accent, shell_panel, shell_selected, shell_text, ISLAND_RADIUS,
 };
 use coconut_plugin_kit::{
-    open_settings, settings_program, xdg_data_directories, IconRequest, IconResolver,
+    installed_applications, open_settings, settings_program, DesktopEntry, IconRequest,
+    IconResolver, XdgPaths,
 };
 use coconut_plugin_kit::{Panel, PanelRenderContext};
 use creamui_core::layout::{AlignItems, FlexDirection, JustifyContent, Style as LayoutStyle};
@@ -46,9 +47,7 @@ use creamui_render::AppHandle;
 use creamui_widgets::layout::{fixed, Align, Flex, Justify, Wrap};
 use creamui_widgets::RawButton;
 use creamui_widgets::{Icon, ScrollController, ScrollView, Symbol, TextController, TextInput};
-use std::collections::{BTreeSet, HashMap};
-use std::fs;
-use std::path::{Path, PathBuf};
+use std::collections::BTreeSet;
 use std::process::Command;
 use std::rc::Rc;
 use std::thread;
@@ -392,26 +391,9 @@ fn load_apps() -> Vec<AppEntry> {
 
 #[cfg(not(target_os = "windows"))]
 fn load_linux_apps() -> Vec<AppEntry> {
-    let mut desktop_files = HashMap::new();
-    for directory in desktop_directories() {
-        let Ok(entries) = fs::read_dir(directory) else {
-            continue;
-        };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path
-                .extension()
-                .is_some_and(|extension| extension == "desktop")
-            {
-                if let Some(name) = path.file_name().and_then(|name| name.to_str()) {
-                    desktop_files.insert(name.to_owned(), path);
-                }
-            }
-        }
-    }
-    let mut apps: Vec<_> = desktop_files
-        .into_values()
-        .filter_map(|path| parse_desktop_entry(&path))
+    let mut apps: Vec<_> = installed_applications(&XdgPaths::default())
+        .into_iter()
+        .filter_map(app_from_desktop_entry)
         .collect();
     apps.sort_by_key(|app| app.name.to_lowercase());
     apps
@@ -465,120 +447,55 @@ fn resolve_icons(mut apps: Vec<AppEntry>, icon_theme: &str) -> Vec<AppEntry> {
 }
 
 #[cfg(not(target_os = "windows"))]
-fn desktop_directories() -> Vec<PathBuf> {
-    xdg_data_directories()
-        .into_iter()
-        .map(|directory| directory.join("applications"))
-        .collect()
-}
-
-#[cfg(not(target_os = "windows"))]
-fn parse_desktop_entry(path: &Path) -> Option<AppEntry> {
-    let contents = fs::read_to_string(path).ok()?;
-    let mut fields = HashMap::new();
-    let mut in_desktop_entry = false;
-    for line in contents.lines().map(str::trim) {
-        if line.starts_with('[') {
-            in_desktop_entry = line == "[Desktop Entry]";
-            continue;
-        }
-        if in_desktop_entry {
-            if let Some((key, value)) = line.split_once('=') {
-                fields.insert(key, value);
-            }
-        }
-    }
-    if fields.get("Type") != Some(&"Application")
-        || matches!(fields.get("Hidden"), Some(&"true"))
-        || matches!(fields.get("NoDisplay"), Some(&"true"))
-    {
+fn app_from_desktop_entry(entry: DesktopEntry) -> Option<AppEntry> {
+    if !entry.is_visible_application() {
         return None;
     }
-    let name = fields
-        .get("Name[en_US]")
-        .or_else(|| fields.get("Name[en]"))
-        .or_else(|| fields.get("Name"))?
-        .to_string();
-    let exec = parse_exec(fields.get("Exec")?);
-    (!exec.is_empty()).then_some(AppEntry {
+    let name = entry
+        .name(std::env::var("LANG").ok().as_deref())?
+        .to_owned();
+    let exec = entry.command_for_files(&[])?;
+    Some(AppEntry {
         name,
         exec,
-        terminal: fields.get("Terminal") == Some(&"true"),
-        category: category_for(fields.get("Categories").copied()),
-        icon_name: fields.get("Icon").map(|icon| (*icon).to_owned()),
+        terminal: entry.terminal(),
+        category: category_for(&entry.categories()),
+        icon_name: entry.icon().map(str::to_owned),
         icon: None,
     })
 }
 
 #[cfg(not(target_os = "windows"))]
-fn category_for(categories: Option<&str>) -> String {
-    let categories = categories.unwrap_or_default();
-    if categories.contains("AudioVideo")
-        || categories.contains("Audio;")
-        || categories.contains("Video;")
+fn category_for(categories: &[&str]) -> String {
+    if categories
+        .iter()
+        .any(|category| matches!(*category, "AudioVideo" | "Audio" | "Video"))
     {
         "Multimedia"
-    } else if categories.contains("Network") {
+    } else if categories.contains(&"Network") {
         "Internet"
-    } else if categories.contains("Development") {
+    } else if categories.contains(&"Development") {
         "Development"
-    } else if categories.contains("Graphics") {
+    } else if categories.contains(&"Graphics") {
         "Graphics"
-    } else if categories.contains("Office") {
+    } else if categories.contains(&"Office") {
         "Office"
-    } else if categories.contains("Education") {
+    } else if categories.contains(&"Education") {
         "Education"
-    } else if categories.contains("Science") {
+    } else if categories.contains(&"Science") {
         "Science"
-    } else if categories.contains("Game") {
+    } else if categories.contains(&"Game") {
         "Games"
-    } else if categories.contains("Settings") {
+    } else if categories.contains(&"Settings") {
         "Settings"
-    } else if categories.contains("System") {
+    } else if categories.contains(&"System") {
         "System Tools"
-    } else if categories.contains("Utility") {
+    } else if categories.contains(&"Utility") {
         "Accessories"
     } else {
         "Other"
     }
     .into()
-}
-
-#[cfg(not(target_os = "windows"))]
-fn parse_exec(value: &str) -> Vec<String> {
-    let mut arguments = Vec::new();
-    let mut current = String::new();
-    let mut quote = None;
-    let mut escaped = false;
-    for character in value.chars() {
-        if escaped {
-            current.push(character);
-            escaped = false;
-        } else if character == '\\' {
-            escaped = true;
-        } else if matches!(character, '\'' | '"') {
-            if quote == Some(character) {
-                quote = None;
-            } else if quote.is_none() {
-                quote = Some(character);
-            } else {
-                current.push(character);
-            }
-        } else if character.is_whitespace() && quote.is_none() {
-            if !current.is_empty() {
-                arguments.push(std::mem::take(&mut current));
-            }
-        } else {
-            current.push(character);
-        }
-    }
-    if !current.is_empty() {
-        arguments.push(current);
-    }
-    arguments
-        .into_iter()
-        .filter(|argument| !argument.starts_with('%'))
-        .collect()
 }
 
 fn short_name(name: &str) -> String {
@@ -716,17 +633,4 @@ fn user_name() -> String {
     std::env::var("USER")
         .or_else(|_| std::env::var("USERNAME"))
         .unwrap_or_else(|_| "User".into())
-}
-
-#[cfg(all(test, not(target_os = "windows")))]
-mod tests {
-    use super::parse_exec;
-
-    #[test]
-    fn exec_parser_keeps_quoted_arguments_and_drops_desktop_fields() {
-        assert_eq!(
-            parse_exec("code --profile \"Work Space\" %U"),
-            ["code", "--profile", "Work Space"]
-        );
-    }
 }

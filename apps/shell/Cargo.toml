@@ -21,6 +21,7 @@ perf-metrics = [
 coconut-api = { path = "../../crates/api" }
 coconut-core = { path = "../../crates/core" }
 coconut-plugin-kit = { path = "../../crates/plugin-kit" }
+delib = { version = "0.1.0", path = "../../../delib" }
 coconut-plugin-logo = { path = "../../plugins/logo" }
 coconut-plugin-clock = { path = "../../plugins/clock" }
 coconut-plugin-weather = { path = "../../plugins/weather" }
@@ -29,6 +30,7 @@ coconut-plugin-app-launcher = { path = "../../plugins/app_launcher" }
 coconut-plugin-app-drawer = { path = "../../plugins/app_drawer" }
 coconut-plugin-tray = { path = "../../plugins/tray" }
 chrono = "0.4"
+mime_guess = "2"
 toml = "0.9"
 creamui-core = { path = "../../../creamui/crates/core" }
 creamui-devtools = { path = "../../../creamui/crates/devtools", optional = true }

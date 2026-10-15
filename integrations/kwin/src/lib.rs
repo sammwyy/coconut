@@ -567,16 +567,8 @@ fn desktop_entries() -> &'static Vec<DesktopEntry> {
 }
 
 fn desktop_entry_dirs() -> Vec<PathBuf> {
-    let mut directories = Vec::new();
-    if let Some(data_home) = std::env::var_os("XDG_DATA_HOME") {
-        directories.push(PathBuf::from(data_home).join("applications"));
-    } else if let Some(home) = std::env::var_os("HOME") {
-        directories.push(PathBuf::from(home).join(".local/share/applications"));
-    }
-    let data_dirs =
-        std::env::var_os("XDG_DATA_DIRS").unwrap_or_else(|| "/usr/local/share:/usr/share".into());
-    directories
-        .extend(std::env::split_paths(&data_dirs).map(|directory| directory.join("applications")));
+    let paths = delib::xdg::XdgPaths::default();
+    let mut directories = paths.application_dirs();
     if let Some(home) = std::env::var_os("HOME") {
         directories
             .push(PathBuf::from(home).join(".local/share/flatpak/exports/share/applications"));
@@ -586,53 +578,11 @@ fn desktop_entry_dirs() -> Vec<PathBuf> {
 }
 
 fn parse_desktop_entry(path: &Path) -> Option<DesktopEntry> {
-    let contents = fs::read_to_string(path).ok()?;
-    let mut in_desktop_entry = false;
-    let mut program = None;
-    let mut icon = None;
-    for line in contents.lines() {
-        let line = line.trim();
-        if line.starts_with('[') && line.ends_with(']') {
-            if in_desktop_entry {
-                break;
-            }
-            in_desktop_entry = line == "[Desktop Entry]";
-            continue;
-        }
-        if !in_desktop_entry {
-            continue;
-        }
-        if let Some(value) = line.strip_prefix("Exec=") {
-            program = desktop_exec_program(value);
-        } else if let Some(value) = line.strip_prefix("Icon=") {
-            icon = Some(value.to_owned());
-        }
-    }
+    let parsed = delib::desktop_entry::DesktopEntry::parse_file(path).ok()?;
     Some(DesktopEntry {
-        program: program?,
-        icon: icon?,
+        program: parsed.program()?,
+        icon: parsed.icon()?.to_owned(),
     })
-}
-
-fn desktop_exec_program(exec: &str) -> Option<String> {
-    let mut program = String::new();
-    let mut quoted = false;
-    let mut escaped = false;
-    for character in exec.chars() {
-        if escaped {
-            program.push(character);
-            escaped = false;
-        } else if character == '\\' {
-            escaped = true;
-        } else if character == '"' {
-            quoted = !quoted;
-        } else if character.is_whitespace() && !quoted {
-            break;
-        } else {
-            program.push(character);
-        }
-    }
-    (!program.is_empty()).then_some(program)
 }
 
 fn program_matches(declared: &str, process: &Path) -> bool {
@@ -699,24 +649,32 @@ fn kdotool(args: &[&str]) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{desktop_exec_program, program_matches, DesktopIntegration, KWinDbus};
+    use super::{program_matches, DesktopIntegration, KWinDbus};
     use std::path::Path;
     use std::sync::mpsc;
     use std::thread;
     use std::time::Duration;
 
     #[test]
-    fn desktop_exec_program_handles_quotes_and_arguments() {
+    fn desktop_entry_parser_handles_quotes_and_arguments() {
         assert_eq!(
-            desktop_exec_program("\"/opt/Example App/example\" --new-window %U"),
+            delib::desktop_entry::DesktopEntry::parse(
+                "example.desktop",
+                "[Desktop Entry]\nExec=\"/opt/Example App/example\" --new-window %U\n",
+            )
+            .program(),
             Some("/opt/Example App/example".to_owned())
         );
     }
 
     #[test]
-    fn desktop_exec_program_stops_before_arguments() {
+    fn desktop_entry_parser_stops_before_arguments() {
         assert_eq!(
-            desktop_exec_program("firefox %U"),
+            delib::desktop_entry::DesktopEntry::parse(
+                "firefox.desktop",
+                "[Desktop Entry]\nExec=firefox %U\n",
+            )
+            .program(),
             Some("firefox".to_owned())
         );
     }
