@@ -31,6 +31,18 @@ pub struct BatteryAlertsConfig {
     pub critical_percent: u8,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LocationConfig {
+    pub enabled: bool,
+}
+
+impl Default for LocationConfig {
+    fn default() -> Self {
+        Self { enabled: false }
+    }
+}
+
 impl Default for BatteryAlertsConfig {
     fn default() -> Self {
         Self {
@@ -69,6 +81,7 @@ pub struct ShellConfig {
     pub desktop: DesktopConfig,
     pub status_updates: PopupConfig,
     pub battery_alerts: BatteryAlertsConfig,
+    pub location: LocationConfig,
     #[serde(
         default = "PopupConfig::notifications",
         deserialize_with = "popups::deserialize_notifications"
@@ -126,6 +139,7 @@ impl Default for ShellConfig {
             desktop: DesktopConfig::default(),
             status_updates: PopupConfig::default(),
             battery_alerts: BatteryAlertsConfig::default(),
+            location: LocationConfig::default(),
             notifications: PopupConfig::notifications(),
         }
     }
@@ -254,6 +268,10 @@ duration_ms = 1800
 low_percent = 10
 critical_percent = 5
 
+[location]
+# Allow applications authorized by the Coconut GeoClue agent to request location.
+enabled = false
+
 [notifications]
 enabled = true
 edge = "top"
@@ -291,6 +309,29 @@ impl ShellConfig {
 
     pub fn bar_configs(&self) -> [DockConfig; 2] {
         [self.statusbar.clone(), self.dockbar.clone()]
+    }
+
+    /// Reads an existing configuration without creating a file during passive
+    /// service discovery.
+    pub fn load_existing() -> Self {
+        let path = config_file_path();
+        match std::fs::read_to_string(&path) {
+            Ok(contents) => toml::from_str(&contents).unwrap_or_else(|error| {
+                eprintln!(
+                    "config: failed to parse {}: {error}; using defaults",
+                    path.display()
+                );
+                ShellConfig::default()
+            }),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => ShellConfig::default(),
+            Err(error) => {
+                eprintln!(
+                    "config: failed to read {}: {error}; using defaults",
+                    path.display()
+                );
+                ShellConfig::default()
+            }
+        }
     }
 
     /// Loads the shell configuration from disk, creating the default file on

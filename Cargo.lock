@@ -573,6 +573,7 @@ name = "coconut-integration-system"
 version = "0.1.0"
 dependencies = [
  "coconut-api",
+ "coconut-core",
  "creamui-theme-loader",
  "creamui-theme-watch",
  "dbus",

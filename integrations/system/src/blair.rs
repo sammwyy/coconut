@@ -1,5 +1,8 @@
 use super::*;
+use coconut_core::ShellConfig;
 use std::os::unix::fs::PermissionsExt;
+
+const LOCATION_AGENT_ID: &str = "org.coconut.LocationAgent";
 
 pub fn configuration() -> Result<toml::Value, String> {
     let connection = Connection::new_session().map_err(|error| error.to_string())?;
@@ -39,7 +42,45 @@ fn path(key: &str) -> Option<(&'static str, &'static str)> {
 }
 
 pub fn supports(key: &str) -> bool {
-    path(key).is_some() || matches!(key, "contrast" | "text-scale")
+    path(key).is_some() || matches!(key, "contrast" | "text-scale" | "location")
+}
+
+fn location_agent_permitted_in(document: &str) -> Option<bool> {
+    let mut in_agent = false;
+    let mut result = None;
+    for line in document.lines().map(str::trim) {
+        if line.is_empty() || line.starts_with('#') || line.starts_with(';') {
+            continue;
+        }
+        if line.starts_with('[') && line.ends_with(']') {
+            in_agent = &line[1..line.len() - 1] == "agent";
+            continue;
+        }
+        if in_agent {
+            if let Some(value) = line.strip_prefix("whitelist=") {
+                result = Some(value.split(';').any(|id| id.trim() == LOCATION_AGENT_ID));
+            }
+        }
+    }
+    result
+}
+
+fn location_agent_permitted() -> bool {
+    let mut paths = vec![std::path::PathBuf::from("/etc/geoclue/geoclue.conf")];
+    if let Ok(entries) = std::fs::read_dir("/etc/geoclue/conf.d") {
+        let mut overrides: Vec<_> = entries
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .collect();
+        overrides.sort();
+        paths.extend(overrides);
+    }
+    paths
+        .into_iter()
+        .filter_map(|path| std::fs::read_to_string(path).ok())
+        .filter_map(|document| location_agent_permitted_in(&document))
+        .last()
+        .unwrap_or(false)
 }
 
 fn compatible_locker() -> Option<String> {
@@ -76,6 +117,21 @@ fn native_backlight_available() -> bool {
 }
 
 pub fn discover(snapshot: &mut Snapshot) {
+    let location_enabled = ShellConfig::load_existing().location.enabled;
+    let location_permitted = location_agent_permitted();
+    snapshot.preferences.insert(
+        "location".into(),
+        Preference {
+            value: Some(Value::Bool(location_enabled)),
+            writable: location_permitted,
+            reason: if location_permitted {
+                String::new()
+            } else {
+                "Ask an administrator to whitelist org.coconut.LocationAgent in GeoClue".into()
+            },
+            ..Default::default()
+        },
+    );
     match creamui_theme_loader::read_system_accessibility() {
         Ok(preferences) => {
             snapshot
@@ -140,6 +196,17 @@ pub fn discover(snapshot: &mut Snapshot) {
 }
 
 pub fn set(key: &str, value: Value) -> Result<(), String> {
+    if key == "location" {
+        let Value::Bool(enabled) = value else {
+            return Err("Invalid location policy".into());
+        };
+        if enabled && !location_agent_permitted() {
+            return Err("GeoClue is not configured to trust Coconut's location agent".into());
+        }
+        let mut config = ShellConfig::load();
+        config.location.enabled = enabled;
+        return config.save().map_err(|error| error.to_string());
+    }
     if matches!(key, "contrast" | "text-scale") {
         let mut preferences =
             creamui_theme_loader::read_system_accessibility().map_err(|error| error.to_string())?;
@@ -218,6 +285,21 @@ fn put(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn geoclue_agent_whitelist_must_name_coconut() {
+        assert_eq!(
+            location_agent_permitted_in(
+                "[agent]\nwhitelist=gnome-shell;org.coconut.LocationAgent\n"
+            ),
+            Some(true)
+        );
+        assert_eq!(
+            location_agent_permitted_in("[agent]\nwhitelist=gnome-shell\n"),
+            Some(false)
+        );
+        assert_eq!(location_agent_permitted_in("[wifi]\nenable=true\n"), None);
+    }
 
     #[test]
     fn changing_a_theme_preserves_other_configuration_sections() {

@@ -3,6 +3,7 @@ mod bar;
 mod battery;
 mod connectivity;
 mod desktop;
+mod location;
 mod plugins;
 mod popups;
 mod process;
@@ -187,6 +188,7 @@ pub fn run() {
     AppBuilder::new()
         .keep_running()
         .on_started(move |app| {
+            location::start();
             let popups = popups::PopupHost::start(
                 app.clone(),
                 config.clone(),
