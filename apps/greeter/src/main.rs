@@ -1,4 +1,6 @@
 use std::{
+    cell::RefCell,
+    rc::Rc,
     thread,
     time::{Duration, Instant},
 };
@@ -7,7 +9,9 @@ use alphin::client::{socket_from_environment, Client};
 use anyhow::{bail, Context, Result};
 use creamui_core::BoxedWidget;
 use creamui_reactive::Signal;
-use creamui_render::{platform::WindowRole, AppBuilder, AppHandle, RenderBackend, WindowOptions};
+use creamui_render::{
+    platform::WindowRole, AppBuilder, AppHandle, RenderBackend, WindowHandle, WindowOptions,
+};
 use creamui_theme::Color;
 use creamui_widgets::{
     layout::{Align, Flex, Justify},
@@ -59,6 +63,7 @@ fn run(client: Client) {
     let response = TextController::new("");
     let message = Signal::new(String::from("Loading accounts and sessions…"));
     let busy = Signal::new(true);
+    let window = Rc::new(RefCell::new(None::<WindowHandle>));
 
     AppBuilder::new()
         .on_started(move |app| {
@@ -73,6 +78,7 @@ fn run(client: Client) {
                 busy.clone(),
             );
             let ui_app = app.clone();
+            let ui_window = window.clone();
             app.append_window(
                 WindowOptions {
                     title: "Sign in".into(),
@@ -86,7 +92,7 @@ fn run(client: Client) {
                     ..Default::default()
                 },
                 Color::rgba(0, 0, 0, 1),
-                |_| {},
+                move |handle| *ui_window.borrow_mut() = Some(handle),
                 move |_| {
                     view(
                         ui_app.clone(),
@@ -99,6 +105,7 @@ fn run(client: Client) {
                         response.clone(),
                         message.clone(),
                         busy.clone(),
+                        window.clone(),
                     )
                 },
             );
@@ -148,6 +155,7 @@ fn view(
     response: TextController,
     message: Signal<String>,
     busy: Signal<bool>,
+    window: Rc<RefCell<Option<WindowHandle>>>,
 ) -> BoxedWidget {
     let is_busy = busy.get();
     let selected_account = selected_user.get();
@@ -162,6 +170,7 @@ fn view(
         let response = response.clone();
         let message = message.clone();
         let busy = busy.clone();
+        let window = window.clone();
         move || {
             if busy.peek() {
                 return;
@@ -196,6 +205,7 @@ fn view(
             let done_prompt = prompt.clone();
             let done_message = message.clone();
             let done_busy = busy.clone();
+            let done_window = window.clone();
             app.spawn_background(
                 move || authenticate_step(&worker_client, &username, &session, worker_answer),
                 move |result| {
@@ -204,6 +214,9 @@ fn view(
                         Ok(AuthenticationStep::Prompt(next_prompt)) => {
                             done_message.set(next_prompt.message.clone());
                             done_prompt.set(Some(next_prompt));
+                            if let Some(window) = done_window.borrow().as_ref() {
+                                window.focus_text_input();
+                            }
                         }
                         Ok(AuthenticationStep::SessionQueued) => {
                             done_message.set("Loading your session…".into());
