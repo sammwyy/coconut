@@ -1,4 +1,5 @@
 mod appearance;
+mod background;
 mod desktop;
 mod dock;
 pub mod geo;
@@ -9,9 +10,8 @@ mod profile;
 mod shortcuts;
 
 pub use appearance::AppearanceConfig;
-pub use desktop::{
-    ClickAction, DesktopColor, DesktopConfig, DesktopIconsConfig, IconShape, WallpaperMode,
-};
+pub use background::{BackgroundConfig, BackgroundMode, WallpaperSource};
+pub use desktop::{ClickAction, DesktopColor, DesktopConfig, DesktopIconsConfig, IconShape};
 pub use dock::{
     ordered_islands, BackgroundSource, DockAlign, DockConfig, DockDirection, DockPosition,
     IslandEntry, SectionConfig, DEFAULT_THICKNESS,
@@ -278,10 +278,6 @@ edge = "top"
 align = "right"
 offset = 64.0
 duration_ms = 5000
-
-[desktop]
-# Path to a wallpaper image. Unset uses the built-in background.
-# wallpaper = "/home/you/Pictures/wallpaper.jpg"
 
 [desktop.icons]
 # Background square size in pixels. The grid slot, label text and

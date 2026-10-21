@@ -32,7 +32,17 @@ stay calm, responsive, and consistent.
 | --- | --- |
 | `coconut` | Start the shell. |
 | `coconut settings` | Open Coconut Settings. |
+| `coconut bg` | Start the standalone background renderer. |
 | `coconut-settings` | Open Coconut Settings directly. |
+| `coconut-bg` | Render the desktop background directly. |
+
+`coconut` now contains only the shell and transparent desktop-icon layer.
+Start `coconut-bg` alongside it in a Wayland session. It renders one bottom
+layer surface per output, follows output size/scale changes, and stores its
+independent configuration in `~/.config/coconut/bg.toml` (or the equivalent
+XDG configuration directory). Coconut Settings updates it live. Image mode
+supports **Full** (aspect-preserving fill), **Centered**, **Stretched**, and
+**Mosaic** placement, plus a solid-color fallback.
 
 ## Notifications and status updates
 
@@ -75,6 +85,7 @@ and troubleshooting guidance.
 For a local development session:
 
 ```bash
+cargo run -p coconut-bg &
 cargo run -p coconut-shell
 ```
 

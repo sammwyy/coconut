@@ -6,16 +6,25 @@ fn main() {
     match mode.as_deref() {
         None | Some("shell") => coconut_shell::run(),
         Some("settings") => open_settings(),
+        Some("bg") => open_background(),
         Some(other) => {
             eprintln!("coconut: unknown command \"{other}\"");
-            eprintln!("usage: coconut [shell|settings [route]]");
+            eprintln!("usage: coconut [shell|settings [route]|bg]");
             std::process::exit(1);
         }
     }
 }
 
+fn open_background() {
+    open_sibling("coconut-bg");
+}
+
 fn open_settings() {
-    let program = settings_program();
+    open_sibling("coconut-settings");
+}
+
+fn open_sibling(name: &str) {
+    let program = sibling_program(name);
     match Command::new(&program)
         .args(std::env::args_os().skip(2))
         .status()
@@ -29,14 +38,13 @@ fn open_settings() {
     }
 }
 
-fn settings_program() -> PathBuf {
+fn sibling_program(name: &str) -> PathBuf {
     std::env::current_exe()
         .ok()
         .and_then(|path| {
-            path.parent().map(|directory| {
-                directory.join(format!("coconut-settings{}", std::env::consts::EXE_SUFFIX))
-            })
+            path.parent()
+                .map(|directory| directory.join(format!("{name}{}", std::env::consts::EXE_SUFFIX)))
         })
         .filter(|path| path.is_file())
-        .unwrap_or_else(|| PathBuf::from("coconut-settings"))
+        .unwrap_or_else(|| PathBuf::from(name))
 }

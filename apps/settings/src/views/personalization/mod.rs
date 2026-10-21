@@ -1,5 +1,5 @@
 use crate::routes::destination::Section;
-use coconut_core::ShellConfig;
+use coconut_core::{BackgroundConfig, ShellConfig, WallpaperSource};
 use creamui_core::BoxedWidget;
 use creamui_reactive::Signal;
 
@@ -11,6 +11,7 @@ pub mod wallpaper;
 pub(crate) fn overview() -> creamui_core::BoxedWidget {
     let context = creamui_reactive::use_context::<crate::views::context::ViewContext>();
     let config = &context.config;
+    let background = &context.background;
     let appearance = &context.appearance;
     let view = &context.view;
     let window = &context.window;
@@ -20,6 +21,7 @@ pub(crate) fn overview() -> creamui_core::BoxedWidget {
     build(
         native,
         config,
+        background,
         appearance,
         view,
         crate::views::personalization::appearance::overview(
@@ -34,11 +36,13 @@ pub(crate) fn overview() -> creamui_core::BoxedWidget {
 fn build(
     state: &State,
     config: &Signal<ShellConfig>,
+    background: &Signal<BackgroundConfig>,
     appearance: &Signal<creamui_theme::ResolvedAppearance>,
     nav: &creamui_router::Router,
     appearance_controls: crate::views::personalization::appearance::OverviewControls,
 ) -> BoxedWidget {
     let config = config.get();
+    let background = background.get();
     let selected = appearance.get();
     let crate::views::personalization::appearance::OverviewControls {
         theme,
@@ -55,10 +59,9 @@ fn build(
                     style,
                     link(
                         "Wallpaper",
-                        match config.desktop.wallpaper_mode {
-                            coconut_core::WallpaperMode::SolidColor => "Solid color".into(),
-                            _ => config
-                                .desktop
+                        match background.source {
+                            WallpaperSource::SolidColor => "Solid color".into(),
+                            WallpaperSource::Image => background
                                 .wallpaper
                                 .as_ref()
                                 .and_then(|p| p.file_stem())

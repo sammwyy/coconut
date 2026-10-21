@@ -1,5 +1,5 @@
 use coconut_api::desktop::DesktopWorkArea;
-use coconut_core::{ClickAction, DesktopIconsConfig, IconShape, ShellConfig, WallpaperMode};
+use coconut_core::{ClickAction, DesktopIconsConfig, IconShape, ShellConfig};
 use coconut_plugin_kit::{pixel_icon, IconRequest, IconResolver};
 use creamui_core::layout::{
     Dimension, FlexDirection, LengthPercentageAuto, Position, Rect as LayoutRect,
@@ -235,11 +235,9 @@ pub fn build(
     let shell = config.get();
     let desktop = shell.desktop;
     let theme = use_theme();
-    // Labels need to contrast with what is actually behind the desktop, not
-    // with the active application theme. This also keeps them readable when a
-    // light theme is used with a dark wallpaper (and vice versa).
-    let wallpaper = configured_wallpaper(desktop.wallpaper.clone());
-    let label_color = desktop_label_color(&desktop, wallpaper.as_ref(), theme.colors.surface);
+    // coconut-bg owns desktop pixels. The shell's desktop surface only hosts
+    // files and their interaction layer, so it must stay transparent.
+    let label_color = Color::rgb(255, 255, 255);
     let layout = IconLayout::from_config(&desktop.icons, theme.colors, label_color);
     let dock_position = shell.dockbar.position;
     let dock_thickness = shell.dockbar.thickness.max(1.0);
@@ -251,105 +249,13 @@ pub fn build(
                     size: fixed(viewport.width, viewport.height),
                     ..Default::default()
                 })
-                .background(theme.colors.surface),
+                .background(TRANSPARENT),
         )
         .with_children(vec![
-            wallpaper_layer(desktop, wallpaper),
             widget_layer(),
             icon_layer(viewport, state, layout, work_area),
         ]),
     )
-}
-
-fn wallpaper_layer(
-    config: coconut_core::DesktopConfig,
-    wallpaper: Option<ImageData>,
-) -> BoxedWidget {
-    if config.wallpaper_mode == WallpaperMode::SolidColor {
-        return Box::new(RawView::new(fill_layout()).background(Color::rgb(
-            config.solid_color.r,
-            config.solid_color.g,
-            config.solid_color.b,
-        )));
-    }
-    wallpaper
-        .map(|data| {
-            Box::new(Image::new(data).layout(fill_layout()).fit(ImageFit::Cover)) as BoxedWidget
-        })
-        .unwrap_or_else(|| Box::new(RawView::new(fill_layout())))
-}
-
-/// Returns a legible label color from the rendered desktop background.
-///
-/// Wallpaper pixels are premultiplied RGBA, so the RGB channels are first
-/// composited over the fallback surface before calculating luminance. Sampling
-/// caps the work for large photographs while still representing the whole
-/// image. A solid desktop has an exact background color, of course.
-fn desktop_label_color(
-    config: &coconut_core::DesktopConfig,
-    wallpaper: Option<&ImageData>,
-    fallback: Color,
-) -> Color {
-    let background = if config.wallpaper_mode == WallpaperMode::SolidColor {
-        Color::rgb(
-            config.solid_color.r,
-            config.solid_color.g,
-            config.solid_color.b,
-        )
-    } else {
-        wallpaper
-            .map(|image| average_wallpaper_color(image, fallback))
-            .unwrap_or(fallback)
-    };
-
-    // Pick the higher-contrast endpoint. Their contrast ratios cross at
-    // roughly 0.179 relative luminance, rather than at a perceptual 50% grey.
-    if relative_luminance(background) < 0.179 {
-        Color::rgb(255, 255, 255)
-    } else {
-        Color::rgb(0, 0, 0)
-    }
-}
-
-fn average_wallpaper_color(image: &ImageData, fallback: Color) -> Color {
-    let pixels = image.pixels();
-    let pixel_count = (image.width() as usize).saturating_mul(image.height() as usize);
-    // At most 16k evenly distributed samples; this is called during widget
-    // rebuilds and wallpapers may be several megapixels.
-    let stride = (pixel_count / 16_384).max(1);
-    let mut red = 0.0;
-    let mut green = 0.0;
-    let mut blue = 0.0;
-    let mut samples = 0usize;
-
-    for pixel in pixels.chunks_exact(4).step_by(stride) {
-        let alpha = pixel[3] as f32 / 255.0;
-        red += pixel[0] as f32 + fallback.r as f32 * (1.0 - alpha);
-        green += pixel[1] as f32 + fallback.g as f32 * (1.0 - alpha);
-        blue += pixel[2] as f32 + fallback.b as f32 * (1.0 - alpha);
-        samples += 1;
-    }
-
-    if samples == 0 {
-        return fallback;
-    }
-    Color::rgb(
-        (red / samples as f32).round() as u8,
-        (green / samples as f32).round() as u8,
-        (blue / samples as f32).round() as u8,
-    )
-}
-
-fn relative_luminance(color: Color) -> f32 {
-    fn linear(channel: u8) -> f32 {
-        let channel = channel as f32 / 255.0;
-        if channel <= 0.04045 {
-            channel / 12.92
-        } else {
-            ((channel + 0.055) / 1.055).powf(2.4)
-        }
-    }
-    0.2126 * linear(color.r) + 0.7152 * linear(color.g) + 0.0722 * linear(color.b)
 }
 
 fn widget_layer() -> BoxedWidget {
@@ -556,13 +462,6 @@ fn entry_icon(entry: &DesktopEntry, size: f32, foreground: Color) -> BoxedWidget
         size,
         foreground,
     )
-}
-
-fn configured_wallpaper(wallpaper: Option<PathBuf>) -> Option<ImageData> {
-    wallpaper
-        .or_else(|| std::env::var_os("COCONUT_WALLPAPER").map(PathBuf::from))
-        .filter(|path| path.is_file())
-        .and_then(|path| ImageData::from_path(path).ok())
 }
 
 fn load_entries(icon_theme: &str) -> Vec<DesktopEntry> {
@@ -1065,30 +964,5 @@ mod tests {
         );
         assert_eq!(position.x, GRID_INSET + layout.grid_cell_x * 2.0);
         assert_eq!(position.y, area.y + GRID_INSET + layout.grid_cell_y * 3.0);
-    }
-
-    #[test]
-    fn labels_switch_for_dark_and_light_solid_backgrounds() {
-        let mut desktop = coconut_core::DesktopConfig::default();
-        desktop.wallpaper_mode = WallpaperMode::SolidColor;
-        desktop.solid_color = coconut_core::DesktopColor {
-            r: 20,
-            g: 20,
-            b: 20,
-        };
-        assert_eq!(
-            desktop_label_color(&desktop, None, Color::rgb(255, 255, 255)).r,
-            255
-        );
-
-        desktop.solid_color = coconut_core::DesktopColor {
-            r: 235,
-            g: 235,
-            b: 235,
-        };
-        assert_eq!(
-            desktop_label_color(&desktop, None, Color::rgb(0, 0, 0)).r,
-            0
-        );
     }
 }

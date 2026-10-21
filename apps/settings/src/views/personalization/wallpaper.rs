@@ -1,5 +1,5 @@
-use crate::components::{group, row, section, tab_colors, update_config};
-use coconut_core::{DesktopColor, ShellConfig, WallpaperMode};
+use crate::components::{group, row, section, tab_colors, update_background_config};
+use coconut_core::{BackgroundConfig, BackgroundMode, DesktopColor, WallpaperSource};
 use creamui_core::layout::FlexDirection;
 use creamui_core::{BoxedWidget, Size, Styled};
 use creamui_image::{Image, ImageData, ImageFit};
@@ -24,7 +24,10 @@ use std::time::UNIX_EPOCH;
 
 const CARD: f32 = 112.0;
 const THUMBNAIL_SIZE: u32 = 224;
-const WALLPAPER_EXTENSIONS: [&str; 4] = ["png", "jpg", "jpeg", "webp"];
+const WALLPAPER_EXTENSIONS: [&str; 19] = [
+    "avif", "bmp", "dds", "exr", "ff", "farbfeld", "gif", "hdr", "ico", "jpe", "jpg", "jpeg",
+    "png", "pnm", "qoi", "tga", "tif", "tiff", "webp",
+];
 
 /// Persists across rebuilds so the `Wallpapers` folder is scanned for
 /// thumbnails at most once per app run, off the UI thread.
@@ -51,36 +54,37 @@ impl Default for GalleryState {
 
 pub fn build(
     _: Size,
-    config: &Signal<ShellConfig>,
+    background: &Signal<BackgroundConfig>,
     picker: &ColorPickerController,
     gallery: &GalleryState,
     window: &Rc<RefCell<Option<WindowHandle>>>,
 ) -> BoxedWidget {
-    let desktop = config.get().desktop;
+    let config = background.get();
     let image_mode = match creamui_router::use_location().query("tab").as_deref() {
         Some("image") => true,
         Some("color") => false,
-        _ => desktop.wallpaper_mode == WallpaperMode::Image,
+        _ => config.source == WallpaperSource::Image,
     };
     let content = if image_mode {
         image_content(
-            config,
-            desktop.wallpaper,
-            desktop.recent_wallpapers,
+            background,
+            config.wallpaper,
+            config.recent_wallpapers,
+            config.mode,
             gallery,
             window,
         )
     } else {
-        solid_color(config, desktop.solid_color, picker)
+        solid_color(background, config.solid_color, picker)
     };
     section(
         "Wallpaper",
         "Choose an image or a solid desktop color.",
-        vec![mode_tabs(config, image_mode), content],
+        vec![mode_tabs(background, image_mode), content],
     )
 }
 
-fn mode_tabs(config: &Signal<ShellConfig>, image_mode: bool) -> BoxedWidget {
+fn mode_tabs(background: &Signal<BackgroundConfig>, image_mode: bool) -> BoxedWidget {
     let labels = ["Image", "Solid color"];
     let colors = tab_colors();
     let styles = tab_styles(&labels, TabSizing::Fill, 36.0, 6.0);
@@ -93,7 +97,7 @@ fn mode_tabs(config: &Signal<ShellConfig>, image_mode: bool) -> BoxedWidget {
     )
     .gap(8.0);
     for (index, label) in labels.into_iter().enumerate() {
-        let config = config.clone();
+        let background = background.clone();
         let router = creamui_router::use_router();
         tabs = tabs.child(Box::new(Tab::new(
             colors,
@@ -106,11 +110,11 @@ fn mode_tabs(config: &Signal<ShellConfig>, image_mode: bool) -> BoxedWidget {
                     "tab",
                     if index == 0 { "image" } else { "color" },
                 );
-                update_config(&config, |config| {
-                    config.desktop.wallpaper_mode = if index == 0 {
-                        WallpaperMode::Image
+                update_background_config(&background, |config| {
+                    config.source = if index == 0 {
+                        WallpaperSource::Image
                     } else {
-                        WallpaperMode::SolidColor
+                        WallpaperSource::SolidColor
                     };
                 })
             },
@@ -119,23 +123,56 @@ fn mode_tabs(config: &Signal<ShellConfig>, image_mode: bool) -> BoxedWidget {
     Box::new(tabs)
 }
 
+fn placement_tabs(background: &Signal<BackgroundConfig>, selected: BackgroundMode) -> BoxedWidget {
+    let labels = ["Full", "Centered", "Stretched", "Mosaic"];
+    let modes = [
+        BackgroundMode::Full,
+        BackgroundMode::Centered,
+        BackgroundMode::Stretched,
+        BackgroundMode::Mosaic,
+    ];
+    let colors = tab_colors();
+    let styles = tab_styles(&labels, TabSizing::Fill, 36.0, 6.0);
+    let mut tabs = Tabs::new(
+        colors,
+        creamui_core::layout::Style {
+            size: fixed(440.0, 36.0),
+            ..Default::default()
+        },
+    )
+    .gap(8.0);
+    for (index, label) in labels.into_iter().enumerate() {
+        let background = background.clone();
+        let mode = modes[index];
+        tabs = tabs.child(Box::new(Tab::new(
+            colors,
+            styles[index].clone(),
+            label,
+            selected == mode,
+            move || update_background_config(&background, |config| config.mode = mode),
+        )));
+    }
+    Box::new(tabs)
+}
+
 fn image_content(
-    config: &Signal<ShellConfig>,
+    background: &Signal<BackgroundConfig>,
     current: Option<PathBuf>,
     mut recent: Vec<PathBuf>,
+    mode: BackgroundMode,
     gallery: &GalleryState,
     window: &Rc<RefCell<Option<WindowHandle>>>,
 ) -> BoxedWidget {
     recent.retain(|path| current.as_ref() != Some(path));
     recent.truncate(2);
-    let mut cards = vec![add_image_card(config)];
+    let mut cards = vec![add_image_card(background)];
     if let Some(path) = current.clone() {
-        cards.push(image_card(config, path, true));
+        cards.push(image_card(background, path, true));
     }
     cards.extend(
         recent
             .into_iter()
-            .map(|path| image_card(config, path, false)),
+            .map(|path| image_card(background, path, false)),
     );
     let theme = use_theme();
     let recent_row: BoxedWidget = Box::new(jsx! {
@@ -143,15 +180,16 @@ fn image_content(
     });
     Box::new(jsx! {
         <Flex direction={FlexDirection::Column} gap={theme.spacing_medium}>
+            {placement_tabs(background, mode)}
             {Box::new(Text::secondary("Recent").size(TextSize::Sm)) as BoxedWidget}
             {recent_row}
-            {wallpapers_folder_section(config, &current, gallery, window)}
+            {wallpapers_folder_section(background, &current, gallery, window)}
         </Flex>
     })
 }
 
 fn wallpapers_folder_section(
-    config: &Signal<ShellConfig>,
+    background: &Signal<BackgroundConfig>,
     current: &Option<PathBuf>,
     gallery: &GalleryState,
     window: &Rc<RefCell<Option<WindowHandle>>>,
@@ -198,7 +236,7 @@ fn wallpapers_folder_section(
                 .into_iter()
                 .map(|path| {
                     let selected = current.as_ref() == Some(&path);
-                    image_card(config, path, selected)
+                    image_card(background, path, selected)
                 })
                 .collect();
             Box::new(jsx! {
@@ -225,9 +263,9 @@ fn folder_button_style() -> creamui_core::Style {
     })
 }
 
-fn add_image_card(config: &Signal<ShellConfig>) -> BoxedWidget {
+fn add_image_card(background: &Signal<BackgroundConfig>) -> BoxedWidget {
     let theme = use_theme();
-    let config = config.clone();
+    let background = background.clone();
     Box::new(jsx! {
         <RawButton
             style={card_style()}
@@ -236,10 +274,10 @@ fn add_image_card(config: &Signal<ShellConfig>) -> BoxedWidget {
             on_click={move || {
                 if let Some(path) = rfd::FileDialog::new()
                     .set_title("Choose a wallpaper")
-                    .add_filter("Images", &["png", "jpg", "jpeg", "webp"])
+                    .add_filter("Images", &WALLPAPER_EXTENSIONS)
                     .pick_file()
                 {
-                    select_image(&config, path);
+                    select_image(&background, path);
                 }
             }}
         >
@@ -250,7 +288,7 @@ fn add_image_card(config: &Signal<ShellConfig>) -> BoxedWidget {
     })
 }
 
-fn image_card(config: &Signal<ShellConfig>, path: PathBuf, selected: bool) -> BoxedWidget {
+fn image_card(background: &Signal<BackgroundConfig>, path: PathBuf, selected: bool) -> BoxedWidget {
     let theme = use_theme();
     let preview: BoxedWidget = thumbnail_for(&path)
         .as_deref()
@@ -263,7 +301,7 @@ fn image_card(config: &Signal<ShellConfig>, path: PathBuf, selected: bool) -> Bo
                 jsx! { <Flex size={(CARD - 8.0, CARD - 8.0)} background={theme.surface_hover} /> },
             )
         });
-    let choose = config.clone();
+    let choose = background.clone();
     let card: BoxedWidget = Box::new(jsx! {
         <RawButton style={card_style()} background={theme.surface_elevated} corner_radius={theme.card_radius} on_click={move || select_image(&choose, path.clone())}>
             <Flex padding={4.0}>{preview}</Flex>
@@ -288,25 +326,21 @@ fn fixed_style() -> creamui_core::layout::Style {
     }
 }
 
-fn select_image(config: &Signal<ShellConfig>, path: PathBuf) {
+fn select_image(background: &Signal<BackgroundConfig>, path: PathBuf) {
     let _ = cache_thumbnail(&path);
-    update_config(config, move |config| {
-        if let Some(previous) = config.desktop.wallpaper.take() {
+    update_background_config(background, move |config| {
+        if let Some(previous) = config.wallpaper.take() {
             if previous != path {
                 config
-                    .desktop
                     .recent_wallpapers
                     .retain(|recent| recent != &previous);
-                config.desktop.recent_wallpapers.insert(0, previous);
+                config.recent_wallpapers.insert(0, previous);
             }
         }
-        config.desktop.wallpaper = Some(path.clone());
-        config.desktop.wallpaper_mode = WallpaperMode::Image;
-        config
-            .desktop
-            .recent_wallpapers
-            .retain(|recent| recent != &path);
-        config.desktop.recent_wallpapers.truncate(2);
+        config.wallpaper = Some(path.clone());
+        config.source = WallpaperSource::Image;
+        config.recent_wallpapers.retain(|recent| recent != &path);
+        config.recent_wallpapers.truncate(2);
     });
 }
 
@@ -352,18 +386,18 @@ fn thumbnail_cache_directory() -> Option<PathBuf> {
 }
 
 fn solid_color(
-    config: &Signal<ShellConfig>,
+    background: &Signal<BackgroundConfig>,
     color: DesktopColor,
     controller: &ColorPickerController,
 ) -> BoxedWidget {
-    let apply = config.clone();
+    let apply = background.clone();
     let picker: BoxedWidget = Box::new(ColorPicker::controlled(
         Color::rgb(color.r, color.g, color.b),
         controller,
         move |color| {
-            update_config(&apply, |config| {
-                config.desktop.wallpaper_mode = WallpaperMode::SolidColor;
-                config.desktop.solid_color = DesktopColor {
+            update_background_config(&apply, |config| {
+                config.source = WallpaperSource::SolidColor;
+                config.solid_color = DesktopColor {
                     r: color.r,
                     g: color.g,
                     b: color.b,
@@ -488,7 +522,9 @@ mod tests {
     fn wallpaper_image_extensions_are_case_insensitive() {
         assert!(is_wallpaper_image(Path::new("beach.PNG")));
         assert!(is_wallpaper_image(Path::new("beach.jpeg")));
-        assert!(!is_wallpaper_image(Path::new("beach.gif")));
+        assert!(is_wallpaper_image(Path::new("beach.gif")));
+        assert!(is_wallpaper_image(Path::new("beach.avif")));
+        assert!(!is_wallpaper_image(Path::new("beach.svg")));
         assert!(!is_wallpaper_image(Path::new("beach")));
     }
 
@@ -527,13 +563,13 @@ mod tests {
 pub(crate) fn route_view() -> creamui_core::BoxedWidget {
     let context = creamui_reactive::use_context::<crate::views::context::ViewContext>();
     let size = context.size;
-    let config = &context.config;
+    let background = &context.background;
     let window = &context.window;
     let wallpaper_color_picker = &context.wallpaper_color_picker;
     let wallpaper_gallery = &context.wallpaper_gallery;
     crate::views::personalization::wallpaper::build(
         size,
-        config,
+        background,
         wallpaper_color_picker,
         wallpaper_gallery,
         window,

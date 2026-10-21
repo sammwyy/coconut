@@ -1,4 +1,4 @@
-use coconut_core::ShellConfig;
+use coconut_core::{BackgroundConfig, ShellConfig};
 use creamui_core::layout::{Dimension, FlexDirection};
 use creamui_core::{BoxedWidget, Styled};
 use creamui_macros::jsx;
@@ -350,6 +350,24 @@ pub fn update_config(config: &Signal<ShellConfig>, mutate: impl FnOnce(&mut Shel
         if let Err(error) = coconut_core::ipc::publish_shell_config(&config.peek()) {
             eprintln!("settings: failed to notify the desktop process about the update: {error}");
         }
+    }
+}
+
+/// Mutates and persists `bg.toml`, then asks the standalone background
+/// process to redraw. It is deliberately separate from `update_config`: the
+/// shell no longer owns wallpaper state or receives wallpaper updates.
+pub fn update_background_config(
+    config: &Signal<BackgroundConfig>,
+    mutate: impl FnOnce(&mut BackgroundConfig),
+) {
+    config.update(mutate);
+    match config.peek().save() {
+        Ok(()) => {
+            if let Err(error) = coconut_core::ipc::publish_background_config(&config.peek()) {
+                eprintln!("settings: failed to notify coconut-bg about the update: {error}");
+            }
+        }
+        Err(error) => eprintln!("settings: failed to save bg.toml: {error}"),
     }
 }
 

@@ -75,6 +75,7 @@ From the Coconut checkout:
 
 ```bash
 cargo build
+cargo run -p coconut-bg &
 cargo run -p coconut-shell
 ```
 

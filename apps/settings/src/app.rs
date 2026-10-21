@@ -2,7 +2,7 @@ use crate::{components, routes};
 use creamui_router::RouterProvider;
 
 use crate::icons::SettingsIcons;
-use coconut_core::ShellConfig;
+use coconut_core::{BackgroundConfig, ShellConfig};
 use creamui_core::Size;
 use creamui_reactive::Signal;
 use creamui_render::{
@@ -16,6 +16,7 @@ use std::rc::Rc;
 pub fn run() {
     components::load_settings_fonts();
     let config = Signal::new(ShellConfig::load());
+    let background = Signal::new(BackgroundConfig::load());
     let render_backend = if config.peek().rendering.gpu_acceleration {
         RenderBackend::Gpu
     } else {
@@ -62,6 +63,7 @@ pub fn run() {
             height: 0.0,
         },
         config,
+        background,
         integrations,
         appearance,
         view,

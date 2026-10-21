@@ -4,11 +4,15 @@ version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
 
+[features]
+default = ["theme-watch"]
+theme-watch = ["dep:creamui-theme-watch"]
+
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 toml = "0.9"
 dbus = "0.9"
 serde_json = "1"
 delib = { version = "0.1.0", path = "../../../delib" }
-creamui-theme-watch = { path = "../../../creamui/crates/theme-watch" }
+creamui-theme-watch = { path = "../../../creamui/crates/theme-watch", optional = true }
 blair-protocol = { path = "../../../blair/crates/protocol" }

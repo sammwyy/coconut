@@ -245,13 +245,13 @@ pub fn run() {
                     height: 720,
                     decorations: false,
                     resizable: false,
-                    transparent: false,
+                    transparent: true,
                     role: creamui_render::platform::WindowRole::Desktop,
                     theme: system_theme(),
                     backend: render_backend,
                     ..Default::default()
                 },
-                system_theme().colors.surface,
+                Color::rgba(0, 0, 0, 0),
                 {
                     let themed_windows = themed_windows.clone();
                     let desktop_state = desktop_state.clone();

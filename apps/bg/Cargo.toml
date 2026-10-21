@@ -1,0 +1,16 @@
+[package]
+name = "coconut-bg"
+version = "0.1.0"
+edition = "2021"
+description = "Coconut's standalone Wayland background renderer"
+license = "Apache-2.0"
+
+[[bin]]
+name = "coconut-bg"
+path = "src/main.rs"
+
+[dependencies]
+coconut-core = { path = "../../crates/core", default-features = false }
+image = "0.25.10"
+smithay-client-toolkit = "0.19"
+wayland-client = { version = "0.31", features = ["system"] }

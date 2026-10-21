@@ -1,6 +1,6 @@
 //! Public D-Bus contract for live CreamUI theme and Coconut shell updates.
 
-use crate::ShellConfig;
+use crate::{BackgroundConfig, ShellConfig};
 use dbus::blocking::Connection;
 use dbus::channel::Sender;
 use dbus::message::{MatchRule, Message};
@@ -10,15 +10,25 @@ use std::sync::{
 };
 use std::time::Duration;
 
+#[cfg(feature = "theme-watch")]
 pub use creamui_theme_watch::{
     INTERFACE as THEME_INTERFACE, OBJECT_PATH as THEME_PATH, SIGNAL as THEME_RELOAD,
 };
+
+#[cfg(not(feature = "theme-watch"))]
+pub const THEME_INTERFACE: &str = "org.creamui.Theme";
+#[cfg(not(feature = "theme-watch"))]
+pub const THEME_PATH: &str = "/org/creamui/Theme";
+#[cfg(not(feature = "theme-watch"))]
+pub const THEME_RELOAD: &str = "ReloadTheme";
 
 pub const SHELL_PATH: &str = "/org/coconut/Shell";
 pub const SHELL_INTERFACE: &str = "org.coconut.Shell";
 pub const SHELL_CONFIG_CHANGED: &str = "ConfigChanged";
 pub const USER_PROFILE_CHANGED: &str = "UserProfileChanged";
 pub const MODULE_CONFIG_CHANGED: &str = "ModuleConfigChanged";
+/// Emitted when the standalone `coconut-bg` configuration changes.
+pub const BACKGROUND_CONFIG_CHANGED: &str = "BackgroundConfigChanged";
 
 /// Color pickers can produce a value for every pointer motion.  Keep those
 /// updates responsive while ensuring only the final value of a short burst is
@@ -26,6 +36,7 @@ pub const MODULE_CONFIG_CHANGED: &str = "ModuleConfigChanged";
 const SHELL_CONFIG_DEBOUNCE: Duration = Duration::from_millis(120);
 
 static SHELL_CONFIG_PUBLISHER: OnceLock<DebouncedShellConfigPublisher> = OnceLock::new();
+static BACKGROUND_CONFIG_PUBLISHER: OnceLock<DebouncedBackgroundConfigPublisher> = OnceLock::new();
 
 #[derive(Debug, Clone)]
 pub enum RuntimeEvent {
@@ -41,7 +52,14 @@ pub enum RuntimeEvent {
 
 /// Emits `org.creamui.Theme.ReloadTheme` on the session bus.
 pub fn publish_theme_reload() -> Result<(), String> {
-    creamui_theme_watch::publish().map_err(|error| error.to_string())
+    #[cfg(feature = "theme-watch")]
+    {
+        creamui_theme_watch::publish().map_err(|error| error.to_string())
+    }
+    #[cfg(not(feature = "theme-watch"))]
+    {
+        Err("Coconut was built without CreamUI theme watching".to_owned())
+    }
 }
 
 /// Schedules `org.coconut.Shell.ConfigChanged` with the complete TOML document.
@@ -51,6 +69,15 @@ pub fn publish_theme_reload() -> Result<(), String> {
 pub fn publish_shell_config(config: &ShellConfig) -> Result<(), String> {
     SHELL_CONFIG_PUBLISHER
         .get_or_init(DebouncedShellConfigPublisher::new)
+        .schedule(config.clone());
+    Ok(())
+}
+
+/// Schedules a live update for `coconut-bg`. This has its own signal and
+/// payload so wallpaper changes never require the CreamUI shell to be alive.
+pub fn publish_background_config(config: &BackgroundConfig) -> Result<(), String> {
+    BACKGROUND_CONFIG_PUBLISHER
+        .get_or_init(DebouncedBackgroundConfigPublisher::new)
         .schedule(config.clone());
     Ok(())
 }
@@ -81,8 +108,38 @@ fn publish_shell_config_now(config: &ShellConfig) -> Result<(), String> {
     )
 }
 
+fn publish_background_config_now(config: &BackgroundConfig) -> Result<(), String> {
+    let contents = toml::to_string(config).map_err(|error| error.to_string())?;
+    publish_signal(
+        SHELL_PATH,
+        SHELL_INTERFACE,
+        BACKGROUND_CONFIG_CHANGED,
+        (contents,),
+    )
+}
+
 struct DebouncedShellConfigPublisher {
     pending: Arc<(Mutex<Option<ShellConfig>>, Condvar)>,
+}
+
+struct DebouncedBackgroundConfigPublisher {
+    pending: Arc<(Mutex<Option<BackgroundConfig>>, Condvar)>,
+}
+
+impl DebouncedBackgroundConfigPublisher {
+    fn new() -> Self {
+        let pending = Arc::new((Mutex::new(None), Condvar::new()));
+        let worker_pending = pending.clone();
+        std::thread::spawn(move || publish_debounced_background_configs(worker_pending));
+        Self { pending }
+    }
+
+    fn schedule(&self, config: BackgroundConfig) {
+        let (pending, wake) = &*self.pending;
+        let mut pending = pending.lock().unwrap_or_else(|error| error.into_inner());
+        *pending = Some(config);
+        wake.notify_one();
+    }
 }
 
 impl DebouncedShellConfigPublisher {
@@ -123,6 +180,31 @@ fn publish_debounced_shell_configs(pending: Arc<(Mutex<Option<ShellConfig>>, Con
 
         if let Err(error) = publish_shell_config_now(&config) {
             eprintln!("coconut: failed to publish shell configuration update: {error}");
+        }
+    }
+}
+
+fn publish_debounced_background_configs(pending: Arc<(Mutex<Option<BackgroundConfig>>, Condvar)>) {
+    let (slot, wake) = &*pending;
+    loop {
+        let config = {
+            let mut config = slot.lock().unwrap_or_else(|error| error.into_inner());
+            while config.is_none() {
+                config = wake.wait(config).unwrap_or_else(|error| error.into_inner());
+            }
+            loop {
+                let (next, timeout) = wake
+                    .wait_timeout(config, SHELL_CONFIG_DEBOUNCE)
+                    .unwrap_or_else(|error| error.into_inner());
+                config = next;
+                if timeout.timed_out() {
+                    break config.take().expect("pending background config");
+                }
+            }
+        };
+
+        if let Err(error) = publish_background_config_now(&config) {
+            eprintln!("coconut: failed to publish background configuration update: {error}");
         }
     }
 }
@@ -194,18 +276,30 @@ pub fn listen_for_runtime_events() -> Receiver<RuntimeEvent> {
     receiver
 }
 
+/// Receives validated background configurations from the session bus. This is
+/// intentionally independent from [`listen_for_runtime_events`] so
+/// `coconut-bg` has no dependency on the shell's UI runtime.
+pub fn listen_for_background_config() -> Receiver<BackgroundConfig> {
+    let (sender, receiver) = mpsc::channel();
+    std::thread::spawn(move || listen_for_background_config_changes(sender));
+    receiver
+}
+
 fn listen(sender: EventSender<RuntimeEvent>) {
     let Ok(connection) = Connection::new_session() else {
         eprintln!("coconut: D-Bus session bus unavailable; live settings updates are disabled");
         return;
     };
 
-    let theme_sender = sender.clone();
-    if let Err(error) = connection.add_match(
-        MatchRule::new_signal(THEME_INTERFACE, THEME_RELOAD).with_path(THEME_PATH),
-        move |_: (), _, _| theme_sender.send(RuntimeEvent::ReloadTheme).is_ok(),
-    ) {
-        eprintln!("coconut: failed to listen for theme updates: {error}");
+    #[cfg(feature = "theme-watch")]
+    {
+        let theme_sender = sender.clone();
+        if let Err(error) = connection.add_match(
+            MatchRule::new_signal(THEME_INTERFACE, THEME_RELOAD).with_path(THEME_PATH),
+            move |_: (), _, _| theme_sender.send(RuntimeEvent::ReloadTheme).is_ok(),
+        ) {
+            eprintln!("coconut: failed to listen for theme updates: {error}");
+        }
     }
 
     let (shell_config_sender, shell_config_receiver) = mpsc::channel();
@@ -254,6 +348,33 @@ fn listen(sender: EventSender<RuntimeEvent>) {
     loop {
         if let Err(error) = connection.process(Duration::from_secs(1)) {
             eprintln!("coconut: D-Bus listener stopped: {error}");
+            return;
+        }
+    }
+}
+
+fn listen_for_background_config_changes(sender: EventSender<BackgroundConfig>) {
+    let Ok(connection) = Connection::new_session() else {
+        eprintln!("background: D-Bus session bus unavailable; live Settings updates are disabled");
+        return;
+    };
+
+    if let Err(error) = connection.add_match(
+        MatchRule::new_signal(SHELL_INTERFACE, BACKGROUND_CONFIG_CHANGED).with_path(SHELL_PATH),
+        move |(contents,): (String,), _, _| match toml::from_str::<BackgroundConfig>(&contents) {
+            Ok(config) => sender.send(config).is_ok(),
+            Err(error) => {
+                eprintln!("background: ignored invalid D-Bus configuration update: {error}");
+                true
+            }
+        },
+    ) {
+        eprintln!("background: failed to listen for Settings updates: {error}");
+    }
+
+    loop {
+        if let Err(error) = connection.process(Duration::from_secs(1)) {
+            eprintln!("background: D-Bus listener stopped: {error}");
             return;
         }
     }

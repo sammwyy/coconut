@@ -1,18 +1,4 @@
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum WallpaperMode {
-    Image,
-    SolidColor,
-}
-
-impl Default for WallpaperMode {
-    fn default() -> Self {
-        Self::Image
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DesktopColor {
@@ -34,10 +20,6 @@ impl Default for DesktopColor {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct DesktopConfig {
-    pub wallpaper: Option<PathBuf>,
-    pub wallpaper_mode: WallpaperMode,
-    pub solid_color: DesktopColor,
-    pub recent_wallpapers: Vec<PathBuf>,
     pub icons: DesktopIconsConfig,
 }
 

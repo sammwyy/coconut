@@ -133,6 +133,7 @@ fn connectivity_layout_matches_reference() {
         let content_scroll = ScrollController::new(0.0);
         let sidebar_scroll = ScrollController::new(0.0);
         let config = Signal::new(ShellConfig::default());
+        let background = Signal::new(coconut_core::BackgroundConfig::default());
         let window = Rc::new(RefCell::new(None));
         let picker = ColorPickerController::new();
         let custom_accent = Signal::new(false);
@@ -153,6 +154,7 @@ fn connectivity_layout_matches_reference() {
                 let context = crate::views::context::ViewContext {
                     size: size,
                     config: config.clone(),
+                    background: background.clone(),
                     integrations: integrations.clone(),
                     appearance: appearance.clone(),
                     view: view.clone(),

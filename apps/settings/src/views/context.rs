@@ -1,5 +1,5 @@
 use crate::icons::SettingsIcons;
-use coconut_core::ShellConfig;
+use coconut_core::{BackgroundConfig, ShellConfig};
 use creamui_core::Size;
 use creamui_reactive::Signal;
 use creamui_render::WindowHandle;
@@ -11,6 +11,7 @@ use std::{cell::RefCell, rc::Rc};
 pub(crate) struct ViewContext {
     pub size: Size,
     pub config: Signal<ShellConfig>,
+    pub background: Signal<BackgroundConfig>,
     pub integrations: Rc<coconut_api::Registry>,
     pub appearance: Signal<creamui_theme::ResolvedAppearance>,
     pub view: Router,
