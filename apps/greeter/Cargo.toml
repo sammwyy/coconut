@@ -1,0 +1,19 @@
+[package]
+name = "coconut-greeter"
+version = "0.1.0"
+edition = "2021"
+description = "Coconut login interface for Alphin"
+license = "Apache-2.0"
+
+[[bin]]
+name = "coconut-greeter"
+path = "src/main.rs"
+
+[dependencies]
+alphin = { path = "../../../alphin" }
+creamui-core = { path = "../../../creamui/crates/core" }
+creamui-reactive = { path = "../../../creamui/crates/reactive" }
+creamui-render = { path = "../../../creamui/crates/render", features = ["platform-wayland", "system-theme"] }
+creamui-theme = { path = "../../../creamui/crates/theme" }
+creamui-widgets = { path = "../../../creamui/crates/widgets" }
+serde_json = "1"
