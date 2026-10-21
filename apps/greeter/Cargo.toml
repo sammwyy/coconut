@@ -11,6 +11,7 @@ path = "src/main.rs"
 
 [dependencies]
 alphin = { path = "../../../alphin" }
+anyhow = "1"
 creamui-core = { path = "../../../creamui/crates/core" }
 creamui-reactive = { path = "../../../creamui/crates/reactive" }
 creamui-render = { path = "../../../creamui/crates/render", features = ["platform-wayland", "system-theme"] }

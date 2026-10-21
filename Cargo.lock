@@ -743,6 +743,7 @@ name = "coconut-greeter"
 version = "0.1.0"
 dependencies = [
  "alphin",
+ "anyhow",
  "creamui-core",
  "creamui-reactive",
  "creamui-render",

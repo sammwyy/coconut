@@ -1,3 +1,5 @@
+use std::{thread, time::Duration};
+
 use alphin::client::{socket_from_environment, Client};
 use creamui_core::BoxedWidget;
 use creamui_reactive::Signal;
@@ -70,10 +72,14 @@ fn view(
             let result = if awaiting_response.get() {
                 let response = password.peek();
                 password.set_value("");
-                client.respond(response)
+                client
+                    .respond(response)
+                    .and_then(|_| wait_for_authentication(&client))
             } else {
                 awaiting_response.set(true);
-                client.begin_authentication(&username.peek())
+                client
+                    .begin_authentication(&username.peek())
+                    .and_then(|_| wait_for_authentication(&client))
             };
             message.set(match result {
                 Ok(value) => value
@@ -104,4 +110,32 @@ fn view(
             ))
             .child(Box::new(Button::new("Sign in", submit))),
     )
+}
+
+fn wait_for_authentication(client: &Client) -> anyhow::Result<serde_json::Value> {
+    for _ in 0..20 {
+        let state = client.state()?;
+        match state.get("phase").and_then(|phase| phase.as_str()) {
+            Some("authenticated") => {
+                let sessions = client.sessions()?;
+                let session = sessions
+                    .get("sessions")
+                    .and_then(|sessions| sessions.as_array())
+                    .and_then(|sessions| sessions.first())
+                    .and_then(|session| session.get("id"))
+                    .and_then(|id| id.as_str())
+                    .ok_or_else(|| anyhow::anyhow!("no desktop sessions are available"))?;
+                return client.start_session(session);
+            }
+            Some("authenticating") => {
+                let status = client.status()?;
+                if status.get("kind").and_then(|kind| kind.as_str()) == Some("prompt") {
+                    return Ok(status);
+                }
+            }
+            _ => return Ok(state),
+        }
+        thread::sleep(Duration::from_millis(50));
+    }
+    Ok(serde_json::json!({ "status": "authentication_pending" }))
 }
