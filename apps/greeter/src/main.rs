@@ -23,6 +23,7 @@ fn run(client: Client) {
     let username = TextController::new("");
     let password = TextController::new("");
     let message = Signal::new(String::from("Enter your account name."));
+    let awaiting_response = Signal::new(false);
     AppBuilder::new()
         .on_started(move |app| {
             app.append_window(
@@ -45,6 +46,7 @@ fn run(client: Client) {
                         username.clone(),
                         password.clone(),
                         message.clone(),
+                        awaiting_response.clone(),
                     )
                 },
             );
@@ -57,25 +59,28 @@ fn view(
     username: TextController,
     password: TextController,
     message: Signal<String>,
+    awaiting_response: Signal<bool>,
 ) -> BoxedWidget {
     let submit = {
         let username = username.clone();
         let password = password.clone();
         let message = message.clone();
+        let awaiting_response = awaiting_response.clone();
         move || {
-            let result = if password.peek().is_empty() {
-                client.begin_authentication(&username.peek())
-            } else {
+            let result = if awaiting_response.get() {
                 let response = password.peek();
                 password.set_value("");
                 client.respond(response)
+            } else {
+                awaiting_response.set(true);
+                client.begin_authentication(&username.peek())
             };
             message.set(match result {
                 Ok(value) => value
                     .get("status")
                     .and_then(|status| status.as_str())
                     .or_else(|| value.get("message").and_then(|prompt| prompt.as_str()))
-                    .unwrap_or("Authentication requires another response.")
+                    .unwrap_or("Enter the requested authentication response.")
                     .to_owned(),
                 Err(error) => format!("Authentication failed: {error}"),
             });
