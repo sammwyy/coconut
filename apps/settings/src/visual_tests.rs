@@ -99,6 +99,8 @@ fn connectivity_layout_matches_reference() {
                 width: 112,
                 height: 28,
             },
+            maximized: false,
+            hovered: None,
         });
         creamui_reactive::provide_context(decorations.clone());
         let integrations = Rc::new(coconut_api::Registry {
@@ -232,6 +234,8 @@ fn connectivity_layout_matches_reference() {
                 width: 112,
                 height: 28,
             },
+            maximized: false,
+            hovered: None,
         });
         let mut raster = Rasterizer::new(1120, 760);
         raster.render(&list, &Damage::Full);

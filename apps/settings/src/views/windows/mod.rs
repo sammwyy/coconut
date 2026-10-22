@@ -477,8 +477,9 @@ impl WindowState {
             .err()
             .map(|error| format!("Blair settings are unavailable: {error}"))
             .unwrap_or_default();
-        let config =
+        let mut config =
             loaded.unwrap_or_else(|_| toml::from_str(DEFAULT).expect("valid built-in Blair TOML"));
+        remove_obsolete_window_size_defaults(&mut config);
         let mut rules = toml::map::Map::new();
         if let Some(value) = config.get("rules") {
             rules.insert("rules".into(), value.clone());
@@ -732,6 +733,7 @@ impl Writer {
                 let mut latest: toml::Value =
                     toml::from_str(&load_configuration()?).map_err(|e| e.to_string())?;
                 merge_changes(&baseline, &attempted, &mut latest);
+                remove_obsolete_window_size_defaults(&mut latest);
                 save_configuration(&toml::to_string_pretty(&latest).map_err(|e| e.to_string())?)?;
                 Ok::<_, String>(latest)
             },
@@ -795,6 +797,14 @@ fn merge_changes(before: &toml::Value, edited: &toml::Value, latest: &mut toml::
     } else {
         *latest = edited.clone();
     }
+}
+
+fn remove_obsolete_window_size_defaults(config: &mut toml::Value) {
+    let Some(window) = config.get_mut("window").and_then(toml::Value::as_table_mut) else {
+        return;
+    };
+    window.remove("default_width");
+    window.remove("default_height");
 }
 
 pub fn build_general(_: Size, state: &WindowState) -> BoxedWidget {
@@ -868,23 +878,7 @@ pub fn build_layout(_: Size, state: &WindowState) -> BoxedWidget {
             setting_group(
                 "New windows",
                 "Floating leaves placement to you. Tiling places windows automatically.",
-                vec![
-                    row("Arrangement", layout_control),
-                    integer_field(
-                        state,
-                        "Default width",
-                        &["window", "default_width"],
-                        1,
-                        None,
-                    ),
-                    integer_field(
-                        state,
-                        "Default height",
-                        &["window", "default_height"],
-                        1,
-                        None,
-                    ),
-                ],
+                vec![row("Arrangement", layout_control)],
             ),
             setting_group(
                 "Tiling",
@@ -2450,6 +2444,16 @@ mod shortcut_tests {
             assert!(state.custom_bindings.peek().is_empty());
             assert!(state.capturing.peek().is_none());
         });
+    }
+
+    #[test]
+    fn obsolete_window_size_defaults_are_removed_from_loaded_configuration() {
+        let state = WindowState::from_configuration(Ok(
+            "[window]\ndefault_width = 1000\ndefault_height = 700\n".into(),
+        ));
+        let config = state.config.get();
+        assert!(at(&config, &["window", "default_width"]).is_none());
+        assert!(at(&config, &["window", "default_height"]).is_none());
     }
 }
 
