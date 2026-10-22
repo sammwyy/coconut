@@ -85,9 +85,9 @@ fn run(client: Client) {
                     width: 560,
                     height: 640,
                     decorations: false,
-                    resizable: false,
+                    resizable: true,
                     transparent: true,
-                    role: WindowRole::Overlay,
+                    role: WindowRole::Normal,
                     backend: RenderBackend::Gpu,
                     ..Default::default()
                 },
@@ -201,7 +201,6 @@ fn view(
             );
             let worker_client = client.clone();
             let worker_answer = prompt_pending.then_some(answer);
-            let done_app = app.clone();
             let done_prompt = prompt.clone();
             let done_message = message.clone();
             let done_busy = busy.clone();
@@ -218,10 +217,7 @@ fn view(
                                 window.focus_text_input();
                             }
                         }
-                        Ok(AuthenticationStep::SessionQueued) => {
-                            done_message.set("Loading your session…".into());
-                            done_app.exit();
-                        }
+                        Ok(AuthenticationStep::SessionQueued) => std::process::exit(0),
                         Err(error) => {
                             done_prompt.set(None);
                             done_message.set(format!("Sign-in failed: {error}"));
