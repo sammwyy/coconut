@@ -751,6 +751,8 @@ dependencies = [
  "alphin",
  "anyhow",
  "creamui-core",
+ "creamui-fonts",
+ "creamui-image",
  "creamui-reactive",
  "creamui-render",
  "creamui-theme",

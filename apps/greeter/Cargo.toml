@@ -13,6 +13,8 @@ path = "src/main.rs"
 alphin = { path = "../../../alphin" }
 anyhow = "1"
 creamui-core = { path = "../../../creamui/crates/core" }
+creamui-fonts = { path = "../../../creamui/crates/fonts" }
+creamui-image = { path = "../../../creamui/crates/image", features = ["webp", "svg"] }
 creamui-reactive = { path = "../../../creamui/crates/reactive" }
 creamui-render = { path = "../../../creamui/crates/render", features = ["platform-wayland", "system-theme"] }
 creamui-theme = { path = "../../../creamui/crates/theme" }

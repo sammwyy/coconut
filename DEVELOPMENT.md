@@ -85,6 +85,44 @@ Start the settings application independently with:
 cargo run -p coconut-settings
 ```
 
+Preview the login screen in a normal, resizable window on any Wayland desktop:
+
+```bash
+cargo run -p coconut-greeter -- --preview
+```
+
+Preview mode supplies one sample account and session and requires neither
+`ALPHIN_SOCKET`, an Alphin daemon, nor Blair. The centered account is ready for
+password entry immediately. Use `coconut` to simulate a successful login, or
+another password to see the error state. Press Enter or the arrow in the field
+to submit. Restart and shut-down requests only show simulated feedback, and
+successful sign-in keeps the preview open.
+
+To preview multiple accounts and desktop sessions:
+
+```bash
+cargo run -p coconut-greeter -- --preview-multiple
+```
+
+With multiple accounts, a horizontal strip of avatars appears at the bottom
+left; scroll it when there are more accounts than fit. The session dropdown
+appears at the top left only when multiple sessions are available. In a real
+login, the greeter prepares the selected account's PAM prompt automatically;
+passwordless accounts still require confirmation before opening a session.
+
+Show a small live-session credentials hint beneath the login with:
+
+```bash
+coconut-greeter --demouser "hello" --demopassord "world"
+```
+
+Both demo flags are required together and only display the supplied example
+credentials. They also work with `--preview`; authentication keeps using its
+configured backend. `--demopassword` is accepted as an alias for `--demopassord`.
+
+For a real login, launch `coconut-greeter` without `--preview` in the Alphin
+environment with `ALPHIN_SOCKET` set. Run `coconut-greeter --help` for usage.
+
 Use the release profile when measuring performance or preparing a local
 installation:
 
