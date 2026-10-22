@@ -1,6 +1,5 @@
-mod render;
-
-use coconut_core::{ipc, BackgroundConfig};
+use coconut_bg::{gpu, render};
+use coconut_core::{ipc, BackgroundConfig, BuiltinShader, ShaderConfig, WallpaperSource};
 use image::RgbaImage;
 use smithay_client_toolkit::{
     compositor::{CompositorHandler, CompositorState},
@@ -21,10 +20,12 @@ use smithay_client_toolkit::{
     },
     shm::{slot::SlotPool, Shm, ShmHandler},
 };
+use std::time::{Duration, Instant};
 use wayland_client::{
+    backend::Backend,
     globals::registry_queue_init,
     protocol::{wl_output, wl_region, wl_shm, wl_surface},
-    Connection, Dispatch, QueueHandle,
+    Connection, Dispatch, Proxy, QueueHandle,
 };
 
 const MAX_FRAME_BYTES: usize = 512 * 1024 * 1024;
@@ -70,6 +71,11 @@ fn run() -> Result<(), String> {
         config,
         image,
         surfaces: Vec::new(),
+        backend: connection.backend(),
+        queue: queue_handle.clone(),
+        start: Instant::now(),
+        gpu: None,
+        gpu_failed: false,
     };
 
     let outputs: Vec<_> = app.output_state.outputs().collect();
@@ -104,12 +110,18 @@ fn run() -> Result<(), String> {
 }
 
 struct BackgroundSurface {
+    // Held directly rather than behind the layer so it drops first: the wgpu
+    // surface borrows the raw `wl_surface` pointer, which must still be alive.
+    gpu: Option<gpu::GpuSurface>,
     output: wl_output::WlOutput,
     layer: LayerSurface,
     logical_size: (u32, u32),
     scale: i32,
     configured: bool,
     redraw: bool,
+    frame_pending: bool,
+    /// When the last shader frame was presented, for target-FPS pacing.
+    last_present: Option<Instant>,
 }
 
 struct BackgroundApp {
@@ -123,6 +135,11 @@ struct BackgroundApp {
     config: BackgroundConfig,
     image: Option<RgbaImage>,
     surfaces: Vec<BackgroundSurface>,
+    backend: Backend,
+    queue: QueueHandle<BackgroundApp>,
+    start: Instant,
+    gpu: Option<gpu::Gpu>,
+    gpu_failed: bool,
 }
 
 impl BackgroundApp {
@@ -150,12 +167,15 @@ impl BackgroundApp {
         layer.set_keyboard_interactivity(KeyboardInteractivity::None);
         layer.commit();
         self.surfaces.push(BackgroundSurface {
+            gpu: None,
             output,
             layer,
             logical_size: (0, 0),
             scale: 1,
             configured: false,
             redraw: true,
+            frame_pending: false,
+            last_present: None,
         });
     }
 
@@ -168,53 +188,155 @@ impl BackgroundApp {
         self.draw();
     }
 
+    /// Lazily creates the shared GPU handles on first use; `false` means no
+    /// usable adapter exists and shaders fall back to the solid color.
+    fn ensure_gpu(&mut self) -> bool {
+        if self.gpu.is_none() && !self.gpu_failed {
+            match gpu::Gpu::new() {
+                Ok(gpu) => self.gpu = Some(gpu),
+                Err(error) => {
+                    eprintln!("coconut-bg: {error}; shader wallpapers are unavailable");
+                    self.gpu_failed = true;
+                }
+            }
+        }
+        self.gpu.is_some()
+    }
+
     fn draw(&mut self) {
         let config = self.config.clone();
-        let image = self.image.as_ref();
-        for surface in &mut self.surfaces {
+        for index in 0..self.surfaces.len() {
+            let surface = &self.surfaces[index];
             if !surface.configured || !surface.redraw {
                 continue;
             }
+            if config.source == WallpaperSource::Shader {
+                let shader_config = config.shader_config(config.shader);
+                self.draw_shader(index, config.shader, &shader_config);
+            } else {
+                self.draw_frame(index, &config);
+            }
+        }
+    }
+
+    /// Paints one CPU-rendered frame into a `wl_shm` buffer. Also the fallback
+    /// when [`WallpaperSource::Shader`] has no working GPU.
+    fn draw_frame(&mut self, index: usize, config: &BackgroundConfig) {
+        let surface = &mut self.surfaces[index];
+        let Some((width, height)) = physical_size(surface.logical_size, surface.scale) else {
+            eprintln!("coconut-bg: ignoring an output with an invalid or oversized size");
+            surface.redraw = false;
+            return;
+        };
+        let image = self.image.as_ref();
+        let frame = render::render(config, image, width, height);
+        let stride = i32::try_from(width)
+            .ok()
+            .and_then(|width| width.checked_mul(4));
+        let Some(stride) = stride else {
+            eprintln!("coconut-bg: output stride is too large");
+            surface.redraw = false;
+            return;
+        };
+        let Ok((buffer, canvas)) = self.pool.create_buffer(
+            width as i32,
+            height as i32,
+            stride,
+            wl_shm::Format::Argb8888,
+        ) else {
+            eprintln!("coconut-bg: could not allocate an output buffer");
+            surface.redraw = false;
+            return;
+        };
+        for (source, destination) in frame.pixels().zip(canvas.chunks_exact_mut(4)) {
+            // wl_shm ARGB8888 is stored as BGRA on little-endian hosts.
+            destination.copy_from_slice(&[source[2], source[1], source[0], source[3]]);
+        }
+        let surface = &mut self.surfaces[index];
+        surface.layer.wl_surface().set_buffer_scale(surface.scale);
+        surface
+            .layer
+            .wl_surface()
+            .damage_buffer(0, 0, width as i32, height as i32);
+        if let Err(error) = buffer.attach_to(surface.layer.wl_surface()) {
+            eprintln!("coconut-bg: could not attach output buffer: {error}");
+            return;
+        }
+        surface.layer.commit();
+        surface.redraw = false;
+    }
+
+    /// Presents one animated frame through the output's GPU swapchain and arms
+    /// the frame callback that drives the next one.
+    fn draw_shader(&mut self, index: usize, shader: BuiltinShader, shader_config: &ShaderConfig) {
+        let (wl_surface, width, height, scale) = {
+            let surface = &mut self.surfaces[index];
             let Some((width, height)) = physical_size(surface.logical_size, surface.scale) else {
                 eprintln!("coconut-bg: ignoring an output with an invalid or oversized size");
                 surface.redraw = false;
-                continue;
+                return;
             };
-            let frame = render::render(&config, image, width, height);
-            let stride = i32::try_from(width)
-                .ok()
-                .and_then(|width| width.checked_mul(4));
-            let Some(stride) = stride else {
-                eprintln!("coconut-bg: output stride is too large");
-                surface.redraw = false;
-                continue;
-            };
-            let Ok((buffer, canvas)) = self.pool.create_buffer(
-                width as i32,
-                height as i32,
-                stride,
-                wl_shm::Format::Argb8888,
-            ) else {
-                eprintln!("coconut-bg: could not allocate an output buffer");
-                surface.redraw = false;
-                continue;
-            };
-            for (source, destination) in frame.pixels().zip(canvas.chunks_exact_mut(4)) {
-                // wl_shm ARGB8888 is stored as BGRA on little-endian hosts.
-                destination.copy_from_slice(&[source[2], source[1], source[0], source[3]]);
-            }
-            surface.layer.wl_surface().set_buffer_scale(surface.scale);
-            surface
-                .layer
-                .wl_surface()
-                .damage_buffer(0, 0, width as i32, height as i32);
-            if let Err(error) = buffer.attach_to(surface.layer.wl_surface()) {
-                eprintln!("coconut-bg: could not attach output buffer: {error}");
-                continue;
-            }
-            surface.layer.commit();
-            surface.redraw = false;
+            (
+                surface.layer.wl_surface().clone(),
+                width,
+                height,
+                surface.scale,
+            )
+        };
+
+        let surface_ptr = wl_surface.id().as_ptr() as *mut std::ffi::c_void;
+        let display_ptr = self.backend.display_ptr() as *mut std::ffi::c_void;
+        if self.gpu_failed || !self.ensure_gpu() {
+            self.draw_frame(index, &self.config.clone());
+            return;
         }
+        let gpu = self.gpu.as_ref().expect("gpu checked above");
+
+        let surface = &mut self.surfaces[index];
+        let state = match &mut surface.gpu {
+            Some(state) => state,
+            None => {
+                // SAFETY: `display_ptr`/`surface_ptr` point at the live
+                // `wl_display`/`wl_surface`; the layer outlives `GpuSurface`
+                // because it is dropped first (field order).
+                let created = unsafe {
+                    gpu::GpuSurface::new(gpu, display_ptr, surface_ptr, shader, width, height)
+                };
+                match created {
+                    Ok(state) => surface.gpu.insert(state),
+                    Err(error) => {
+                        eprintln!("coconut-bg: {error}; falling back to the solid color");
+                        self.gpu_failed = true;
+                        self.draw_frame(index, &self.config.clone());
+                        return;
+                    }
+                }
+            }
+        };
+        if state.shader() != shader {
+            if let Err(error) = state.set_shader(&gpu.device, shader) {
+                eprintln!("coconut-bg: {error}");
+            }
+        }
+        state.resize(&gpu.device, width, height);
+        wl_surface.set_buffer_scale(scale);
+        // Frame callbacks bind to the next wl_surface.commit, which happens
+        // inside render(). Arming afterwards would leave the callback waiting
+        // for a commit that never arrives.
+        if !surface.frame_pending {
+            wl_surface.frame(&self.queue, wl_surface.clone());
+            surface.frame_pending = true;
+        }
+        let time = self.start.elapsed().as_secs_f32() * shader_config.speed;
+        if state.render(gpu, time, shader_config) {
+            surface.last_present = Some(Instant::now());
+        } else {
+            // No frame was presented, so the armed callback never fired: bind
+            // it to an empty commit so acquisition is retried at the next
+            // repaint instead of stalling the animation.
+            wl_surface.commit();
+        }
+        surface.redraw = false;
     }
 }
 
@@ -271,13 +393,44 @@ impl CompositorHandler for BackgroundApp {
     ) {
     }
 
+    /// Each armed callback keeps the animation loop alive: present a frame,
+    /// then arm the next. The compositor stops repainting hidden or idle
+    /// surfaces, which pauses the loop for free.
     fn frame(
         &mut self,
         _connection: &Connection,
         _queue: &QueueHandle<Self>,
-        _surface: &wl_surface::WlSurface,
+        surface: &wl_surface::WlSurface,
         _time: u32,
     ) {
+        let Some(index) = self
+            .surfaces
+            .iter()
+            .position(|background| background.layer.wl_surface() == surface)
+        else {
+            return;
+        };
+        self.surfaces[index].frame_pending = false;
+        if self.config.source != WallpaperSource::Shader || !self.surfaces[index].configured {
+            return;
+        }
+        let shader = self.config.shader;
+        let shader_config = self.config.shader_config(shader);
+        let frame_interval =
+            Duration::from_secs_f64(1.0 / f64::from(shader_config.fps.clamp(1, 60)));
+        let now = Instant::now();
+        if let Some(last) = self.surfaces[index].last_present {
+            if now.duration_since(last) < frame_interval {
+                // Too soon for the target frame rate: an empty commit keeps the
+                // callback chain alive at the display's pace until the
+                // interval has elapsed.
+                surface.frame(&self.queue, surface.clone());
+                surface.commit();
+                self.surfaces[index].frame_pending = true;
+                return;
+            }
+        }
+        self.draw_shader(index, shader, &shader_config);
     }
 
     fn surface_enter(

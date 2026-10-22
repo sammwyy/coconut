@@ -45,7 +45,11 @@ layer surface per output, follows output size/scale changes, and stores its
 independent configuration in `~/.config/coconut/bg.toml` (or the equivalent
 XDG configuration directory). Coconut Settings updates it live. Image mode
 supports **Full** (aspect-preserving fill), **Centered**, **Stretched**, and
-**Mosaic** placement, plus a solid-color fallback.
+**Mosaic** placement. The background can also be a solid color, a two-color
+linear gradient, or a built-in GPU shader animated through frame callbacks.
+Each shader can be tuned independently for animation speed, target frame rate
+(1-60 fps) and palette colors under `[shaders.<name>]`. When GPU rendering is
+unavailable, shader mode falls back to the solid color.
 
 ## Notifications and status updates
 

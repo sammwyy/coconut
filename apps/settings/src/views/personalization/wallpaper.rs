@@ -1,5 +1,8 @@
 use crate::components::{group, row, section, tab_colors, update_background_config};
-use coconut_core::{BackgroundConfig, BackgroundMode, DesktopColor, WallpaperSource};
+use coconut_core::{
+    BackgroundConfig, BackgroundMode, BuiltinShader, DesktopColor, GradientConfig, ShaderConfig,
+    WallpaperSource, MAX_SHADER_COLORS,
+};
 use creamui_core::layout::FlexDirection;
 use creamui_core::{BoxedWidget, Size, Styled};
 use creamui_image::{Image, ImageData, ImageFit};
@@ -9,7 +12,8 @@ use creamui_render::WindowHandle;
 use creamui_theme::{use_theme, Color};
 use creamui_widgets::layout::{fixed, Align, Justify, Wrap};
 use creamui_widgets::{
-    tab_styles, ColorPicker, ColorPickerController, Tab, TabSizing, Tabs, Text, TextSize,
+    tab_styles, ColorPicker, ColorPickerController, RadioGroup, Slider, Tab, TabSizing, Tabs, Text,
+    TextSize,
 };
 use delib::xdg::XdgPaths;
 use image_rs::codecs::jpeg::JpegEncoder;
@@ -52,71 +56,104 @@ impl Default for GalleryState {
     }
 }
 
+/// Popup open-state for every color picker on this page: one per endpoint is
+/// required so the pickers don't open and close each other. `shader` covers
+/// the slots of [`BuiltinShader::palette`].
+#[derive(Clone)]
+pub struct WallpaperPickers {
+    pub solid: ColorPickerController,
+    pub gradient_from: ColorPickerController,
+    pub gradient_to: ColorPickerController,
+    pub shader: [ColorPickerController; MAX_SHADER_COLORS],
+}
+
+impl WallpaperPickers {
+    pub fn new() -> Self {
+        Self {
+            solid: ColorPickerController::new(),
+            gradient_from: ColorPickerController::new(),
+            gradient_to: ColorPickerController::new(),
+            shader: std::array::from_fn(|_| ColorPickerController::new()),
+        }
+    }
+}
+
+impl Default for WallpaperPickers {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 pub fn build(
     _: Size,
     background: &Signal<BackgroundConfig>,
-    picker: &ColorPickerController,
+    pickers: &WallpaperPickers,
     gallery: &GalleryState,
     window: &Rc<RefCell<Option<WindowHandle>>>,
 ) -> BoxedWidget {
     let config = background.get();
-    let image_mode = match creamui_router::use_location().query("tab").as_deref() {
-        Some("image") => true,
-        Some("color") => false,
-        _ => config.source == WallpaperSource::Image,
+    let source = match creamui_router::use_location().query("tab").as_deref() {
+        Some("image") => WallpaperSource::Image,
+        Some("color") => WallpaperSource::SolidColor,
+        Some("gradient") => WallpaperSource::Gradient,
+        Some("shader") => WallpaperSource::Shader,
+        _ => config.source,
     };
-    let content = if image_mode {
-        image_content(
+    let content = match source {
+        WallpaperSource::Image => image_content(
             background,
             config.wallpaper,
             config.recent_wallpapers,
             config.mode,
             gallery,
             window,
-        )
-    } else {
-        solid_color(background, config.solid_color, picker)
+        ),
+        WallpaperSource::SolidColor => solid_color(background, config.solid_color, &pickers.solid),
+        WallpaperSource::Gradient => gradient_content(background, &config.gradient, pickers),
+        WallpaperSource::Shader => shader_content(
+            background,
+            config.shader,
+            config.shader_config(config.shader),
+            pickers,
+        ),
     };
     section(
         "Wallpaper",
-        "Choose an image or a solid desktop color.",
-        vec![mode_tabs(background, image_mode), content],
+        "Choose an image, solid color, gradient or animated shader.",
+        vec![mode_tabs(background, source), content],
     )
 }
 
-fn mode_tabs(background: &Signal<BackgroundConfig>, image_mode: bool) -> BoxedWidget {
-    let labels = ["Image", "Solid color"];
+const SOURCE_TABS: [(&str, &str, WallpaperSource); 4] = [
+    ("Image", "image", WallpaperSource::Image),
+    ("Solid color", "color", WallpaperSource::SolidColor),
+    ("Gradient", "gradient", WallpaperSource::Gradient),
+    ("Shader", "shader", WallpaperSource::Shader),
+];
+
+fn mode_tabs(background: &Signal<BackgroundConfig>, source: WallpaperSource) -> BoxedWidget {
+    let labels = SOURCE_TABS.map(|tab| tab.0);
     let colors = tab_colors();
     let styles = tab_styles(&labels, TabSizing::Fill, 36.0, 6.0);
     let mut tabs = Tabs::new(
         colors,
         creamui_core::layout::Style {
-            size: fixed(260.0, 36.0),
+            size: fixed(460.0, 36.0),
             ..Default::default()
         },
     )
     .gap(8.0);
-    for (index, label) in labels.into_iter().enumerate() {
+    for (index, (label, query, tab_source)) in SOURCE_TABS.into_iter().enumerate() {
         let background = background.clone();
         let router = creamui_router::use_router();
         tabs = tabs.child(Box::new(Tab::new(
             colors,
             styles[index].clone(),
             label,
-            (index == 0) == image_mode,
+            source == tab_source,
             move || {
-                crate::routes::set_query(
-                    &router,
-                    "tab",
-                    if index == 0 { "image" } else { "color" },
-                );
-                update_background_config(&background, |config| {
-                    config.source = if index == 0 {
-                        WallpaperSource::Image
-                    } else {
-                        WallpaperSource::SolidColor
-                    };
-                })
+                crate::routes::set_query(&router, "tab", query);
+                update_background_config(&background, |config| config.source = tab_source)
             },
         )));
     }
@@ -408,6 +445,152 @@ fn solid_color(
     group(vec![row("Color", picker)])
 }
 
+fn gradient_content(
+    background: &Signal<BackgroundConfig>,
+    gradient: &GradientConfig,
+    pickers: &WallpaperPickers,
+) -> BoxedWidget {
+    let theme = use_theme();
+    let apply = background.clone();
+    let from: BoxedWidget = Box::new(ColorPicker::controlled(
+        Color::rgb(gradient.from.r, gradient.from.g, gradient.from.b),
+        &pickers.gradient_from,
+        move |color| {
+            update_background_config(&apply, |config| {
+                config.source = WallpaperSource::Gradient;
+                config.gradient.from = DesktopColor {
+                    r: color.r,
+                    g: color.g,
+                    b: color.b,
+                };
+            })
+        },
+    ));
+    let apply = background.clone();
+    let to: BoxedWidget = Box::new(ColorPicker::controlled(
+        Color::rgb(gradient.to.r, gradient.to.g, gradient.to.b),
+        &pickers.gradient_to,
+        move |color| {
+            update_background_config(&apply, |config| {
+                config.source = WallpaperSource::Gradient;
+                config.gradient.to = DesktopColor {
+                    r: color.r,
+                    g: color.g,
+                    b: color.b,
+                };
+            })
+        },
+    ));
+    let apply = background.clone();
+    let slider: BoxedWidget = Box::new(Slider::new(gradient.angle_degrees / 360.0, move |value| {
+        update_background_config(&apply, |config| {
+            config.source = WallpaperSource::Gradient;
+            config.gradient.angle_degrees = value * 360.0;
+        })
+    }));
+    let degrees: BoxedWidget = Box::new(
+        Text::secondary(format!("{}°", gradient.angle_degrees.round() as i32)).size(TextSize::Sm),
+    );
+    let angle: BoxedWidget = Box::new(jsx! {
+        <Flex direction={FlexDirection::Row} align={Align::Center} gap={theme.spacing_medium}>
+            {slider}
+            {degrees}
+        </Flex>
+    });
+    group(vec![
+        row("Start color", from),
+        row("End color", to),
+        row("Angle", angle),
+    ])
+}
+
+fn shader_content(
+    background: &Signal<BackgroundConfig>,
+    selected: BuiltinShader,
+    tuning: ShaderConfig,
+    pickers: &WallpaperPickers,
+) -> BoxedWidget {
+    let theme = use_theme();
+    let apply = background.clone();
+    let selected_index = BuiltinShader::ALL
+        .iter()
+        .position(|shader| *shader == selected)
+        .unwrap_or(0);
+    let mut shaders = RadioGroup::new(selected_index, move |index| {
+        update_background_config(&apply, |config| {
+            config.source = WallpaperSource::Shader;
+            config.shader = BuiltinShader::ALL[index];
+        })
+    });
+    for shader in BuiltinShader::ALL {
+        shaders = shaders.option(shader.name());
+    }
+
+    let apply = background.clone();
+    let speed: BoxedWidget = Box::new(jsx! {
+        <Flex direction={FlexDirection::Row} align={Align::Center} gap={theme.spacing_medium}>
+            {Box::new(Slider::new(((tuning.speed - 0.1) / 2.9).clamp(0.0, 1.0), move |value| {
+                update_background_config(&apply, |config| {
+                    config.source = WallpaperSource::Shader;
+                    config.shader_settings(selected).speed = 0.1 + value * 2.9;
+                })
+            })) as BoxedWidget}
+            {Box::new(Text::secondary(format!("{:.2}×", tuning.speed)).size(TextSize::Sm)) as BoxedWidget}
+        </Flex>
+    });
+    let apply = background.clone();
+    let fps: BoxedWidget = Box::new(jsx! {
+        <Flex direction={FlexDirection::Row} align={Align::Center} gap={theme.spacing_medium}>
+            {Box::new(Slider::new(tuning.fps.saturating_sub(1) as f32 / 59.0, move |value| {
+                update_background_config(&apply, |config| {
+                    config.source = WallpaperSource::Shader;
+                    config.shader_settings(selected).fps = (1.0 + value * 59.0).round() as u32;
+                })
+            })) as BoxedWidget}
+            {Box::new(Text::secondary(format!("{} fps", tuning.fps.clamp(1, 60))).size(TextSize::Sm)) as BoxedWidget}
+        </Flex>
+    });
+    let mut tuning_rows = vec![row("Speed", speed), row("Frame rate", fps)];
+    for (slot, (label, _)) in selected.palette().iter().enumerate() {
+        let current = tuning.color(selected, slot);
+        let apply = background.clone();
+        let picker: BoxedWidget = Box::new(ColorPicker::controlled(
+            Color::rgb(current.r, current.g, current.b),
+            &pickers.shader[slot],
+            move |color| {
+                update_background_config(&apply, |config| {
+                    config.source = WallpaperSource::Shader;
+                    let entry = config.shader_settings(selected);
+                    while entry.colors.len() <= slot {
+                        let next = entry.colors.len();
+                        let fill = entry.color(selected, next);
+                        entry.colors.push(fill);
+                    }
+                    entry.colors[slot] = DesktopColor {
+                        r: color.r,
+                        g: color.g,
+                        b: color.b,
+                    };
+                })
+            },
+        ));
+        tuning_rows.push(row(*label, picker));
+    }
+
+    let card: BoxedWidget = Box::new(jsx! {
+        <Flex direction={FlexDirection::Column} padding={16.0} gap={theme.spacing_medium}>
+            {Box::new(shaders) as BoxedWidget}
+            {Box::new(Text::secondary("Rendered by the GPU. If no graphics adapter is available the solid color is shown instead.").size(TextSize::Sm)) as BoxedWidget}
+        </Flex>
+    });
+    Box::new(jsx! {
+        <Flex direction={FlexDirection::Column} gap={theme.spacing_medium}>
+            {group(vec![card])}
+            {group(tuning_rows)}
+        </Flex>
+    })
+}
+
 /// Where wallpapers live by convention: the platform's pictures directory,
 /// in a `Wallpapers` subfolder. Never created just by looking — only
 /// [`open_wallpapers_folder`] (an explicit user action) creates it.
@@ -565,12 +748,12 @@ pub(crate) fn route_view() -> creamui_core::BoxedWidget {
     let size = context.size;
     let background = &context.background;
     let window = &context.window;
-    let wallpaper_color_picker = &context.wallpaper_color_picker;
+    let wallpaper_pickers = &context.wallpaper_pickers;
     let wallpaper_gallery = &context.wallpaper_gallery;
     crate::views::personalization::wallpaper::build(
         size,
         background,
-        wallpaper_color_picker,
+        wallpaper_pickers,
         wallpaper_gallery,
         window,
     )

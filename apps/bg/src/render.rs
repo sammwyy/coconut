@@ -1,14 +1,19 @@
-use coconut_core::{BackgroundConfig, BackgroundMode, WallpaperSource};
+use coconut_core::{BackgroundConfig, BackgroundMode, GradientConfig, WallpaperSource};
 use image::{imageops, Rgba, RgbaImage};
 
 /// Rasterizes one output into an opaque RGBA frame. Keeping this independent
 /// from Wayland makes placement behavior deterministic and cheap to test.
+/// [`WallpaperSource::Shader`] draws on the GPU; this returns the configured
+/// solid color as its CPU fallback.
 pub fn render(
     config: &BackgroundConfig,
     image: Option<&RgbaImage>,
     width: u32,
     height: u32,
 ) -> RgbaImage {
+    if config.source == WallpaperSource::Gradient {
+        return render_gradient(&config.gradient, width, height);
+    }
     let color = config.solid_color;
     let mut frame = RgbaImage::from_pixel(width, height, Rgba([color.r, color.g, color.b, 255]));
     if config.source != WallpaperSource::Image {
@@ -67,6 +72,43 @@ fn draw_tiled(frame: &mut RgbaImage, image: &RgbaImage) {
             image.get_pixel(x % image.width(), y % image.height()),
         );
     }
+}
+
+/// A linear gradient running along `angle_degrees`: the extremes of the
+/// output's projection onto that direction map to the two endpoints.
+fn render_gradient(gradient: &GradientConfig, width: u32, height: u32) -> RgbaImage {
+    let mut frame = RgbaImage::new(width, height);
+    if width == 0 || height == 0 {
+        return frame;
+    }
+    let (dy, dx) = (
+        f64::from(gradient.angle_degrees.to_radians().sin()),
+        f64::from(gradient.angle_degrees.to_radians().cos()),
+    );
+    let project = |x: f64, y: f64| x * dx + y * dy;
+    let corners = [
+        project(0.0, 0.0),
+        project(width as f64, 0.0),
+        project(0.0, height as f64),
+        project(width as f64, height as f64),
+    ];
+    let min = corners.iter().copied().fold(f64::INFINITY, f64::min);
+    let extent = corners.iter().copied().fold(f64::NEG_INFINITY, f64::max) - min;
+    if extent <= 0.0 {
+        return frame;
+    }
+    let from = [gradient.from.r, gradient.from.g, gradient.from.b];
+    let to = [gradient.to.r, gradient.to.g, gradient.to.b];
+    for (x, y, pixel) in frame.enumerate_pixels_mut() {
+        let t = ((project(x as f64 + 0.5, y as f64 + 0.5) - min) / extent).clamp(0.0, 1.0) as f32;
+        for channel in 0..3 {
+            pixel[channel] = (from[channel] as f32
+                + (to[channel] as f32 - from[channel] as f32) * t)
+                .round() as u8;
+        }
+        pixel[3] = 255;
+    }
+    frame
 }
 
 /// Composites an RGBA wallpaper pixel over the opaque fallback frame.
@@ -143,6 +185,48 @@ mod tests {
     fn solid_source_ignores_the_image() {
         let mut config = config(BackgroundMode::Full);
         config.source = WallpaperSource::SolidColor;
+        let frame = render(&config, Some(&source()), 2, 2);
+        assert!(frame
+            .pixels()
+            .all(|pixel| *pixel == Rgba([10, 20, 30, 255])));
+    }
+
+    fn gradient_config(angle_degrees: f32) -> BackgroundConfig {
+        BackgroundConfig {
+            source: WallpaperSource::Gradient,
+            gradient: coconut_core::GradientConfig {
+                from: DesktopColor { r: 0, g: 0, b: 0 },
+                to: DesktopColor {
+                    r: 100,
+                    g: 50,
+                    b: 200,
+                },
+                angle_degrees,
+            },
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn gradient_runs_left_to_right_at_zero_degrees() {
+        let frame = render(&gradient_config(0.0), None, 2, 2);
+        assert_eq!(*frame.get_pixel(0, 0), Rgba([25, 13, 50, 255]));
+        assert_eq!(*frame.get_pixel(1, 0), Rgba([75, 38, 150, 255]));
+        assert_eq!(frame.get_pixel(0, 0), frame.get_pixel(0, 1));
+    }
+
+    #[test]
+    fn gradient_runs_top_to_bottom_at_ninety_degrees() {
+        let frame = render(&gradient_config(90.0), None, 2, 2);
+        assert_eq!(*frame.get_pixel(0, 0), Rgba([25, 13, 50, 255]));
+        assert_eq!(*frame.get_pixel(0, 1), Rgba([75, 38, 150, 255]));
+        assert_eq!(frame.get_pixel(0, 0), frame.get_pixel(1, 0));
+    }
+
+    #[test]
+    fn shader_source_falls_back_to_the_solid_color() {
+        let mut config = config(BackgroundMode::Full);
+        config.source = WallpaperSource::Shader;
         let frame = render(&config, Some(&source()), 2, 2);
         assert!(frame
             .pixels()

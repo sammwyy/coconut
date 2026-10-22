@@ -727,8 +727,11 @@ version = "0.1.0"
 dependencies = [
  "coconut-core",
  "image",
+ "pollster 0.3.0",
+ "raw-window-handle",
  "smithay-client-toolkit",
  "wayland-client",
+ "wgpu",
 ]
 
 [[package]]

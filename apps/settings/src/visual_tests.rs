@@ -161,7 +161,8 @@ fn connectivity_layout_matches_reference() {
                     appearance: appearance.clone(),
                     view: view.clone(),
                     window: window.clone(),
-                    wallpaper_color_picker: picker.clone(),
+                    wallpaper_pickers:
+                        crate::views::personalization::wallpaper::WallpaperPickers::new(),
                     desktop_icons_color_picker: picker.clone(),
                     appearance_accent_picker: picker.clone(),
                     appearance_custom_accent: custom_accent.clone(),

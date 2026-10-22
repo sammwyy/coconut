@@ -16,7 +16,7 @@ pub(crate) struct ViewContext {
     pub appearance: Signal<creamui_theme::ResolvedAppearance>,
     pub view: Router,
     pub window: Rc<RefCell<Option<WindowHandle>>>,
-    pub wallpaper_color_picker: ColorPickerController,
+    pub wallpaper_pickers: crate::views::personalization::wallpaper::WallpaperPickers,
     pub desktop_icons_color_picker: ColorPickerController,
     pub appearance_accent_picker: ColorPickerController,
     pub appearance_custom_accent: Signal<bool>,

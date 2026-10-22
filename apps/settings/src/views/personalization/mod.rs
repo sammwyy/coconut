@@ -61,6 +61,10 @@ fn build(
                         "Wallpaper",
                         match background.source {
                             WallpaperSource::SolidColor => "Solid color".into(),
+                            WallpaperSource::Gradient => "Gradient".into(),
+                            WallpaperSource::Shader => {
+                                format!("Shader · {}", background.shader.name())
+                            }
                             WallpaperSource::Image => background
                                 .wallpaper
                                 .as_ref()

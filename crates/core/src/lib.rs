@@ -10,7 +10,10 @@ mod profile;
 mod shortcuts;
 
 pub use appearance::AppearanceConfig;
-pub use background::{BackgroundConfig, BackgroundMode, WallpaperSource};
+pub use background::{
+    BackgroundConfig, BackgroundMode, BuiltinShader, GradientConfig, ShaderConfig, WallpaperSource,
+    MAX_SHADER_COLORS,
+};
 pub use desktop::{ClickAction, DesktopColor, DesktopConfig, DesktopIconsConfig, IconShape};
 pub use dock::{
     ordered_islands, BackgroundSource, DockAlign, DockConfig, DockDirection, DockPosition,

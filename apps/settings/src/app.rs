@@ -29,7 +29,7 @@ pub fn run() {
             eprintln!("settings: invalid initial route: {error}");
             routes::create(routes::DEFAULT_ROUTE).expect("valid settings routes")
         });
-    let wallpaper_color_picker = ColorPickerController::new();
+    let wallpaper_pickers = crate::views::personalization::wallpaper::WallpaperPickers::new();
     let desktop_icons_color_picker = ColorPickerController::new();
     let appearance_accent_picker = ColorPickerController::new();
     let appearance_custom_accent = Signal::new(false);
@@ -68,7 +68,7 @@ pub fn run() {
         appearance,
         view,
         window,
-        wallpaper_color_picker,
+        wallpaper_pickers,
         desktop_icons_color_picker,
         appearance_accent_picker,
         appearance_custom_accent,
