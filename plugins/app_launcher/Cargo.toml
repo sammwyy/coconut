@@ -6,14 +6,14 @@ description = "Coconut dock plugin: the app launcher island (opens app_drawer)"
 license = "Apache-2.0"
 
 [dependencies]
-coconut-api = { path = "../../crates/api" }
-coconut-core = { path = "../../crates/core" }
-coconut-plugin-kit = { path = "../../crates/plugin-kit" }
-creamui-core = { path = "../../../creamui/crates/core" }
-creamui-image = { path = "../../../creamui/crates/image", features = ["webp", "jpeg", "svg"] }
-creamui-jsx = { path = "../../../creamui/crates/jsx" }
-creamui-macros = { path = "../../../creamui/crates/macros" }
-creamui-reactive = { path = "../../../creamui/crates/reactive" }
-creamui-theme = { path = "../../../creamui/crates/theme" }
-creamui-widgets = { path = "../../../creamui/crates/widgets" }
-resvg = "0.45.1"
+coconut-api = { workspace = true }
+coconut-core = { workspace = true }
+coconut-plugin-kit = { workspace = true }
+creamui-core = { workspace = true }
+creamui-image = { workspace = true, features = ["webp", "jpeg", "svg"] }
+creamui-jsx = { workspace = true }
+creamui-macros = { workspace = true }
+creamui-reactive = { workspace = true }
+creamui-theme = { workspace = true }
+creamui-widgets = { workspace = true }
+resvg.workspace = true

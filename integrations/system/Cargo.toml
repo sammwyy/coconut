@@ -5,12 +5,12 @@ edition = "2021"
 license = "Apache-2.0"
 
 [dependencies]
-coconut-api = { path = "../../crates/api" }
-coconut-core = { path = "../../crates/core" }
-dbus = "0.9"
-serde_json = "1"
-libc = "0.2"
-toml = "0.9"
-delib = { version = "0.1.0", path = "../../../delib" }
-creamui-theme-loader = { path = "../../../creamui/crates/theme-loader" }
-creamui-theme-watch = { path = "../../../creamui/crates/theme-watch" }
+coconut-api = { workspace = true }
+coconut-core = { workspace = true }
+dbus.workspace = true
+serde_json.workspace = true
+libc.workspace = true
+toml.workspace = true
+delib = { workspace = true }
+creamui-theme-loader = { workspace = true }
+creamui-theme-watch = { workspace = true }

@@ -12,14 +12,14 @@ name = "cmonitor"
 path = "src/main.rs"
 
 [dependencies]
-libc = "0.2"
-delib = { version = "0.1.0", path = "../../../delib" }
-creamui-core = { path = "../../../creamui/crates/core" }
-creamui-reactive = { path = "../../../creamui/crates/reactive" }
-creamui-render = { path = "../../../creamui/crates/render", features = ["platform-wayland", "system-theme", "platform-window-integration-blair", "platform-blur-blair", "platform-blur-kwin"] }
-creamui-router = { path = "../../../creamui/crates/router" }
-creamui-theme = { path = "../../../creamui/crates/theme" }
-creamui-theme-loader = { path = "../../../creamui/crates/theme-loader" }
-creamui-theme-watch = { path = "../../../creamui/crates/theme-watch" }
-creamui-fonts = { path = "../../../creamui/crates/fonts" }
-creamui-widgets = { path = "../../../creamui/crates/widgets" }
+libc.workspace = true
+delib = { workspace = true }
+creamui-core = { workspace = true }
+creamui-reactive = { workspace = true }
+creamui-render = { workspace = true, features = ["platform-wayland", "system-theme", "platform-window-integration-blair", "platform-blur-blair", "platform-blur-kwin"] }
+creamui-router = { workspace = true }
+creamui-theme = { workspace = true }
+creamui-theme-loader = { workspace = true }
+creamui-theme-watch = { workspace = true }
+creamui-fonts = { workspace = true }
+creamui-widgets = { workspace = true }

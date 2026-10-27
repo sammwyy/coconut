@@ -2,5 +2,91 @@
 resolver = "2"
 members = ["apps/*", "crates/*", "desktop/*", "integrations/*", "plugins/*"]
 
+# Single source of truth for every dependency the workspace uses. Members
+# reference these with `dep.workspace = true` and only add the features,
+# `optional` or `default-features` that apply to them.
+[workspace.dependencies]
+# Sibling repositories.
+alphin = { path = "../alphin" }
+delib = { version = "0.1.0", path = "../delib" }
+blair-client = { path = "../blair/crates/client" }
+blair-protocol = { path = "../blair/crates/protocol" }
+
+# CreamUI.
+creamui-core = { path = "../creamui/crates/core" }
+creamui-devtools = { path = "../creamui/crates/devtools" }
+creamui-fonts = { path = "../creamui/crates/fonts" }
+creamui-image = { path = "../creamui/crates/image" }
+creamui-jsx = { path = "../creamui/crates/jsx" }
+creamui-macros = { path = "../creamui/crates/macros" }
+creamui-reactive = { path = "../creamui/crates/reactive" }
+creamui-render = { path = "../creamui/crates/render" }
+creamui-router = { path = "../creamui/crates/router" }
+creamui-theme = { path = "../creamui/crates/theme" }
+creamui-theme-loader = { path = "../creamui/crates/theme-loader" }
+creamui-theme-watch = { path = "../creamui/crates/theme-watch" }
+creamui-widgets = { path = "../creamui/crates/widgets" }
+
+# Workspace crates.
+coconut-api = { path = "crates/api" }
+coconut-core = { path = "crates/core" }
+coconut-plugin-kit = { path = "crates/plugin-kit" }
+coconut-registry = { path = "crates/registry" }
+coconut-ui = { path = "crates/ui" }
+coconut-integration-blair = { path = "integrations/blair" }
+coconut-integration-bluez = { path = "integrations/bluez" }
+coconut-integration-brightnessctl = { path = "integrations/brightnessctl" }
+coconut-integration-kwin = { path = "integrations/kwin" }
+coconut-integration-mpris = { path = "integrations/mpris" }
+coconut-integration-network-manager = { path = "integrations/network-manager" }
+coconut-integration-notifications = { path = "integrations/notifications" }
+coconut-integration-pipewire = { path = "integrations/pipewire" }
+coconut-integration-power-profiles-daemon = { path = "integrations/power-profiles-daemon" }
+coconut-integration-system = { path = "integrations/system" }
+coconut-integration-upower = { path = "integrations/upower" }
+coconut-integration-windows = { path = "integrations/windows" }
+coconut-plugin-app-drawer = { path = "plugins/app_drawer" }
+coconut-plugin-app-launcher = { path = "plugins/app_launcher" }
+coconut-plugin-clock = { path = "plugins/clock" }
+coconut-plugin-current-playing = { path = "plugins/current_playing" }
+coconut-plugin-logo = { path = "plugins/logo" }
+coconut-plugin-tray = { path = "plugins/tray" }
+coconut-plugin-weather = { path = "plugins/weather" }
+
+# crates.io.
+anyhow = "1"
+arboard = "3"
+chrono = "0.4"
+dbus = "0.9"
+discord-rich-presence = "1.1.0"
+image = "0.25.10"
+image-rs = { package = "image", version = "0.25.10" }
+libc = "0.2"
+libloading = "=0.8.9"
+mime_guess = "2"
+percent-encoding = "2"
+pipewire = "0.10.1"
+pollster = "0.3"
+portable-pty = "0.9"
+raw-window-handle = "0.6"
+regex = "1"
+reqwest = "0.12"
+resvg = "0.45.1"
+rfd = "0.17"
+rodio = "0.23"
+serde = "1"
+serde_json = "1"
+smithay-client-toolkit = "0.19"
+swash = "0.2"
+tempfile = "3"
+tokio = "1"
+toml = "0.9"
+url = "2"
+vt100 = "0.16"
+wayland-client = "0.31"
+wgpu = "22"
+windows = "0.52"
+zbus = "5"
+
 [profile.dev.package."*"]
 opt-level = 2

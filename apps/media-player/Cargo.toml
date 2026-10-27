@@ -12,38 +12,38 @@ name = "cplayer"
 path = "src/main.rs"
 
 [dependencies]
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-rodio = "0.23"
-toml = "0.9"
-libloading = "=0.8.9"
-discord-rich-presence = "1.1.0"
-image = { version = "0.25.10", default-features = false, features = ["jpeg"] }
-coconut-ui = { path = "../../crates/ui" }
-delib = { version = "0.1.0", path = "../../../delib" }
-creamui-image = { path = "../../../creamui/crates/image", features = ["svg", "jpeg", "webp"] }
-creamui-core = { path = "../../../creamui/crates/core" }
-creamui-reactive = { path = "../../../creamui/crates/reactive" }
-creamui-render = { path = "../../../creamui/crates/render", default-features = false, features = ["system-theme", "logger"] }
-creamui-theme = { path = "../../../creamui/crates/theme" }
-creamui-theme-loader = { path = "../../../creamui/crates/theme-loader" }
-creamui-theme-watch = { path = "../../../creamui/crates/theme-watch" }
-creamui-fonts = { path = "../../../creamui/crates/fonts" }
-creamui-widgets = { path = "../../../creamui/crates/widgets" }
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+rodio.workspace = true
+toml.workspace = true
+libloading.workspace = true
+discord-rich-presence.workspace = true
+image = { workspace = true, default-features = false, features = ["jpeg"] }
+coconut-ui = { workspace = true }
+delib = { workspace = true }
+creamui-image = { workspace = true, features = ["svg", "jpeg", "webp"] }
+creamui-core = { workspace = true }
+creamui-reactive = { workspace = true }
+creamui-render = { workspace = true, default-features = false, features = ["system-theme", "logger"] }
+creamui-theme = { workspace = true }
+creamui-theme-loader = { workspace = true }
+creamui-theme-watch = { workspace = true }
+creamui-fonts = { workspace = true }
+creamui-widgets = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
-libc = "0.2"
+libc.workspace = true
 
 [target.'cfg(target_os = "linux")'.dependencies]
-dbus = "0.9"
-rfd = { version = "0.17", default-features = false, features = ["xdg-portal"] }
-creamui-render = { path = "../../../creamui/crates/render", default-features = false, features = ["platform-winit", "platform-wayland", "platform-x11", "platform-window-integration-blair", "platform-blur-blair", "platform-blur-kwin", "tray"] }
+dbus.workspace = true
+rfd = { workspace = true, default-features = false, features = ["xdg-portal"] }
+creamui-render = { workspace = true, default-features = false, features = ["platform-winit", "platform-wayland", "platform-x11", "platform-window-integration-blair", "platform-blur-blair", "platform-blur-kwin", "tray"] }
 
 [target.'cfg(not(target_os = "linux"))'.dependencies]
-rfd = "0.17"
+rfd.workspace = true
 
 [target.'cfg(target_os = "windows")'.dependencies]
-windows = { version = "0.52", features = [
+windows = { workspace = true, features = [
     "Foundation",
     "Media",
     "Storage_Streams",
@@ -52,4 +52,4 @@ windows = { version = "0.52", features = [
     "Win32_System_WinRT",
     "Win32_UI_WindowsAndMessaging",
 ] }
-creamui-render = { path = "../../../creamui/crates/render", default-features = false, features = ["platform-winit", "platform-windows"] }
+creamui-render = { workspace = true, default-features = false, features = ["platform-winit", "platform-windows"] }

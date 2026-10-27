@@ -10,31 +10,31 @@ name = "coconut-settings"
 path = "src/main.rs"
 
 [dependencies]
-coconut-core = { path = "../../crates/core" }
-coconut-api = { path = "../../crates/api" }
-coconut-registry = { path = "../../crates/registry" }
-coconut-plugin-kit = { path = "../../crates/plugin-kit" }
-coconut-plugin-tray = { path = "../../plugins/tray" }
-coconut-plugin-clock = { path = "../../plugins/clock" }
-coconut-plugin-app-launcher = { path = "../../plugins/app_launcher" }
-blair-client = { path = "../../../blair/crates/client" }
-blair-protocol = { path = "../../../blair/crates/protocol" }
-creamui-core = { path = "../../../creamui/crates/core" }
-creamui-fonts = { path = "../../../creamui/crates/fonts" }
-creamui-image = { path = "../../../creamui/crates/image", features = ["webp", "jpeg", "svg"] }
-creamui-jsx = { path = "../../../creamui/crates/jsx" }
-creamui-macros = { path = "../../../creamui/crates/macros" }
-creamui-router = { path = "../../../creamui/crates/router" }
-percent-encoding = "2"
-url = "2"
-creamui-reactive = { path = "../../../creamui/crates/reactive" }
-creamui-render = { path = "../../../creamui/crates/render", features = ["platform-wayland", "system-theme", "platform-window-integration-blair", "platform-blur-blair", "platform-blur-kwin"] }
-creamui-theme = { path = "../../../creamui/crates/theme" }
-creamui-theme-loader = { path = "../../../creamui/crates/theme-loader" }
-creamui-widgets = { path = "../../../creamui/crates/widgets" }
-image-rs = { package = "image", version = "0.25.10" }
-dbus = "0.9"
-rfd = "0.17"
-toml = "0.9"
-tokio = { version = "1", features = ["rt"] }
-delib = { version = "0.1.0", path = "../../../delib" }
+coconut-core = { workspace = true }
+coconut-api = { workspace = true }
+coconut-registry = { workspace = true }
+coconut-plugin-kit = { workspace = true }
+coconut-plugin-tray = { workspace = true }
+coconut-plugin-clock = { workspace = true }
+coconut-plugin-app-launcher = { workspace = true }
+blair-client = { workspace = true }
+blair-protocol = { workspace = true }
+creamui-core = { workspace = true }
+creamui-fonts = { workspace = true }
+creamui-image = { workspace = true, features = ["webp", "jpeg", "svg"] }
+creamui-jsx = { workspace = true }
+creamui-macros = { workspace = true }
+creamui-router = { workspace = true }
+percent-encoding.workspace = true
+url.workspace = true
+creamui-reactive = { workspace = true }
+creamui-render = { workspace = true, features = ["platform-wayland", "system-theme", "platform-window-integration-blair", "platform-blur-blair", "platform-blur-kwin"] }
+creamui-theme = { workspace = true }
+creamui-theme-loader = { workspace = true }
+creamui-widgets = { workspace = true }
+image-rs.workspace = true
+dbus.workspace = true
+rfd.workspace = true
+toml.workspace = true
+tokio = { workspace = true, features = ["rt"] }
+delib = { workspace = true }

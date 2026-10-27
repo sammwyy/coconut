@@ -5,19 +5,19 @@ edition = "2021"
 license = "Apache-2.0"
 
 [dependencies]
-coconut-api = { path = "../api" }
-coconut-integration-system = { path = "../../integrations/system", optional = true }
-coconut-integration-mpris = { path = "../../integrations/mpris", optional = true }
-coconut-integration-upower = { path = "../../integrations/upower", optional = true }
-coconut-integration-bluez = { path = "../../integrations/bluez", optional = true }
-coconut-integration-brightnessctl = { path = "../../integrations/brightnessctl", optional = true }
-coconut-integration-network-manager = { path = "../../integrations/network-manager", optional = true }
-coconut-integration-power-profiles-daemon = { path = "../../integrations/power-profiles-daemon", optional = true }
-coconut-integration-pipewire = { path = "../../integrations/pipewire", optional = true }
-coconut-integration-kwin = { path = "../../integrations/kwin", optional = true }
-coconut-integration-blair = { path = "../../integrations/blair", optional = true }
-coconut-integration-windows = { path = "../../integrations/windows", optional = true }
-coconut-integration-notifications = { path = "../../integrations/notifications", optional = true }
+coconut-api = { workspace = true }
+coconut-integration-system = { workspace = true, optional = true }
+coconut-integration-mpris = { workspace = true, optional = true }
+coconut-integration-upower = { workspace = true, optional = true }
+coconut-integration-bluez = { workspace = true, optional = true }
+coconut-integration-brightnessctl = { workspace = true, optional = true }
+coconut-integration-network-manager = { workspace = true, optional = true }
+coconut-integration-power-profiles-daemon = { workspace = true, optional = true }
+coconut-integration-pipewire = { workspace = true, optional = true }
+coconut-integration-kwin = { workspace = true, optional = true }
+coconut-integration-blair = { workspace = true, optional = true }
+coconut-integration-windows = { workspace = true, optional = true }
+coconut-integration-notifications = { workspace = true, optional = true }
 
 [features]
 default = [

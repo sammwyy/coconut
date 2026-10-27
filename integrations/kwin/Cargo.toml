@@ -5,9 +5,9 @@ edition = "2021"
 license = "Apache-2.0"
 
 [dependencies]
-coconut-api = { path = "../../crates/api" }
-creamui-render = { path = "../../../creamui/crates/render" }
-dbus = "0.9"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-delib = { version = "0.1.0", path = "../../../delib" }
+coconut-api = { workspace = true }
+creamui-render = { workspace = true }
+dbus.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+delib = { workspace = true }

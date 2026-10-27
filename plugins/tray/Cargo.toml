@@ -6,12 +6,12 @@ description = "Coconut dock plugin: the tray islands (control center / individua
 license = "Apache-2.0"
 
 [dependencies]
-coconut-api = { path = "../../crates/api" }
-coconut-core = { path = "../../crates/core" }
-coconut-plugin-kit = { path = "../../crates/plugin-kit" }
-creamui-core = { path = "../../../creamui/crates/core" }
-creamui-jsx = { path = "../../../creamui/crates/jsx" }
-creamui-macros = { path = "../../../creamui/crates/macros" }
-creamui-reactive = { path = "../../../creamui/crates/reactive" }
-creamui-widgets = { path = "../../../creamui/crates/widgets" }
-serde = { version = "1", features = ["derive"] }
+coconut-api = { workspace = true }
+coconut-core = { workspace = true }
+coconut-plugin-kit = { workspace = true }
+creamui-core = { workspace = true }
+creamui-jsx = { workspace = true }
+creamui-macros = { workspace = true }
+creamui-reactive = { workspace = true }
+creamui-widgets = { workspace = true }
+serde = { workspace = true, features = ["derive"] }

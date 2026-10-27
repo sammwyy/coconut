@@ -10,10 +10,10 @@ name = "coconut-bg"
 path = "src/main.rs"
 
 [dependencies]
-coconut-core = { path = "../../crates/core", default-features = false }
-image = "0.25.10"
-smithay-client-toolkit = "0.19"
-wayland-client = { version = "0.31", features = ["system"] }
-pollster = "0.3"
-raw-window-handle = "0.6"
-wgpu = { version = "22", default-features = false, features = ["wgsl"] }
+coconut-core = { workspace = true, default-features = false }
+image.workspace = true
+smithay-client-toolkit.workspace = true
+wayland-client = { workspace = true, features = ["system"] }
+pollster.workspace = true
+raw-window-handle.workspace = true
+wgpu = { workspace = true, default-features = false, features = ["wgsl"] }

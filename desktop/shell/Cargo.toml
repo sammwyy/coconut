@@ -18,40 +18,40 @@ perf-metrics = [
 ]
 
 [dependencies]
-coconut-api = { path = "../../crates/api" }
-coconut-core = { path = "../../crates/core" }
-coconut-plugin-kit = { path = "../../crates/plugin-kit" }
-delib = { version = "0.1.0", path = "../../../delib" }
-coconut-plugin-logo = { path = "../../plugins/logo" }
-coconut-plugin-clock = { path = "../../plugins/clock" }
-coconut-plugin-weather = { path = "../../plugins/weather" }
-coconut-plugin-current-playing = { path = "../../plugins/current_playing" }
-coconut-plugin-app-launcher = { path = "../../plugins/app_launcher" }
-coconut-plugin-app-drawer = { path = "../../plugins/app_drawer" }
-coconut-plugin-tray = { path = "../../plugins/tray" }
-chrono = "0.4"
-mime_guess = "2"
-toml = "0.9"
-creamui-core = { path = "../../../creamui/crates/core" }
-creamui-devtools = { path = "../../../creamui/crates/devtools", optional = true }
-creamui-fonts = { path = "../../../creamui/crates/fonts" }
-creamui-image = { path = "../../../creamui/crates/image", features = ["webp", "jpeg", "svg"] }
-creamui-jsx = { path = "../../../creamui/crates/jsx" }
-creamui-macros = { path = "../../../creamui/crates/macros" }
-creamui-reactive = { path = "../../../creamui/crates/reactive" }
-creamui-render = { path = "../../../creamui/crates/render", features = ["platform-wayland", "platform-blur-blair", "platform-blur-kwin", "system-theme"] }
-creamui-theme = { path = "../../../creamui/crates/theme" }
-creamui-theme-loader = { path = "../../../creamui/crates/theme-loader" }
-creamui-widgets = { path = "../../../creamui/crates/widgets" }
-serde = { version = "1", features = ["derive"] }
-blair-client = { path = "../../../blair/crates/client" }
-blair-protocol = { path = "../../../blair/crates/protocol" }
-coconut-integration-kwin = { path = "../../integrations/kwin" }
-tokio = { version = "1", features = ["rt", "macros", "sync"] }
-zbus = { version = "5", default-features = false, features = ["tokio"] }
+coconut-api = { workspace = true }
+coconut-core = { workspace = true }
+coconut-plugin-kit = { workspace = true }
+delib = { workspace = true }
+coconut-plugin-logo = { workspace = true }
+coconut-plugin-clock = { workspace = true }
+coconut-plugin-weather = { workspace = true }
+coconut-plugin-current-playing = { workspace = true }
+coconut-plugin-app-launcher = { workspace = true }
+coconut-plugin-app-drawer = { workspace = true }
+coconut-plugin-tray = { workspace = true }
+chrono.workspace = true
+mime_guess.workspace = true
+toml.workspace = true
+creamui-core = { workspace = true }
+creamui-devtools = { workspace = true, optional = true }
+creamui-fonts = { workspace = true }
+creamui-image = { workspace = true, features = ["webp", "jpeg", "svg"] }
+creamui-jsx = { workspace = true }
+creamui-macros = { workspace = true }
+creamui-reactive = { workspace = true }
+creamui-render = { workspace = true, features = ["platform-wayland", "platform-blur-blair", "platform-blur-kwin", "system-theme"] }
+creamui-theme = { workspace = true }
+creamui-theme-loader = { workspace = true }
+creamui-widgets = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+blair-client = { workspace = true }
+blair-protocol = { workspace = true }
+coconut-integration-kwin = { workspace = true }
+tokio = { workspace = true, features = ["rt", "macros", "sync"] }
+zbus = { workspace = true, default-features = false, features = ["tokio"] }
 
 [target.'cfg(not(target_os = "windows"))'.dependencies]
-coconut-registry = { path = "../../crates/registry" }
+coconut-registry = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-coconut-registry = { path = "../../crates/registry", default-features = false, features = ["windows"] }
+coconut-registry = { workspace = true, default-features = false, features = ["windows"] }

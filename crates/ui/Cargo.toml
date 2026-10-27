@@ -6,6 +6,6 @@ description = "Shared widgets for Coconut applications"
 license = "Apache-2.0"
 
 [dependencies]
-creamui-core = { path = "../../../creamui/crates/core" }
-creamui-theme = { path = "../../../creamui/crates/theme" }
-creamui-widgets = { path = "../../../creamui/crates/widgets" }
+creamui-core = { workspace = true }
+creamui-theme = { workspace = true }
+creamui-widgets = { workspace = true }

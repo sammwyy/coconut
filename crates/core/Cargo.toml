@@ -9,10 +9,10 @@ default = ["theme-watch"]
 theme-watch = ["dep:creamui-theme-watch"]
 
 [dependencies]
-serde = { version = "1", features = ["derive"] }
-toml = "0.9"
-dbus = "0.9"
-serde_json = "1"
-delib = { version = "0.1.0", path = "../../../delib" }
-creamui-theme-watch = { path = "../../../creamui/crates/theme-watch", optional = true }
-blair-protocol = { path = "../../../blair/crates/protocol" }
+serde = { workspace = true, features = ["derive"] }
+toml.workspace = true
+dbus.workspace = true
+serde_json.workspace = true
+delib = { workspace = true }
+creamui-theme-watch = { workspace = true, optional = true }
+blair-protocol = { workspace = true }
