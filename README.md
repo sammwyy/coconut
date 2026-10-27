@@ -41,6 +41,8 @@ stay calm, responsive, and consistent.
 | `cfiles --settings` | Open File Explorer settings. |
 | `cfiles --portal` | Run the FileChooser portal backend. |
 | `coconut monitor` | Start the system monitor. |
+| `coconut media-player` | Start the media player. |
+| `cplayer --settings` | Open Media Player settings. |
 | `coconut-greeter` | Start the Alphin login screen. |
 | `coconut-greeter --preview` | Preview the login screen with sample accounts, without Alphin or Blair. |
 | `coconut-greeter --preview-multiple` | Preview the account switcher and session dropdown. |

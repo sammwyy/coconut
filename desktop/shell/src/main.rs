@@ -10,9 +10,12 @@ fn main() {
         Some("terminal") => open_terminal(),
         Some("files") => open_files(),
         Some("monitor") => open_monitor(),
+        Some("media-player") => open_media_player(),
         Some(other) => {
             eprintln!("coconut: unknown command \"{other}\"");
-            eprintln!("usage: coconut [shell|settings [route]|bg|terminal|files|monitor]");
+            eprintln!(
+                "usage: coconut [shell|settings [route]|bg|terminal|files|monitor|media-player]"
+            );
             std::process::exit(1);
         }
     }
@@ -36,6 +39,10 @@ fn open_files() {
 
 fn open_monitor() {
     open_sibling("cmonitor");
+}
+
+fn open_media_player() {
+    open_sibling("cplayer");
 }
 
 fn open_sibling(name: &str) {

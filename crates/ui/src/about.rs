@@ -6,7 +6,7 @@ use creamui_core::{
     BoxedWidget, StateStyle, Styled, TextAlign,
 };
 use creamui_theme::use_theme;
-use creamui_widgets::{Icon, Link, RawView, Symbol, Text};
+use creamui_widgets::{Icon, IconSource, Link, RawView, Text};
 
 pub struct Metadata {
     pub version: &'static str,
@@ -16,7 +16,7 @@ pub struct Metadata {
     pub repository: &'static str,
 }
 
-pub fn build(display_name: &str, icon: Symbol, metadata: Metadata) -> BoxedWidget {
+pub fn build(display_name: &str, icon: impl Into<IconSource>, metadata: Metadata) -> BoxedWidget {
     let theme = use_theme();
     let repository = metadata.repository.trim_end_matches('/');
     let identity = RawView::new(column(10.0)).with_children(vec![
@@ -32,7 +32,9 @@ pub fn build(display_name: &str, icon: Symbol, metadata: Metadata) -> BoxedWidge
             })
             .background(theme.colors.surface_elevated)
             .corner_radius(20.0)
-            .child(Box::new(Icon::new(icon, theme.colors.accent).size(38.0))),
+            .child(Box::new(
+                Icon::new(icon.into(), theme.colors.accent).size(38.0),
+            )),
         ),
         Box::new(
             Text::new(display_name)

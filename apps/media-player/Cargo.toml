@@ -1,0 +1,55 @@
+[package]
+name = "coconut-media-player"
+version = "0.1.0"
+edition = "2021"
+description = "Coconut's video and music player"
+license = "Apache-2.0"
+authors = ["Sammwy"]
+repository = "https://github.com/sammwyy/creamshell"
+
+[[bin]]
+name = "cplayer"
+path = "src/main.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rodio = "0.23"
+toml = "0.9"
+libloading = "=0.8.9"
+discord-rich-presence = "1.1.0"
+image = { version = "0.25.10", default-features = false, features = ["jpeg"] }
+coconut-ui = { path = "../../crates/ui" }
+delib = { version = "0.1.0", path = "../../../delib" }
+creamui-image = { path = "../../../creamui/crates/image", features = ["svg", "jpeg", "webp"] }
+creamui-core = { path = "../../../creamui/crates/core" }
+creamui-reactive = { path = "../../../creamui/crates/reactive" }
+creamui-render = { path = "../../../creamui/crates/render", default-features = false, features = ["system-theme", "logger"] }
+creamui-theme = { path = "../../../creamui/crates/theme" }
+creamui-theme-loader = { path = "../../../creamui/crates/theme-loader" }
+creamui-theme-watch = { path = "../../../creamui/crates/theme-watch" }
+creamui-fonts = { path = "../../../creamui/crates/fonts" }
+creamui-widgets = { path = "../../../creamui/crates/widgets" }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+dbus = "0.9"
+rfd = { version = "0.17", default-features = false, features = ["xdg-portal"] }
+creamui-render = { path = "../../../creamui/crates/render", default-features = false, features = ["platform-winit", "platform-wayland", "platform-x11", "platform-window-integration-blair", "platform-blur-blair", "platform-blur-kwin", "tray"] }
+
+[target.'cfg(not(target_os = "linux"))'.dependencies]
+rfd = "0.17"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.52", features = [
+    "Foundation",
+    "Media",
+    "Storage_Streams",
+    "Win32_Foundation",
+    "Win32_System_Threading",
+    "Win32_System_WinRT",
+    "Win32_UI_WindowsAndMessaging",
+] }
+creamui-render = { path = "../../../creamui/crates/render", default-features = false, features = ["platform-winit", "platform-windows"] }

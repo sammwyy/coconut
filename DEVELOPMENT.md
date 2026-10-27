@@ -103,6 +103,12 @@ And the system monitor with:
 cargo run -p coconut-monitor
 ```
 
+And the media player with:
+
+```bash
+cargo run -p coconut-media-player
+```
+
 Preview the login screen in a normal, resizable window on any Wayland desktop:
 
 ```bash

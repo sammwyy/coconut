@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Media Player
+GenericName=Media Player
+Comment=Play video and music files
+Exec=cplayer --player %U
+Icon=cplayer
+Terminal=false
+Categories=AudioVideo;Player;Video;Audio;
+MimeType=video/mp4;video/x-matroska;video/webm;video/x-msvideo;video/quicktime;video/mpeg;video/x-ms-wmv;video/x-flv;video/3gpp;video/ogg;audio/mpeg;audio/flac;audio/ogg;audio/opus;audio/mp4;audio/aac;audio/x-wav;audio/x-ms-wma;audio/x-aiff;
+Keywords=media;player;video;music;audio;
