@@ -54,7 +54,7 @@ other installed backends remain as fallbacks.
 
 The assets under `data/` describe the desktop entry, the D-Bus activation
 service, the systemd user unit, and the portal registration. The development
-installer (`../../../installde.sh` at the workspace root) installs the binary and
+installer (`../../install.sh` at the repository root) installs the binary and
 writes those files under the user's XDG directories, adding
 `FileChooser=cfiles` to `blair-portals.conf`/`coconut-portals.conf` without
 overwriting existing policies. Log out and back in (or restart

@@ -28,12 +28,14 @@ fn user_installer_uses_one_binary_and_preserves_existing_policy() {
     fs::create_dir_all(policy.parent().unwrap()).unwrap();
     fs::write(&policy, "user preferences\n").unwrap();
     let output = Command::new("bash")
-        .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../installde.sh"))
+        .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../install.sh"))
         .current_dir(root)
         .env("PATH", format!("{}:/usr/bin:/bin", commands.display()))
         .env("CARGO_INSTALL_ROOT", &install_root)
         .env("XDG_DATA_HOME", &data)
         .env("XDG_CONFIG_HOME", &config)
+        .env("COCONUT_SESSIONS_DIR", data.join("wayland-sessions"))
+        .env("COCONUT_WM", "kwin_wayland")
         .output()
         .unwrap();
     assert!(
@@ -62,4 +64,8 @@ fn user_installer_uses_one_binary_and_preserves_existing_policy() {
     assert!(config
         .join("xdg-desktop-portal/blair-portals.conf")
         .exists());
+    let session = fs::read_to_string(install_root.join("bin/startcoconut")).unwrap();
+    assert!(session.contains("WM=\"kwin_wayland\""));
+    assert!(session.contains(&format!("SHELL=\"{}/bin/coconut\"", install_root.display())));
+    assert!(data.join("wayland-sessions/coconut.desktop").exists());
 }

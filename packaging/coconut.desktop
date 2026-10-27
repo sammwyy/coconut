@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Coconut
+Comment=Coconut desktop environment
+Exec=@INSTALL_BIN@/startcoconut
+TryExec=@INSTALL_BIN@/startcoconut
+Type=Application
+DesktopNames=Coconut
+Keywords=coconut;desktop;environment;
