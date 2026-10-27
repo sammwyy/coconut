@@ -97,6 +97,12 @@ And the file manager with:
 cargo run -p coconut-files
 ```
 
+And the system monitor with:
+
+```bash
+cargo run -p coconut-monitor
+```
+
 Preview the login screen in a normal, resizable window on any Wayland desktop:
 
 ```bash

@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=System Monitor
+Comment=View and manage your Linux system
+Exec=cmonitor
+Terminal=false
+Categories=System;Monitor;
+Keywords=system;monitor;process;resource;network;

@@ -40,6 +40,7 @@ stay calm, responsive, and consistent.
 | `coconut files` | Start the file manager. |
 | `cfiles --settings` | Open File Explorer settings. |
 | `cfiles --portal` | Run the FileChooser portal backend. |
+| `coconut monitor` | Start the system monitor. |
 | `coconut-greeter` | Start the Alphin login screen. |
 | `coconut-greeter --preview` | Preview the login screen with sample accounts, without Alphin or Blair. |
 | `coconut-greeter --preview-multiple` | Preview the account switcher and session dropdown. |

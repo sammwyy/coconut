@@ -898,6 +898,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "coconut-monitor"
+version = "0.1.0"
+dependencies = [
+ "creamui-core",
+ "creamui-fonts",
+ "creamui-reactive",
+ "creamui-render",
+ "creamui-router",
+ "creamui-theme",
+ "creamui-theme-loader",
+ "creamui-theme-watch",
+ "creamui-widgets",
+ "delib",
+ "libc",
+]
+
+[[package]]
 name = "coconut-plugin-app-drawer"
 version = "0.1.0"
 dependencies = [
