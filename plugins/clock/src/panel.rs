@@ -9,7 +9,7 @@ const WIDTH: u32 = 280;
 const HEIGHT: u32 = 188;
 
 /// The expanded clock panel opened from [`crate::ClockIsland`]. Ported from
-/// `apps/shell/src/panels/clock/mod.rs`, with one fix: the live time display
+/// `desktop/shell/src/panels/clock/mod.rs`, with one fix: the live time display
 /// now uses [`crate::ClockConfig::format`] (the same pattern the dock island
 /// paints) instead of a hardcoded `"%H:%M"` the old panel never read from
 /// config.

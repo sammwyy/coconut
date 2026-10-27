@@ -14,10 +14,10 @@ const SIDE_ITEM_SIZE: f32 = 36.0;
 /// horizontal dock, a fixed weather icon button on a vertical one. Opens the
 /// `"weather"` panel on click either way.
 ///
-/// Moved from `apps/shell/src/bar/mod.rs`'s weather-button construction in
+/// Moved from `desktop/shell/src/bar/mod.rs`'s weather-button construction in
 /// `build_dock`/`build_side_dock`.
 ///
-/// **Contract for `apps/shell/src/lib.rs` (Phase 4d):** insert a
+/// **Contract for `desktop/shell/src/lib.rs` (Phase 4d):** insert a
 /// `creamui_reactive::Signal<`[`WeatherState`]`>` into the app-wide
 /// `SharedState`, seeded with [`WeatherState::Loading`] and updated by
 /// running [`crate::refresh`] on a background thread (see its own doc

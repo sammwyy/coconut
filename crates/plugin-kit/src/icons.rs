@@ -1,5 +1,5 @@
-//! Relocated from `apps/shell/src/icons.rs` (Phase 3 of the plugin-kit
-//! refactor): plugin crates can't depend on the `apps/shell` binary crate,
+//! Relocated from `desktop/shell/src/icons.rs` (Phase 3 of the plugin-kit
+//! refactor): plugin crates can't depend on the `desktop/shell` binary crate,
 //! so the bundled-icon rasterizer/cache lives here instead.
 
 use creamui_core::BoxedWidget;

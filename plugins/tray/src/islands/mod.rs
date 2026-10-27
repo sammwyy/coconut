@@ -1,7 +1,7 @@
 //! Shared tray-icon mapping helpers and dock-button styling used by both
 //! [`grouped::ControlCenterIsland`] (one fused button) and
 //! [`individual::build_islands`] (one button per device) — ported from the
-//! free functions in `apps/shell/src/bar/mod.rs`
+//! free functions in `desktop/shell/src/bar/mod.rs`
 //! (`network_icon`/`battery_icon`/`volume_icon`/`island_button_style`; the
 //! inline `if status.bluetooth_connected {...}` branch there is lifted out
 //! into `bluetooth_icon` here since it's now needed in two places instead of

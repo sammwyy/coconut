@@ -1,5 +1,5 @@
 [package]
-name = "coconut-bg"
+name = "coconut-background"
 version = "0.1.0"
 edition = "2021"
 description = "Coconut's standalone Wayland background renderer"

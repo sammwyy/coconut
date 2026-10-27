@@ -92,7 +92,7 @@ and troubleshooting guidance.
 For a local development session:
 
 ```bash
-cargo run -p coconut-bg &
+cargo run -p coconut-background &
 cargo run -p coconut-shell
 ```
 

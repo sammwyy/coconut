@@ -10,7 +10,7 @@ use std::rc::Rc;
 
 /// Owns every open panel popup and knows how to open/toggle-close one by
 /// id. Replaces the ~10x duplicated `append_popup` boilerplate that used to
-/// live inline in `apps/shell/src/lib.rs` (one block per panel: a
+/// live inline in `desktop/shell/src/lib.rs` (one block per panel: a
 /// hand-created per-open `Signal`, a toggle-close-if-already-open check, an
 /// anchor computation, and an `AppHandle::append_popup` call) with one
 /// generic implementation shared by every panel.
@@ -27,7 +27,7 @@ pub struct PanelHost {
     /// so each dock's popups anchor against that dock, not always the first.
     docks: RefCell<HashMap<usize, DockAnchor>>,
     /// Applied to every popup's `WindowOptions`, kept current via
-    /// [`PanelHost::set_theme`] the same way `apps/shell`'s
+    /// [`PanelHost::set_theme`] the same way `desktop/shell`'s
     /// `RuntimeEvent::ReloadTheme` handler pushes a new theme to every
     /// live window today.
     theme: Cell<Theme>,
@@ -235,7 +235,7 @@ impl PanelHost {
 /// Computes the anchored, gravity-aware [`PopupOptions`] for a panel opened
 /// at `anchor` against `dock` (that dock's own window) at `position`,
 /// `dock_thickness` logical pixels thick. Adapted from
-/// `apps/shell/src/lib.rs::popup_for` (`BarPosition` -> `DockPosition`; the
+/// `desktop/shell/src/lib.rs::popup_for` (`BarPosition` -> `DockPosition`; the
 /// dock's physical thickness — a hardcoded `DOCK_HEIGHT`/`DOCK_WIDTH`
 /// constant owned by the bar module in the original — is now an explicit
 /// parameter via [`PanelHost::set_dock`], since `PanelHost` itself has no
@@ -293,9 +293,9 @@ fn popup_for(
 }
 
 /// Builds the `WindowOptions` shared by every panel popup. Moved verbatim
-/// (parameterized on `theme` instead of reading `apps/shell`'s own
+/// (parameterized on `theme` instead of reading `desktop/shell`'s own
 /// process-global `system_theme()`, since `PanelHost` has no such static)
-/// from `apps/shell/src/lib.rs::popup_options`.
+/// from `desktop/shell/src/lib.rs::popup_options`.
 fn popup_options(
     title: &str,
     width: u32,

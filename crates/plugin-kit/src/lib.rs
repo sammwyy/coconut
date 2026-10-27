@@ -8,7 +8,7 @@
 //! Phase 3 of the dock/island/panel refactor
 //! (`~/.claude/plans/luminous-prancing-wombat.md`). Nothing in the
 //! workspace depends on this crate yet — `plugins/<id>` crates and
-//! `apps/shell`'s engine rewrite (Phase 4) are the first consumers.
+//! `desktop/shell`'s engine rewrite (Phase 4) are the first consumers.
 
 pub mod chrome;
 mod config;

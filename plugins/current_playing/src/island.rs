@@ -22,9 +22,9 @@ const SIDE_ITEM_SIZE: f32 = 36.0;
 /// itself entirely (see [`Island::is_visible`]) when nothing is playing.
 /// Opens the `"current_playing"` panel on click either way.
 ///
-/// Moved from `apps/shell/src/bar/mod.rs`'s `compact_playback_widget`,
+/// Moved from `desktop/shell/src/bar/mod.rs`'s `compact_playback_widget`,
 /// `music_cover` and `safe_image_data`. See [`crate::shared`] for the exact
-/// `SharedState` entries this island expects `apps/shell/src/lib.rs`
+/// `SharedState` entries this island expects `desktop/shell/src/lib.rs`
 /// (Phase 4d) to provide.
 pub struct CurrentPlayingIsland;
 

@@ -1,6 +1,6 @@
 //! `coconut-plugin-weather`: the dock's weather island and panel, plus the
 //! relocated `WeatherState`/HTTP-refresh domain logic (formerly
-//! `apps/shell/src/weather.rs`). Phase 4a of the dock/island/panel refactor
+//! `desktop/shell/src/weather.rs`). Phase 4a of the dock/island/panel refactor
 //! (`~/.claude/plans/luminous-prancing-wombat.md`).
 
 mod island;

@@ -5,9 +5,9 @@ use std::path::{Path, PathBuf};
 
 /// Rasterizes the bundled `assets/icons/**/*.svg` tree into a
 /// `name -> &'static [u8]` lookup consumed by `crate::icons::pixel_icon`.
-/// Copied from `apps/shell/build.rs` (Phase 3 of the plugin-kit refactor
-/// relocates `apps/shell/src/icons.rs` here, since plugin crates can't
-/// depend on the `apps/shell` binary crate).
+/// Copied from `desktop/shell/build.rs` (Phase 3 of the plugin-kit refactor
+/// relocates `desktop/shell/src/icons.rs` here, since plugin crates can't
+/// depend on the `desktop/shell` binary crate).
 fn main() {
     let source_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/icons");
     let output = PathBuf::from(env::var("OUT_DIR").expect("build output directory must exist"));

@@ -4,7 +4,7 @@
 //! panels they open. The most complex plugin in the dock/island/panel
 //! refactor (`~/.claude/plans/luminous-prancing-wombat.md`, Phase 4c).
 //!
-//! See [`shared`] for the exact `SharedState` contract `apps/shell/src/lib.rs`
+//! See [`shared`] for the exact `SharedState` contract `desktop/shell/src/lib.rs`
 //! (Phase 4d) must provide.
 
 mod config;

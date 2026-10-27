@@ -1,7 +1,7 @@
 //! Renders a built-in shader into a PNG without a compositor:
-//! `cargo run -p coconut-bg --example shader_preview -- swirl out.png [time]`
+//! `cargo run -p coconut-background --example shader_preview -- swirl out.png [time]`
 
-use coconut_bg::gpu::{Gpu, ShaderRenderer};
+use coconut_background::gpu::{Gpu, ShaderRenderer};
 use coconut_core::BuiltinShader;
 
 fn main() {

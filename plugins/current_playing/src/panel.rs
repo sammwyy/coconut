@@ -27,9 +27,9 @@ const COVER_SIZE: f32 = 128.0;
 
 /// The expanded current-playing panel opened from
 /// [`crate::CurrentPlayingIsland`]. Ported from
-/// `apps/shell/src/panels/current_playing/mod.rs`, reading the same
+/// `desktop/shell/src/panels/current_playing/mod.rs`, reading the same
 /// `SharedState` entries the island reads (see [`crate::shared`] for the
-/// exact contract `apps/shell/src/lib.rs`, Phase 4d, must provide).
+/// exact contract `desktop/shell/src/lib.rs`, Phase 4d, must provide).
 pub struct CurrentPlayingPanel;
 
 impl Panel for CurrentPlayingPanel {

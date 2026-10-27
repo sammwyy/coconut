@@ -1,7 +1,7 @@
-//! Moved verbatim from `apps/shell/src/process.rs` (Phase 4b of the
+//! Moved verbatim from `desktop/shell/src/process.rs` (Phase 4b of the
 //! dock/island/panel refactor): `app_drawer`'s launched-app spawning is the
 //! only consumer of this helper left after the migration, and plugin crates
-//! can't depend on the `apps/shell` binary crate to reuse it from there.
+//! can't depend on the `desktop/shell` binary crate to reuse it from there.
 
 use std::io;
 use std::process::{Child, Command, Stdio};

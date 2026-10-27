@@ -66,7 +66,7 @@ impl Panel for NetworkPanel {
 /// [`crate::panels::control_center::ControlCenterPanel`] (embedded inline
 /// when its internal view is Network, `on_back: Some(_)` to return to the
 /// control center's main view). Ported from
-/// `apps/shell/src/panels/network/mod.rs::build`.
+/// `desktop/shell/src/panels/network/mod.rs::build`.
 pub fn build_content(
     shared: &SharedState,
     scratch: &SharedState,

@@ -14,7 +14,7 @@ const SIDE_ITEM_SIZE: f32 = 36.0;
 /// dock, a sun-symbol icon button on a vertical one. Opens the `"clock"`
 /// panel on click either way.
 ///
-/// Moved from `apps/shell/src/bar/mod.rs`'s `LiveClock` widget plus the
+/// Moved from `desktop/shell/src/bar/mod.rs`'s `LiveClock` widget plus the
 /// clock-button construction in `build_dock`/`build_side_dock`.
 pub struct ClockIsland {
     pub format: String,
@@ -57,7 +57,7 @@ impl Island for ClockIsland {
 
 impl ClockIsland {
     /// Reads the live-updating text from [`ClockText`] in shared state, if
-    /// `apps/shell/src/lib.rs` (Phase 4d) has wired it up; otherwise falls
+    /// `desktop/shell/src/lib.rs` (Phase 4d) has wired it up; otherwise falls
     /// back to a one-shot `Local::now()` formatted with this island's own
     /// `format` (correct at build time, but it won't tick without the
     /// shared signal — see [`ClockText`]'s doc comment).

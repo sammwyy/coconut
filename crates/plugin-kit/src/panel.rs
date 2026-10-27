@@ -14,7 +14,7 @@ pub struct PanelRenderContext {
     /// A fresh, empty [`SharedState`] created for this open only — replaces
     /// the "hand-created `Signal`/`ScrollController` per open" locals that
     /// used to live inline in each `open_X` block in
-    /// `apps/shell/src/lib.rs`. Use [`SharedState::get_or_insert_with`] to
+    /// `desktop/shell/src/lib.rs`. Use [`SharedState::get_or_insert_with`] to
     /// lazily seed per-open state (a navigation `Signal`, a
     /// `ScrollController`) the first time this panel's `build` runs for
     /// this open.

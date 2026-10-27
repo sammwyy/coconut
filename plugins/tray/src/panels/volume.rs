@@ -49,7 +49,7 @@ impl Panel for VolumePanel {
 
 /// The volume panel's actual content, shared between [`VolumePanel`] and
 /// [`crate::panels::control_center::ControlCenterPanel`]'s embedded Volume
-/// view. Ported from `apps/shell/src/panels/volume/mod.rs::build`.
+/// view. Ported from `desktop/shell/src/panels/volume/mod.rs::build`.
 pub fn build_content(shared: &SharedState, on_back: Option<Rc<dyn Fn()>>) -> BoxedWidget {
     let volume = shared
         .get::<Rc<dyn VolumeIntegration>>()

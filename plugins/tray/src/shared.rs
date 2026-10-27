@@ -3,7 +3,7 @@ use creamui_widgets::ScrollController;
 use std::rc::Rc;
 
 /// The `SharedState` entries every tray island/panel in this crate expects
-/// `apps/shell/src/lib.rs` (Phase 4d) to `.insert(...)` at startup, replacing
+/// `desktop/shell/src/lib.rs` (Phase 4d) to `.insert(...)` at startup, replacing
 /// the individually-cloned `Rc<dyn ...Integration>` bindings and
 /// hand-created `Signal`s that used to live as separate locals in that file
 /// (one per integration, one per "fresh state on open").
@@ -40,7 +40,7 @@ use std::rc::Rc;
 /// - [`BluetoothPowered`] — the Bluetooth analog of `WifiEnabled`.
 /// - [`BrightnessLevel`], [`VolumeLevel`] — written directly by a background
 ///   thread relaying each integration's native change hook (or a poll
-///   fallback), mirroring `apps/shell/src/lib.rs`'s old
+///   fallback), mirroring `desktop/shell/src/lib.rs`'s old
 ///   `schedule_brightness_events`/`schedule_volume_events`. Reading these
 ///   inside a panel/island's `build` is already enough for live reactivity;
 ///   no separate revision signal is used for either.
@@ -48,14 +48,14 @@ use std::rc::Rc;
 ///   keep-awake toggle shown on both the control center and the energy
 ///   panel. The tray plugin only reads/toggles this state; the shell itself
 ///   still owns spawning/killing the actual child process (mirrors the old
-///   `apps/shell/src/lib.rs::keep_awake` closure and `awake` signal).
+///   `desktop/shell/src/lib.rs::keep_awake` closure and `awake` signal).
 /// - [`NetworkRevision`], [`BluetoothRevision`], [`BatteryRevision`],
 ///   [`PowerProfileRevision`] — pulsed by a background thread whenever the
 ///   corresponding integration's native change hook (or poll fallback)
 ///   fires; read purely for their reactive subscription (the `()` payload
 ///   carries no data) so a panel/island re-reads the integration's plain
 ///   (non-reactive) getter methods live. Mirrors
-///   `apps/shell/src/lib.rs::schedule_change_events` and its four
+///   `desktop/shell/src/lib.rs::schedule_change_events` and its four
 ///   `*_revision` signals.
 ///
 /// # Per-open scratch state (do **not** pre-populate; each panel creates its

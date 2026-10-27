@@ -1,5 +1,5 @@
 //! `app_drawer`'s `Panel` implementation, moved from
-//! `apps/shell/src/panels/app_drawer/mod.rs` (Phase 4b of the dock/island/
+//! `desktop/shell/src/panels/app_drawer/mod.rs` (Phase 4b of the dock/island/
 //! panel refactor, `~/.claude/plans/luminous-prancing-wombat.md`). Opened by
 //! the paired `coconut-plugin-app-launcher` crate's `AppLauncherIsland` via
 //! `(ctx.open_panel)("app_drawer", at)`.
@@ -12,14 +12,14 @@
 //! however, at [`crate::AppDrawerPlugin::panels`] time: `PluginInitContext`
 //! carries `app: AppHandle`, and the icon theme is read directly from
 //! `coconut_core::ShellConfig::load()` there (mirroring how
-//! `apps/shell/src/lib.rs` read `initial_config.appearance.icon_theme`
+//! `desktop/shell/src/lib.rs` read `initial_config.appearance.icon_theme`
 //! before `AppBuilder::run` even started). So the catalog is built and its
 //! initial scan kicked off exactly once, at plugin-init time, then stashed
 //! in the app-wide `SharedState` (not `scratch`, since it must survive
 //! across popup opens/closes) so `Panel::build` can fetch the same instance
 //! back out by type. This also gives Phase 4d's config-reload handling
 //! (re-running `start_loading` when `appearance.icon_theme` changes, as
-//! `apps/shell/src/lib.rs`'s `schedule_runtime_events` used to) a way to
+//! `desktop/shell/src/lib.rs`'s `schedule_runtime_events` used to) a way to
 //! reach the very same `AppCatalog` — `ctx.shared.get::<AppCatalog>()` —
 //! without this crate needing to expose anything beyond the `Plugin`/`Panel`
 //! traits.

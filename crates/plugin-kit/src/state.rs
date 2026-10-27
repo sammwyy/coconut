@@ -7,7 +7,7 @@ use std::rc::Rc;
 ///
 /// Replaces `BarActions`'s enumerated closures and the ~20 individually
 /// cloned `Rc` integration/signal bindings that used to live as separate
-/// locals in `apps/shell/src/lib.rs` (one per integration, one per widget's
+/// locals in `desktop/shell/src/lib.rs` (one per integration, one per widget's
 /// "fresh state on open"). Any `T: Clone + 'static` — an
 /// `Rc<dyn NetworkIntegration>`, a `creamui_reactive::Signal<X>`, a
 /// `creamui_widgets::ScrollController` — can be stored and fetched back out
@@ -43,7 +43,7 @@ impl SharedState {
     /// the first time it's requested. Replaces the "fresh `Signal`/
     /// `ScrollController` per panel open" locals that used to be
     /// hand-created inline in every `open_X` block in
-    /// `apps/shell/src/lib.rs` — `make` runs at most once per type, even
+    /// `desktop/shell/src/lib.rs` — `make` runs at most once per type, even
     /// across repeated calls, since the created value is stored back into
     /// the bag before returning.
     pub fn get_or_insert_with<T: Clone + 'static>(&self, make: impl FnOnce() -> T) -> T {

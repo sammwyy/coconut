@@ -13,7 +13,7 @@ const WIDTH: u32 = 280;
 const HEIGHT: u32 = 240;
 
 /// The expanded weather panel opened from [`crate::WeatherIsland`]. Ported
-/// from `apps/shell/src/panels/weather/mod.rs`, reading the same
+/// from `desktop/shell/src/panels/weather/mod.rs`, reading the same
 /// `Signal<WeatherState>` from shared state the island reads (see
 /// [`crate::WeatherIsland`]'s doc comment for the `SharedState` contract).
 pub struct WeatherPanel;

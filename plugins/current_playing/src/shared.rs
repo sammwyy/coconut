@@ -2,7 +2,7 @@ use coconut_api::audio::Playback;
 use std::rc::Rc;
 
 /// The `SharedState` entries [`crate::CurrentPlayingIsland`] and
-/// [`crate::CurrentPlayingPanel`] expect `apps/shell/src/lib.rs` (Phase 4d)
+/// [`crate::CurrentPlayingPanel`] expect `desktop/shell/src/lib.rs` (Phase 4d)
 /// to `.insert(...)` at startup, replacing the dedicated
 /// `current_playback`/`toggle_playback`/`previous_playback`/`next_playback`
 /// fields the old `BarActions` struct carried (plus `seek`, previously
@@ -15,7 +15,7 @@ use std::rc::Rc;
 /// (e.g. a future plugin's own toggle callback) would otherwise collide
 /// under the same erased type and silently overwrite one another.
 ///
-/// `apps/shell/src/lib.rs` should insert:
+/// `desktop/shell/src/lib.rs` should insert:
 /// - [`CurrentPlayback`] — reads the current playback state (the old
 ///   `BarActions::current_playback`).
 /// - [`TogglePlayback`], [`PreviousPlayback`], [`NextPlayback`] — the three

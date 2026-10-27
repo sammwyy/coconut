@@ -18,10 +18,10 @@ use std::rc::Rc;
 /// The single fused tray button shown when `[modules/tray.toml] mode =
 /// "grouped"` (the default): every enabled device gets one icon inside this
 /// button, which opens the `"control_center"` panel. Ported from
-/// `apps/shell/src/bar/mod.rs::control_button_widget`.
+/// `desktop/shell/src/bar/mod.rs::control_button_widget`.
 ///
 /// See [`crate::shared`] for the exact `SharedState` entries this island
-/// expects `apps/shell/src/lib.rs` (Phase 4d) to provide.
+/// expects `desktop/shell/src/lib.rs` (Phase 4d) to provide.
 pub struct ControlCenterIsland {
     tray: TrayConfig,
 }
@@ -58,7 +58,7 @@ impl Island for ControlCenterIsland {
 
         // Subscribing to these revisions here (mirroring the old dock
         // rebuild closure's `network_revision.get(); ...` calls in
-        // `apps/shell/src/lib.rs`) makes this island's own rebuild reactive
+        // `desktop/shell/src/lib.rs`) makes this island's own rebuild reactive
         // to device changes even if the engine's dock-rebuild trigger set
         // doesn't already cover them.
         if let Some(revision) = ctx.shared.get::<NetworkRevision>() {
@@ -151,7 +151,7 @@ impl Island for ControlCenterIsland {
 
 /// Grows with the number of visible device icons, plus the trailing
 /// chevron. Ported verbatim from
-/// `apps/shell/src/bar/mod.rs::control_button_width`.
+/// `desktop/shell/src/bar/mod.rs::control_button_width`.
 fn control_button_width(icon_count: usize, scale: f32) -> f32 {
     const ICON_WIDTH: f32 = 13.0;
     const SETTINGS_WIDTH: f32 = 13.0;
@@ -165,7 +165,7 @@ fn control_button_width(icon_count: usize, scale: f32) -> f32 {
 mod tests {
     use super::control_button_width;
 
-    /// Moved from `apps/shell/src/bar/mod.rs::control_button_grows_with_visible_icons`.
+    /// Moved from `desktop/shell/src/bar/mod.rs::control_button_grows_with_visible_icons`.
     #[test]
     fn control_button_grows_with_visible_icons() {
         assert!(control_button_width(0, 1.0) < control_button_width(3, 1.0));

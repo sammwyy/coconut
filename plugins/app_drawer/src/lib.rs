@@ -28,7 +28,7 @@ impl Plugin for AppDrawerPlugin {
         let catalog = AppCatalog::new();
         // The icon theme lives in `shell.toml`'s `[appearance]` table, not a
         // per-plugin `modules/<id>.toml` (so `ctx.module_config` doesn't
-        // apply here) — read it the same way `apps/shell/src/lib.rs` used to
+        // apply here) — read it the same way `desktop/shell/src/lib.rs` used to
         // read `initial_config.appearance.icon_theme` before `AppBuilder`
         // even started.
         let icon_theme = coconut_core::ShellConfig::load().appearance.icon_theme;

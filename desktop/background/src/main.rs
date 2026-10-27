@@ -1,4 +1,4 @@
-use coconut_bg::{gpu, render};
+use coconut_background::{gpu, render};
 use coconut_core::{ipc, BackgroundConfig, BuiltinShader, ShaderConfig, WallpaperSource};
 use image::RgbaImage;
 use smithay_client_toolkit::{

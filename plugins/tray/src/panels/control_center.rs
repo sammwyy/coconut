@@ -35,7 +35,7 @@ const SLIDER_W: f32 = 324.0;
 /// via `ctx.scratch.get_or_insert_with(|| Signal::new(PanelView::Main))` so
 /// drilling into a device and back is a pure signal flip — the popup window
 /// itself is never closed and reopened. Ported from
-/// `apps/shell/src/panels/control_center/mod.rs::PanelView`.
+/// `desktop/shell/src/panels/control_center/mod.rs::PanelView`.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum PanelView {
     Main,
@@ -51,7 +51,7 @@ enum PanelView {
 /// device tiles navigate *within this same popup* by flipping the
 /// `PanelView` scratch signal (mirroring the old hand-created
 /// `Signal::new(control_center::PanelView::Main)` in
-/// `apps/shell/src/lib.rs`) rather than opening a separate popup — unlike
+/// `desktop/shell/src/lib.rs`) rather than opening a separate popup — unlike
 /// the individual-mode tray icons (and this panel's own back button), which
 /// reach the exact same 5 device panels as freestanding popups via
 /// `PanelHost`'s normal `open_panel("network"|...)` dispatch. Both paths
@@ -76,7 +76,7 @@ enum PanelView {
 /// - [`crate::NetworkRevision`], [`crate::BluetoothRevision`],
 ///   [`crate::BatteryRevision`], [`crate::PowerProfileRevision`]
 ///   (`Signal<()>` each) — read unconditionally on every rebuild, regardless
-///   of which `PanelView` is showing (matching `apps/shell/src/lib.rs`'s old
+///   of which `PanelView` is showing (matching `desktop/shell/src/lib.rs`'s old
 ///   `open_control_center` popup builder, which subscribed to all four
 ///   before ever dispatching on view), purely for their reactive
 ///   subscription.

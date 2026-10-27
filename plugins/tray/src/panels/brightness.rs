@@ -50,7 +50,7 @@ impl Panel for BrightnessPanel {
 /// The brightness panel's actual content, shared between [`BrightnessPanel`]
 /// and [`crate::panels::control_center::ControlCenterPanel`]'s embedded
 /// Brightness view. Ported from
-/// `apps/shell/src/panels/brightness/mod.rs::build`.
+/// `desktop/shell/src/panels/brightness/mod.rs::build`.
 pub fn build_content(shared: &SharedState, on_back: Option<Rc<dyn Fn()>>) -> BoxedWidget {
     let brightness = shared
         .get::<Rc<dyn BrightnessIntegration>>()

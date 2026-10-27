@@ -58,7 +58,7 @@ impl Panel for BluetoothPanel {
 /// The bluetooth panel's actual content, shared between [`BluetoothPanel`]
 /// and [`crate::panels::control_center::ControlCenterPanel`]'s embedded
 /// Bluetooth view. Ported from
-/// `apps/shell/src/panels/bluetooth/mod.rs::build`.
+/// `desktop/shell/src/panels/bluetooth/mod.rs::build`.
 pub fn build_content(
     shared: &SharedState,
     scratch: &SharedState,

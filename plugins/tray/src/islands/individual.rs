@@ -15,7 +15,7 @@ use creamui_widgets::RawButton;
 use std::rc::Rc;
 
 /// Which device an individual-mode tray icon represents, and which panel it
-/// opens. Ported from `apps/shell/src/bar/mod.rs::individual_tray_row`,
+/// opens. Ported from `desktop/shell/src/bar/mod.rs::individual_tray_row`,
 /// which fused every enabled icon into one row/dock-slot; here each becomes
 /// its own [`Island`] with a stable id (`"tray.<device>"`) so `shell.toml`
 /// can place and reorder them independently — a deliberate improvement over
@@ -43,7 +43,7 @@ impl Device {
 
     /// The panel this device's icon opens. Battery opens `"energy"`, not a
     /// `"battery"` panel (there isn't one) — matches
-    /// `apps/shell/src/bar/mod.rs::individual_tray_row`'s
+    /// `desktop/shell/src/bar/mod.rs::individual_tray_row`'s
     /// `tray_icon_button(battery_icon, open_energy)` wiring exactly.
     fn panel_id(self) -> &'static str {
         match self {

@@ -722,7 +722,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "coconut-bg"
+name = "coconut-background"
 version = "0.1.0"
 dependencies = [
  "coconut-core",

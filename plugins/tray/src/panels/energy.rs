@@ -54,7 +54,7 @@ impl Panel for EnergyPanel {
 
 /// The energy panel's actual content, shared between [`EnergyPanel`] and
 /// [`crate::panels::control_center::ControlCenterPanel`]'s embedded Energy
-/// view. Ported from `apps/shell/src/panels/energy/mod.rs::build`.
+/// view. Ported from `desktop/shell/src/panels/energy/mod.rs::build`.
 pub fn build_content(shared: &SharedState, on_back: Option<Rc<dyn Fn()>>) -> BoxedWidget {
     let battery = shared
         .get::<Rc<dyn BatteryIntegration>>()

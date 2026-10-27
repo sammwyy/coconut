@@ -1,5 +1,5 @@
 //! Weather domain state and HTTP refresh logic, relocated wholesale from
-//! `apps/shell/src/weather.rs` (Phase 4a of the dock/island/panel refactor)
+//! `desktop/shell/src/weather.rs` (Phase 4a of the dock/island/panel refactor)
 //! since this is weather-domain logic, not shell-engine infra.
 
 use coconut_core::{geo, UserProfile};
@@ -58,9 +58,9 @@ impl WeatherState {
 /// city if no cached coordinates exist yet, then fetching the forecast) and
 /// returns the resulting [`WeatherState`].
 ///
-/// **Contract for callers (`apps/shell/src/lib.rs`, Phase 4d):** this
+/// **Contract for callers (`desktop/shell/src/lib.rs`, Phase 4d):** this
 /// function blocks on network I/O, so it must be run on a background thread
-/// (mirroring the old `apps/shell/src/lib.rs::refresh_weather`, which called
+/// (mirroring the old `desktop/shell/src/lib.rs::refresh_weather`, which called
 /// this via `AppHandle::spawn_background` and pushed the result into a
 /// `Signal<WeatherState>` on the render thread). Call it once at startup
 /// (when the `weather` island is present in `shell.toml`), and again

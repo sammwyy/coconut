@@ -19,7 +19,7 @@ impl PluginRegistry {
     /// by id. If two plugins (or two islands/panels within one plugin)
     /// register the same id, the later one in `plugins` wins — mirrors
     /// ordinary `HashMap::insert` overwrite semantics, so registration
-    /// order in `apps/shell/src/plugins.rs::all_plugins()` matters only for
+    /// order in `desktop/shell/src/plugins.rs::all_plugins()` matters only for
     /// deliberate overrides.
     pub fn build(plugins: &[Box<dyn Plugin>], ctx: &PluginInitContext) -> Self {
         let mut registry = Self {
@@ -65,7 +65,7 @@ impl PluginRegistry {
 /// Warns once (meant to be called at startup, or whenever `shell.toml`
 /// reloads) about every `[[dock.section.island]].id` across every dock and
 /// section that `registry` has no [`Island`] for. Mirrors
-/// `apps/shell/src/bar/mod.rs::warn_unknown_widgets`'s house style: the
+/// `desktop/shell/src/bar/mod.rs::warn_unknown_widgets`'s house style: the
 /// per-frame dock-building code stays silent about unknown ids so
 /// rebuilding a dock never spams the log, and only this explicit call does.
 pub fn warn_unknown_islands(docks: &[DockConfig], registry: &PluginRegistry) {
