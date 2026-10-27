@@ -85,6 +85,12 @@ Start the settings application independently with:
 cargo run -p coconut-settings
 ```
 
+And the terminal emulator with:
+
+```bash
+cargo run -p coconut-terminal
+```
+
 Preview the login screen in a normal, resizable window on any Wayland desktop:
 
 ```bash

@@ -6,6 +6,7 @@ pub mod geo;
 pub mod ipc;
 pub mod modules;
 mod popups;
+mod process;
 mod profile;
 mod shortcuts;
 
@@ -20,6 +21,7 @@ pub use dock::{
     IslandEntry, SectionConfig, DEFAULT_THICKNESS,
 };
 pub use popups::{PopupAlign, PopupConfig, PopupEdge};
+pub use process::{spawn_detached, terminal_command};
 pub use profile::UserProfile;
 pub use shortcuts::{CustomShortcut, ShellShortcut, ShortcutAction, ShortcutConfig};
 

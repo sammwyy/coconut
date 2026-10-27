@@ -366,17 +366,13 @@ fn launch_app(app: &AppEntry) {
     let terminal = app.terminal;
     thread::spawn(move || {
         let mut command = if terminal {
-            let terminal =
-                std::env::var("TERMINAL").unwrap_or_else(|_| "x-terminal-emulator".into());
-            let mut command = Command::new(terminal);
-            command.arg("-e").arg(program).args(args);
-            command
+            coconut_core::terminal_command(&program, &args)
         } else {
             let mut command = Command::new(program);
             command.args(args);
             command
         };
-        let _ = crate::process::spawn_detached(&mut command);
+        let _ = coconut_core::spawn_detached(&mut command);
     });
 }
 

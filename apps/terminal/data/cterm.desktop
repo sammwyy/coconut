@@ -1,0 +1,19 @@
+[Desktop Entry]
+Type=Application
+Name=Terminal
+Comment=Use the command line
+Exec=cterm
+Icon=utilities-terminal
+Terminal=false
+Categories=System;TerminalEmulator;
+Keywords=shell;command;console;terminal;
+StartupNotify=true
+Actions=NewWindow;Settings;
+
+[Desktop Action NewWindow]
+Name=New Window
+Exec=cterm
+
+[Desktop Action Settings]
+Name=Settings
+Exec=cterm --settings

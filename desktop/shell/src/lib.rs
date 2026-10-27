@@ -6,7 +6,6 @@ mod desktop;
 mod location;
 mod plugins;
 mod popups;
-mod process;
 mod shortcuts;
 mod sounds;
 

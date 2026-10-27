@@ -701,7 +701,7 @@ fn open_target(target: DesktopTarget) {
 
 #[cfg(target_os = "windows")]
 fn open_path(path: PathBuf) {
-    let _ = crate::process::spawn_detached(Command::new("explorer.exe").arg(path));
+    let _ = coconut_core::spawn_detached(Command::new("explorer.exe").arg(path));
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -720,21 +720,18 @@ fn open_path(path: PathBuf) {
     let Some((program, args)) = argv.split_first() else {
         return;
     };
-    let _ = crate::process::spawn_detached(Command::new(program).args(args));
+    let _ = coconut_core::spawn_detached(Command::new(program).args(args));
 }
 
 fn launch(program: String, args: Vec<String>, terminal: bool) {
     let mut command = if terminal {
-        let terminal = std::env::var("TERMINAL").unwrap_or_else(|_| "x-terminal-emulator".into());
-        let mut command = Command::new(terminal);
-        command.arg("-e").arg(program).args(args);
-        command
+        coconut_core::terminal_command(&program, &args)
     } else {
         let mut command = Command::new(program);
         command.args(args);
         command
     };
-    let _ = crate::process::spawn_detached(&mut command);
+    let _ = coconut_core::spawn_detached(&mut command);
 }
 
 fn fill_layout() -> LayoutStyle {

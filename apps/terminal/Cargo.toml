@@ -1,0 +1,44 @@
+[package]
+name = "coconut-terminal"
+version = "0.1.0"
+edition = "2021"
+description = "Coconut's terminal emulator"
+license = "Apache-2.0"
+authors = ["Sammwy"]
+repository = "https://github.com/sammwyy/creamshell"
+
+[[bin]]
+name = "cterm"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+toml = "0.9"
+portable-pty = "0.9"
+swash = "0.2"
+vt100 = "0.16"
+regex = "1"
+arboard = "3"
+delib = { version = "0.1.0", path = "../../../delib" }
+creamui-core = { path = "../../../creamui/crates/core" }
+creamui-reactive = { path = "../../../creamui/crates/reactive" }
+creamui-render = { path = "../../../creamui/crates/render", default-features = false, features = ["system-theme"] }
+creamui-theme = { path = "../../../creamui/crates/theme" }
+creamui-theme-loader = { path = "../../../creamui/crates/theme-loader" }
+creamui-theme-watch = { path = "../../../creamui/crates/theme-watch" }
+creamui-fonts = { path = "../../../creamui/crates/fonts" }
+creamui-widgets = { path = "../../../creamui/crates/widgets" }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+# Linux keeps the Wayland backend, Blair/KWin blur and the Wayland clipboard.
+# Those crates do not build on Windows. `default-features` stays off in every
+# spec so `platform-winit` is not merged into the Windows build.
+[target.'cfg(target_os = "linux")'.dependencies]
+arboard = { version = "3", features = ["wayland-data-control"] }
+creamui-render = { path = "../../../creamui/crates/render", default-features = false, features = ["platform-winit", "platform-wayland", "platform-window-integration-blair", "platform-blur-blair", "platform-blur-kwin"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+creamui-render = { path = "../../../creamui/crates/render", default-features = false, features = ["platform-windows"] }

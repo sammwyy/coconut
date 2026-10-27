@@ -10,7 +10,6 @@
 //! to `Panel::build` via `SharedState`.
 
 mod panel;
-mod process;
 
 pub use panel::{AppCatalog, AppDrawerPanel, DrawerState};
 

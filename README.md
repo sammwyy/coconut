@@ -35,6 +35,8 @@ stay calm, responsive, and consistent.
 | `coconut bg` | Start the standalone background renderer. |
 | `coconut-settings` | Open Coconut Settings directly. |
 | `coconut-bg` | Render the desktop background directly. |
+| `coconut terminal` | Start the terminal emulator. |
+| `cterm --settings` | Open Terminal Settings. |
 | `coconut-greeter` | Start the Alphin login screen. |
 | `coconut-greeter --preview` | Preview the login screen with sample accounts, without Alphin or Blair. |
 | `coconut-greeter --preview-multiple` | Preview the account switcher and session dropdown. |

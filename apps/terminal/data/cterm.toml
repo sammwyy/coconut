@@ -1,0 +1,24 @@
+# Copy to ~/.config/coconut/cterm.toml, or change these values in cterm --settings.
+shell = "bash"
+
+# Omitted actions retain their defaults. Set a binding to "" to disable it.
+[shortcuts]
+new_tab = "Ctrl+Shift+T"
+new_window = "Ctrl+Shift+N"
+close_tab = "Ctrl+Shift+W"
+next_tab = "Ctrl+Tab"
+previous_tab = "Ctrl+Shift+Tab"
+tab_1 = "Alt+1"
+tab_2 = "Alt+2"
+tab_3 = "Alt+3"
+tab_4 = "Alt+4"
+tab_5 = "Alt+5"
+tab_6 = "Alt+6"
+tab_7 = "Alt+7"
+tab_8 = "Alt+8"
+tab_9 = "Alt+9"
+copy = "Ctrl+Shift+C"
+paste = "Ctrl+Shift+V"
+settings = "Ctrl+Comma"
+scroll_up = "Shift+PageUp"
+scroll_down = "Shift+PageDown"

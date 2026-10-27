@@ -27,3 +27,11 @@
   clear one; it can currently only be set by hand-editing
   `~/.config/cream/appearance.toml` or the `CREAMUI_FONT` environment
   variable.
+- Four `apps/terminal` scene-index tests fail on this machine
+  (`single_session_has_centered_title_and_actions_opposite_window_controls`,
+  `tab_strip_reserves_compositor_controls_and_renders_terminal`,
+  `settings::general_island_controls_render_edit_and_restore_defaults`,
+  `settings::recorder_detects_conflicts_cancels_clears_and_saves_atomically`).
+  They already failed before the migration, so the cause is environmental
+  rather than a regression — investigate when the test environment is
+  reproducible.
