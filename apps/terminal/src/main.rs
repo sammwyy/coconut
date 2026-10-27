@@ -1,4 +1,3 @@
-mod about;
 mod app;
 mod appearance;
 mod backends;

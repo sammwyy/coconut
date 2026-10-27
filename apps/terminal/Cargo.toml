@@ -20,6 +20,7 @@ swash = "0.2"
 vt100 = "0.16"
 regex = "1"
 arboard = "3"
+coconut-ui = { path = "../../crates/ui" }
 delib = { version = "0.1.0", path = "../../../delib" }
 creamui-core = { path = "../../../creamui/crates/core" }
 creamui-reactive = { path = "../../../creamui/crates/reactive" }

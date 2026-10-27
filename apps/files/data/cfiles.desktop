@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=File Explorer
+Comment=Browse files and folders
+Exec=cfiles %U
+Icon=folder
+Terminal=false
+Categories=System;FileManager;Utility;
+MimeType=inode/directory;

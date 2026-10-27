@@ -1,0 +1,11 @@
+[package]
+name = "coconut-ui"
+version = "0.1.0"
+edition = "2021"
+description = "Shared widgets for Coconut applications"
+license = "Apache-2.0"
+
+[dependencies]
+creamui-core = { path = "../../../creamui/crates/core" }
+creamui-theme = { path = "../../../creamui/crates/theme" }
+creamui-widgets = { path = "../../../creamui/crates/widgets" }

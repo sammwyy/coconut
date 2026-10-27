@@ -749,6 +749,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "coconut-files"
+version = "0.1.0"
+dependencies = [
+ "coconut-ui",
+ "creamui-core",
+ "creamui-fonts",
+ "creamui-image",
+ "creamui-reactive",
+ "creamui-render",
+ "creamui-theme",
+ "creamui-theme-loader",
+ "creamui-theme-watch",
+ "creamui-widgets",
+ "dbus",
+ "delib",
+ "libc",
+ "mime_guess",
+ "serde",
+ "tempfile",
+ "toml 0.9.12+spec-1.1.0",
+ "url",
+]
+
+[[package]]
 name = "coconut-greeter"
 version = "0.1.0"
 dependencies = [
@@ -1092,6 +1116,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "arboard",
+ "coconut-ui",
  "creamui-core",
  "creamui-fonts",
  "creamui-reactive",
@@ -1108,6 +1133,15 @@ dependencies = [
  "swash",
  "toml 0.9.12+spec-1.1.0",
  "vt100",
+]
+
+[[package]]
+name = "coconut-ui"
+version = "0.1.0"
+dependencies = [
+ "creamui-core",
+ "creamui-theme",
+ "creamui-widgets",
 ]
 
 [[package]]

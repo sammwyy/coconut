@@ -714,13 +714,24 @@ fn open_path(path: PathBuf) {
             .essence_str()
             .to_owned()
     };
-    let Some((_, argv)) = delib::mimeapps::MimeApps::default().command_for(&mime, &[path]) else {
+    let mut command = delib::mimeapps::MimeApps::default()
+        .command_for(&mime, std::slice::from_ref(&path))
+        .and_then(|(_, argv)| {
+            argv.split_first().map(|(program, args)| {
+                let mut command = Command::new(program);
+                command.args(args);
+                command
+            })
+        })
+        .or_else(|| {
+            (mime == "inode/directory")
+                .then(|| coconut_core::files_command(&path))
+                .flatten()
+        });
+    let Some(command) = command.as_mut() else {
         return;
     };
-    let Some((program, args)) = argv.split_first() else {
-        return;
-    };
-    let _ = coconut_core::spawn_detached(Command::new(program).args(args));
+    let _ = coconut_core::spawn_detached(command);
 }
 
 fn launch(program: String, args: Vec<String>, terminal: bool) {

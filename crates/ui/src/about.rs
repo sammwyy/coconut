@@ -1,4 +1,4 @@
-//! Shared About layout; Cargo embeds each application's package metadata.
+//! Shared About layout; the `about!` macro feeds each application's metadata.
 use creamui_core::{
     layout::{
         AlignItems, Dimension, FlexDirection, FlexWrap, JustifyContent, LengthPercentage, Style,
@@ -8,9 +8,17 @@ use creamui_core::{
 use creamui_theme::use_theme;
 use creamui_widgets::{Icon, Link, RawView, Symbol, Text};
 
-pub fn build(display_name: &str) -> BoxedWidget {
+pub struct Metadata {
+    pub version: &'static str,
+    pub description: &'static str,
+    pub authors: &'static str,
+    pub license: &'static str,
+    pub repository: &'static str,
+}
+
+pub fn build(display_name: &str, icon: Symbol, metadata: Metadata) -> BoxedWidget {
     let theme = use_theme();
-    let repository = env!("CARGO_PKG_REPOSITORY").trim_end_matches('/');
+    let repository = metadata.repository.trim_end_matches('/');
     let identity = RawView::new(column(10.0)).with_children(vec![
         Box::new(
             RawView::new(Style {
@@ -24,9 +32,7 @@ pub fn build(display_name: &str) -> BoxedWidget {
             })
             .background(theme.colors.surface_elevated)
             .corner_radius(20.0)
-            .child(Box::new(
-                Icon::new(Symbol::Keyboard, theme.colors.accent).size(38.0),
-            )),
+            .child(Box::new(Icon::new(icon, theme.colors.accent).size(38.0))),
         ),
         Box::new(
             Text::new(display_name)
@@ -35,12 +41,12 @@ pub fn build(display_name: &str) -> BoxedWidget {
                 .text_align(TextAlign::Center),
         ),
         Box::new(
-            Text::secondary(format!("Version {}", env!("CARGO_PKG_VERSION")))
+            Text::secondary(format!("Version {}", metadata.version))
                 .font_size(12.0)
                 .text_align(TextAlign::Center),
         ),
         Box::new(
-            Text::secondary(env!("CARGO_PKG_DESCRIPTION"))
+            Text::secondary(metadata.description)
                 .font_size(13.0)
                 .text_align(TextAlign::Center)
                 .layout(full_width()),
@@ -50,13 +56,13 @@ pub fn build(display_name: &str) -> BoxedWidget {
         Box::new(
             Text::new(format!(
                 "Created by {}",
-                env!("CARGO_PKG_AUTHORS").replace(':', ", ")
+                metadata.authors.replace(':', ", ")
             ))
             .font_size(13.0)
             .text_align(TextAlign::Center),
         ),
         Box::new(
-            Text::secondary(env!("CARGO_PKG_LICENSE"))
+            Text::secondary(metadata.license)
                 .font_size(12.0)
                 .text_align(TextAlign::Center),
         ),
@@ -115,7 +121,18 @@ pub fn build(display_name: &str) -> BoxedWidget {
 }
 
 fn open_link(url: &str) {
-    match crate::backends::open_url(url).spawn() {
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let mut command = std::process::Command::new("xdg-open");
+    #[cfg(target_os = "macos")]
+    let mut command = std::process::Command::new("open");
+    #[cfg(target_os = "windows")]
+    let mut command = {
+        let mut command = std::process::Command::new("cmd");
+        // The first quoted argument of `start` is a window title.
+        command.args(["/C", "start", ""]);
+        command
+    };
+    match command.arg(url).spawn() {
         Ok(mut child) => {
             std::thread::spawn(move || {
                 let _ = child.wait();

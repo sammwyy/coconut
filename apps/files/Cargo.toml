@@ -1,0 +1,34 @@
+[package]
+name = "coconut-files"
+version = "0.1.0"
+edition = "2021"
+description = "Coconut's file manager and FileChooser portal backend"
+license = "Apache-2.0"
+authors = ["Sammwy"]
+repository = "https://github.com/sammwyy/creamshell"
+
+[[bin]]
+name = "cfiles"
+path = "src/main.rs"
+
+[dependencies]
+dbus = "0.9"
+url = "2"
+libc = "0.2"
+mime_guess = "2"
+serde = { version = "1", features = ["derive"] }
+toml = "0.9"
+coconut-ui = { path = "../../crates/ui" }
+delib = { version = "0.1.0", path = "../../../delib" }
+creamui-image = { path = "../../../creamui/crates/image", features = ["svg"] }
+creamui-core = { path = "../../../creamui/crates/core" }
+creamui-reactive = { path = "../../../creamui/crates/reactive" }
+creamui-render = { path = "../../../creamui/crates/render", features = ["platform-wayland", "system-theme", "platform-window-integration-blair", "platform-blur-blair", "platform-blur-kwin"] }
+creamui-theme = { path = "../../../creamui/crates/theme" }
+creamui-theme-loader = { path = "../../../creamui/crates/theme-loader" }
+creamui-theme-watch = { path = "../../../creamui/crates/theme-watch" }
+creamui-fonts = { path = "../../../creamui/crates/fonts" }
+creamui-widgets = { path = "../../../creamui/crates/widgets" }
+
+[dev-dependencies]
+tempfile = "3"

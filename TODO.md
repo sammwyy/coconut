@@ -35,3 +35,15 @@
   They already failed before the migration, so the cause is environmental
   rather than a regression — investigate when the test environment is
   reproducible.
+- Five `apps/files` scene tests fail on this machine
+  (`browser::browser_draws_one_set_of_client_controls_for_single_and_multiple_tabs`,
+  `settings::about_tab_shows_package_information_and_project_links`,
+  `settings::header_keeps_injected_controls_clear_on_either_side`,
+  `settings::preferences_tabs_render_and_navigate_without_changing_config`,
+  `settings::settings_draw_client_controls_only_for_client_decorations`).
+  They already failed in the original `dfiles` repository, so the cause is
+  environmental rather than a migration regression.
+- Implement real multiple-file selection for `apps/files` portal requests:
+  support Ctrl/Shift selection in the browser and return every selected file
+  as a URI in the FileChooser portal response. (Inherited from the dfiles
+  TODO.)

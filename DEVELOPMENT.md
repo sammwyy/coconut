@@ -91,6 +91,12 @@ And the terminal emulator with:
 cargo run -p coconut-terminal
 ```
 
+And the file manager with:
+
+```bash
+cargo run -p coconut-files
+```
+
 Preview the login screen in a normal, resizable window on any Wayland desktop:
 
 ```bash

@@ -21,7 +21,7 @@ pub use dock::{
     IslandEntry, SectionConfig, DEFAULT_THICKNESS,
 };
 pub use popups::{PopupAlign, PopupConfig, PopupEdge};
-pub use process::{spawn_detached, terminal_command};
+pub use process::{files_command, spawn_detached, terminal_command};
 pub use profile::UserProfile;
 pub use shortcuts::{CustomShortcut, ShellShortcut, ShortcutAction, ShortcutConfig};
 

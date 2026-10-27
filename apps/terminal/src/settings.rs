@@ -119,7 +119,7 @@ impl State {
         let body = match page {
             Page::General => self.general(),
             Page::Shortcuts => self.shortcuts(),
-            Page::About => crate::about::build("Terminal"),
+            Page::About => coconut_ui::about!("Terminal", Symbol::Keyboard),
         };
         let inset = 24.0 + ((size.width - 720.0) / 2.0).max(0.0);
         Box::new(

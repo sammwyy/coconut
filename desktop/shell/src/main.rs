@@ -8,9 +8,10 @@ fn main() {
         Some("settings") => open_settings(),
         Some("bg") => open_background(),
         Some("terminal") => open_terminal(),
+        Some("files") => open_files(),
         Some(other) => {
             eprintln!("coconut: unknown command \"{other}\"");
-            eprintln!("usage: coconut [shell|settings [route]|bg|terminal]");
+            eprintln!("usage: coconut [shell|settings [route]|bg|terminal|files]");
             std::process::exit(1);
         }
     }
@@ -26,6 +27,10 @@ fn open_settings() {
 
 fn open_terminal() {
     open_sibling("cterm");
+}
+
+fn open_files() {
+    open_sibling("cfiles");
 }
 
 fn open_sibling(name: &str) {

@@ -1,5 +1,5 @@
 use std::io;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 
 /// Spawns `command` detached from Coconut's own process group/session so
@@ -19,17 +19,27 @@ pub fn spawn_detached(command: &mut Command) -> io::Result<Child> {
 pub fn terminal_command(program: &str, args: &[String]) -> Command {
     let terminal = std::env::var_os("TERMINAL")
         .map(PathBuf::from)
-        .or_else(cterm)
+        .or_else(|| sibling("cterm"))
         .unwrap_or_else(|| PathBuf::from("x-terminal-emulator"));
     let mut command = Command::new(terminal);
     command.arg("-e").arg(program).args(args);
     command
 }
 
-/// `cterm` sits next to the running executable in installed and `cargo run`
-/// layouts alike; fall back to `PATH` for a separately installed binary.
-fn cterm() -> Option<PathBuf> {
-    let name = format!("cterm{}", std::env::consts::EXE_SUFFIX);
+/// Builds the command that opens `path` in the `cfiles` file manager, the
+/// fallback for paths with no configured MIME default application. `None`
+/// means no `cfiles` binary is installed.
+pub fn files_command(path: &Path) -> Option<Command> {
+    let mut command = Command::new(sibling("cfiles")?);
+    command.arg(path);
+    Some(command)
+}
+
+/// A sibling binary sits next to the running executable in installed and
+/// `cargo run` layouts alike; fall back to `PATH` for a separately installed
+/// binary.
+fn sibling(name: &str) -> Option<PathBuf> {
+    let name = format!("{name}{}", std::env::consts::EXE_SUFFIX);
     if let Some(sibling) = std::env::current_exe()
         .ok()
         .and_then(|exe| exe.parent().map(|dir| dir.join(&name)))
