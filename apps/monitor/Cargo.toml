@@ -1,11 +1,11 @@
 [package]
 name = "coconut-monitor"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 description = "Coconut's system monitor"
-license = "Apache-2.0"
-authors = ["Sammwy"]
-repository = "https://github.com/sammwyy/creamshell"
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
 
 [[bin]]
 name = "cmonitor"
@@ -16,7 +16,7 @@ libc.workspace = true
 delib = { workspace = true }
 creamui-core = { workspace = true }
 creamui-reactive = { workspace = true }
-creamui-render = { workspace = true, features = ["platform-wayland", "system-theme", "platform-window-integration-blair", "platform-blur-blair", "platform-blur-kwin"] }
+creamui-render = { workspace = true, default-features = true, features = ["platform-wayland", "system-theme", "platform-window-integration-blair", "platform-blur-blair", "platform-blur-kwin"] }
 creamui-router = { workspace = true }
 creamui-theme = { workspace = true }
 creamui-theme-loader = { workspace = true }

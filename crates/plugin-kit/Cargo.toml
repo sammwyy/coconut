@@ -1,13 +1,15 @@
 [package]
 name = "coconut-plugin-kit"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 description = "Island/Panel/Plugin traits, registry, SharedState and PanelHost shared by every Coconut plugin crate"
-license = "Apache-2.0"
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
 build = "build.rs"
 
 [dependencies]
-coconut-core = { workspace = true }
+coconut-core = { workspace = true, default-features = true }
 delib = { workspace = true }
 creamui-core = { workspace = true }
 creamui-fonts = { workspace = true }
@@ -15,7 +17,7 @@ creamui-image = { workspace = true, features = ["webp", "jpeg", "svg"] }
 creamui-jsx = { workspace = true }
 creamui-macros = { workspace = true }
 creamui-reactive = { workspace = true }
-creamui-render = { workspace = true }
+creamui-render = { workspace = true, default-features = true }
 creamui-theme = { workspace = true }
 creamui-widgets = { workspace = true }
-serde = { workspace = true, features = ["derive"] }
+serde.workspace = true

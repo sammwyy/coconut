@@ -1,18 +1,18 @@
 [package]
 name = "coconut-media-player"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 description = "Coconut's video and music player"
-license = "Apache-2.0"
-authors = ["Sammwy"]
-repository = "https://github.com/sammwyy/creamshell"
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
 
 [[bin]]
 name = "cplayer"
 path = "src/main.rs"
 
 [dependencies]
-serde = { workspace = true, features = ["derive"] }
+serde.workspace = true
 serde_json.workspace = true
 rodio.workspace = true
 toml.workspace = true
@@ -40,7 +40,7 @@ rfd = { workspace = true, default-features = false, features = ["xdg-portal"] }
 creamui-render = { workspace = true, default-features = false, features = ["platform-winit", "platform-wayland", "platform-x11", "platform-window-integration-blair", "platform-blur-blair", "platform-blur-kwin", "tray"] }
 
 [target.'cfg(not(target_os = "linux"))'.dependencies]
-rfd.workspace = true
+rfd = { workspace = true, default-features = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { workspace = true, features = [

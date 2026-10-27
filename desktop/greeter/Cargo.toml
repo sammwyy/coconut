@@ -1,9 +1,11 @@
 [package]
 name = "coconut-greeter"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 description = "Coconut login interface for Alphin"
-license = "Apache-2.0"
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
 
 [[bin]]
 name = "coconut-greeter"
@@ -16,7 +18,7 @@ creamui-core = { workspace = true }
 creamui-fonts = { workspace = true }
 creamui-image = { workspace = true, features = ["webp", "svg"] }
 creamui-reactive = { workspace = true }
-creamui-render = { workspace = true, features = ["platform-wayland", "system-theme"] }
+creamui-render = { workspace = true, default-features = true, features = ["platform-wayland", "system-theme"] }
 creamui-theme = { workspace = true }
 creamui-widgets = { workspace = true }
 serde_json.workspace = true

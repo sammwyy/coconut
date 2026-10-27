@@ -1,18 +1,20 @@
 [package]
 name = "coconut-settings"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 description = "Coconut's settings window process"
-license = "Apache-2.0"
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
 
 [[bin]]
 name = "coconut-settings"
 path = "src/main.rs"
 
 [dependencies]
-coconut-core = { workspace = true }
+coconut-core = { workspace = true, default-features = true }
 coconut-api = { workspace = true }
-coconut-registry = { workspace = true }
+coconut-registry = { workspace = true, default-features = true }
 coconut-plugin-kit = { workspace = true }
 coconut-plugin-tray = { workspace = true }
 coconut-plugin-clock = { workspace = true }
@@ -28,13 +30,13 @@ creamui-router = { workspace = true }
 percent-encoding.workspace = true
 url.workspace = true
 creamui-reactive = { workspace = true }
-creamui-render = { workspace = true, features = ["platform-wayland", "system-theme", "platform-window-integration-blair", "platform-blur-blair", "platform-blur-kwin"] }
+creamui-render = { workspace = true, default-features = true, features = ["platform-wayland", "system-theme", "platform-window-integration-blair", "platform-blur-blair", "platform-blur-kwin"] }
 creamui-theme = { workspace = true }
 creamui-theme-loader = { workspace = true }
 creamui-widgets = { workspace = true }
 image-rs.workspace = true
 dbus.workspace = true
-rfd.workspace = true
+rfd = { workspace = true, default-features = true }
 toml.workspace = true
 tokio = { workspace = true, features = ["rt"] }
 delib = { workspace = true }

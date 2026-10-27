@@ -1,9 +1,11 @@
 [package]
 name = "coconut-plugin-logo"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 description = "Coconut dock plugin: the logo island"
-license = "Apache-2.0"
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
 
 [dependencies]
 coconut-plugin-kit = { workspace = true }

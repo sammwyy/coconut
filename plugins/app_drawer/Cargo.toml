@@ -1,17 +1,19 @@
 [package]
 name = "coconut-plugin-app-drawer"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 description = "Coconut dock plugin: the app drawer panel (opened by app_launcher)"
-license = "Apache-2.0"
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
 
 [dependencies]
-coconut-core = { workspace = true }
+coconut-core = { workspace = true, default-features = true }
 coconut-plugin-kit = { workspace = true }
 creamui-core = { workspace = true }
 creamui-image = { workspace = true, features = ["webp", "jpeg", "svg"] }
 creamui-jsx = { workspace = true }
 creamui-macros = { workspace = true }
 creamui-reactive = { workspace = true }
-creamui-render = { workspace = true }
+creamui-render = { workspace = true, default-features = true }
 creamui-widgets = { workspace = true }

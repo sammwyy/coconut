@@ -1,9 +1,11 @@
 [package]
 name = "coconut-shell"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 description = "Coconut's dock/bar process"
-license = "Apache-2.0"
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
 
 [[bin]]
 name = "coconut"
@@ -19,7 +21,7 @@ perf-metrics = [
 
 [dependencies]
 coconut-api = { workspace = true }
-coconut-core = { workspace = true }
+coconut-core = { workspace = true, default-features = true }
 coconut-plugin-kit = { workspace = true }
 delib = { workspace = true }
 coconut-plugin-logo = { workspace = true }
@@ -39,19 +41,19 @@ creamui-image = { workspace = true, features = ["webp", "jpeg", "svg"] }
 creamui-jsx = { workspace = true }
 creamui-macros = { workspace = true }
 creamui-reactive = { workspace = true }
-creamui-render = { workspace = true, features = ["platform-wayland", "platform-blur-blair", "platform-blur-kwin", "system-theme"] }
+creamui-render = { workspace = true, default-features = true, features = ["platform-wayland", "platform-blur-blair", "platform-blur-kwin", "system-theme"] }
 creamui-theme = { workspace = true }
 creamui-theme-loader = { workspace = true }
 creamui-widgets = { workspace = true }
-serde = { workspace = true, features = ["derive"] }
+serde.workspace = true
 blair-client = { workspace = true }
 blair-protocol = { workspace = true }
 coconut-integration-kwin = { workspace = true }
 tokio = { workspace = true, features = ["rt", "macros", "sync"] }
-zbus = { workspace = true, default-features = false, features = ["tokio"] }
+zbus.workspace = true
 
 [target.'cfg(not(target_os = "windows"))'.dependencies]
-coconut-registry = { workspace = true }
+coconut-registry = { workspace = true, default-features = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 coconut-registry = { workspace = true, default-features = false, features = ["windows"] }

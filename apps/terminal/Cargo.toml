@@ -1,11 +1,11 @@
 [package]
 name = "coconut-terminal"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 description = "Coconut's terminal emulator"
-license = "Apache-2.0"
-authors = ["Sammwy"]
-repository = "https://github.com/sammwyy/creamshell"
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
 
 [[bin]]
 name = "cterm"
@@ -13,7 +13,7 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow.workspace = true
-serde = { workspace = true, features = ["derive"] }
+serde.workspace = true
 toml.workspace = true
 portable-pty.workspace = true
 swash.workspace = true

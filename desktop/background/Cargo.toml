@@ -1,9 +1,11 @@
 [package]
 name = "coconut-background"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 description = "Coconut's standalone Wayland background renderer"
-license = "Apache-2.0"
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
 
 [[bin]]
 name = "coconut-bg"
@@ -11,9 +13,9 @@ path = "src/main.rs"
 
 [dependencies]
 coconut-core = { workspace = true, default-features = false }
-image.workspace = true
+image = { workspace = true, default-features = true }
 smithay-client-toolkit.workspace = true
 wayland-client = { workspace = true, features = ["system"] }
 pollster.workspace = true
 raw-window-handle.workspace = true
-wgpu = { workspace = true, default-features = false, features = ["wgsl"] }
+wgpu.workspace = true

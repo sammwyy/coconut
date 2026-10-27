@@ -1,13 +1,15 @@
 [package]
 name = "coconut-integration-kwin"
-version = "0.1.0"
-edition = "2021"
-license = "Apache-2.0"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
 
 [dependencies]
 coconut-api = { workspace = true }
-creamui-render = { workspace = true }
+creamui-render = { workspace = true, default-features = true }
 dbus.workspace = true
-serde = { workspace = true, features = ["derive"] }
+serde.workspace = true
 serde_json.workspace = true
 delib = { workspace = true }

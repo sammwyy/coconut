@@ -1,12 +1,14 @@
 [package]
 name = "coconut-plugin-weather"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 description = "Coconut dock plugin: the weather island and panel"
-license = "Apache-2.0"
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
 
 [dependencies]
-coconut-core = { workspace = true }
+coconut-core = { workspace = true, default-features = true }
 coconut-plugin-kit = { workspace = true }
 chrono.workspace = true
 creamui-core = { workspace = true }
@@ -15,5 +17,5 @@ creamui-macros = { workspace = true }
 creamui-reactive = { workspace = true }
 creamui-theme = { workspace = true }
 creamui-widgets = { workspace = true }
-reqwest = { workspace = true, default-features = false, features = ["blocking", "gzip", "json", "rustls-tls"] }
-serde = { workspace = true, features = ["derive"] }
+reqwest.workspace = true
+serde.workspace = true

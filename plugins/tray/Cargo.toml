@@ -1,17 +1,19 @@
 [package]
 name = "coconut-plugin-tray"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 description = "Coconut dock plugin: the tray islands (control center / individual devices) and the control center, network, bluetooth, energy, brightness and volume panels"
-license = "Apache-2.0"
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
 
 [dependencies]
 coconut-api = { workspace = true }
-coconut-core = { workspace = true }
+coconut-core = { workspace = true, default-features = true }
 coconut-plugin-kit = { workspace = true }
 creamui-core = { workspace = true }
 creamui-jsx = { workspace = true }
 creamui-macros = { workspace = true }
 creamui-reactive = { workspace = true }
 creamui-widgets = { workspace = true }
-serde = { workspace = true, features = ["derive"] }
+serde.workspace = true
