@@ -35,7 +35,7 @@ fn build(_: Size, accounts: &[Account], username: &str) -> BoxedWidget {
     )
 }
 
-pub(crate) fn route_view() -> creamui_core::BoxedWidget {
+pub(crate) fn route_view() -> BoxedWidget {
     let context = creamui_reactive::use_context::<crate::views::context::ViewContext>();
     let size = context.size;
     let account_list = context.users.get();

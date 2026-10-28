@@ -40,3 +40,6 @@ rfd = { workspace = true, default-features = true }
 toml.workspace = true
 tokio = { workspace = true, features = ["rt"] }
 delib = { workspace = true }
+
+[lints]
+workspace = true

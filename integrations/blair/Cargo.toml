@@ -11,3 +11,6 @@ coconut-api = { workspace = true }
 creamui-render = { workspace = true, default-features = true }
 dbus.workspace = true
 delib = { workspace = true }
+
+[lints]
+workspace = true

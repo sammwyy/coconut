@@ -67,7 +67,7 @@ fn location_agent_permitted_in(document: &str) -> Option<bool> {
 
 fn location_agent_permitted() -> bool {
     let mut paths = vec![std::path::PathBuf::from("/etc/geoclue/geoclue.conf")];
-    if let Ok(entries) = std::fs::read_dir("/etc/geoclue/conf.d") {
+    if let Ok(entries) = fs::read_dir("/etc/geoclue/conf.d") {
         let mut overrides: Vec<_> = entries
             .filter_map(Result::ok)
             .map(|entry| entry.path())
@@ -77,9 +77,9 @@ fn location_agent_permitted() -> bool {
     }
     paths
         .into_iter()
-        .filter_map(|path| std::fs::read_to_string(path).ok())
+        .filter_map(|path| fs::read_to_string(path).ok())
         .filter_map(|document| location_agent_permitted_in(&document))
-        .last()
+        .next_back()
         .unwrap_or(false)
 }
 
@@ -101,18 +101,14 @@ fn compatible_locker() -> Option<String> {
 }
 
 fn native_backlight_available() -> bool {
-    std::fs::read_dir("/sys/class/backlight")
+    fs::read_dir("/sys/class/backlight")
         .ok()
         .into_iter()
         .flatten()
         .filter_map(Result::ok)
         .map(|entry| entry.path().join("brightness"))
         .any(|brightness| {
-            brightness.is_file()
-                && std::fs::OpenOptions::new()
-                    .write(true)
-                    .open(brightness)
-                    .is_ok()
+            brightness.is_file() && fs::OpenOptions::new().write(true).open(brightness).is_ok()
         })
 }
 

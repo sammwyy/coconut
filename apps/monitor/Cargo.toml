@@ -23,3 +23,6 @@ creamui-theme-loader = { workspace = true }
 creamui-theme-watch = { workspace = true }
 creamui-fonts = { workspace = true }
 creamui-widgets = { workspace = true }
+
+[lints]
+workspace = true

@@ -200,7 +200,7 @@ pub enum Accent {
 }
 
 impl Accent {
-    pub const ALL: [Accent; 9] = [
+    pub const ALL: [Self; 9] = [
         Self::Auto,
         Self::System,
         Self::Blue,

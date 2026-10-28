@@ -59,7 +59,7 @@ fn build_scoped(b: &BrowserState, size: Size) -> BoxedWidget {
         content_width,
         !(tabs_at_top && has_tab_strip),
     ));
-    if let Some(filters) = crate::components::portal_footer::filter_bar(b) {
+    if let Some(filters) = portal_footer::filter_bar(b) {
         main.push(filters);
     }
     if tab.location() != &Location::Home && tab.view == DirectoryView::List {

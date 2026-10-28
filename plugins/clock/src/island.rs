@@ -25,7 +25,7 @@ impl Island for ClockIsland {
         "clock"
     }
 
-    fn build(&self, ctx: &IslandRenderContext) -> BoxedWidget {
+    fn build(&self, ctx: &IslandRenderContext<'_>) -> BoxedWidget {
         let s = ctx.scale;
         let open = ctx.open_panel.clone();
         if ctx.position.is_vertical() {
@@ -61,7 +61,7 @@ impl ClockIsland {
     /// back to a one-shot `Local::now()` formatted with this island's own
     /// `format` (correct at build time, but it won't tick without the
     /// shared signal — see [`ClockText`]'s doc comment).
-    fn current_text(&self, ctx: &IslandRenderContext) -> String {
+    fn current_text(&self, ctx: &IslandRenderContext<'_>) -> String {
         match ctx.shared.get::<ClockText>() {
             Some(ClockText(signal)) => signal.get(),
             None => chrono::Local::now().format(&self.format).to_string(),

@@ -25,31 +25,23 @@ pub struct DesktopConfig {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum IconShape {
     Square,
+    #[default]
     Rounded,
     Circle,
-}
-
-impl Default for IconShape {
-    fn default() -> Self {
-        Self::Rounded
-    }
 }
 
 /// What a single click on a desktop icon does. Either way, double-clicking
 /// always opens it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum ClickAction {
+    #[default]
     Select,
     Open,
-}
-
-impl Default for ClickAction {
-    fn default() -> Self {
-        Self::Select
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]

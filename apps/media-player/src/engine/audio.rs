@@ -27,7 +27,7 @@ impl AudioOutput {
             .map_err(|e| eprintln!("cplayer: no audio output device: {e}"))
             .ok()?;
         let player = Player::connect_new(device.mixer());
-        Some(AudioOutput {
+        Some(Self {
             _device: device,
             player,
         })

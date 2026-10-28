@@ -194,7 +194,7 @@ mod tests {
     fn gradient_config(angle_degrees: f32) -> BackgroundConfig {
         BackgroundConfig {
             source: WallpaperSource::Gradient,
-            gradient: coconut_core::GradientConfig {
+            gradient: GradientConfig {
                 from: DesktopColor { r: 0, g: 0, b: 0 },
                 to: DesktopColor {
                     r: 100,

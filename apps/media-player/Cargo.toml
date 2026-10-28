@@ -53,3 +53,6 @@ windows = { workspace = true, features = [
     "Win32_UI_WindowsAndMessaging",
 ] }
 creamui-render = { workspace = true, default-features = false, features = ["platform-winit", "platform-windows"] }
+
+[lints]
+workspace = true

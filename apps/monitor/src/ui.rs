@@ -61,7 +61,7 @@ pub trait Tint {
 }
 impl Tint for Color {
     fn with_alpha(self, opacity: f32) -> Color {
-        Color::rgba(
+        Self::rgba(
             self.r,
             self.g,
             self.b,

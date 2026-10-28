@@ -16,7 +16,7 @@ impl Island for LogoIsland {
         "logo"
     }
 
-    fn build(&self, ctx: &IslandRenderContext) -> BoxedWidget {
+    fn build(&self, ctx: &IslandRenderContext<'_>) -> BoxedWidget {
         let s = ctx.scale;
         let row = jsx! {
             <Flex direction={FlexDirection::Row} size={(124.0 * s, 32.0 * s)} padding={4.0 * s} gap={2.0 * s} align={Align::Center} background={shell_island()} border={(shell_border(), 1.0)} corner_radius={16.0 * s}>

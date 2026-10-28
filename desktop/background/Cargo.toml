@@ -19,3 +19,6 @@ wayland-client = { workspace = true, features = ["system"] }
 pollster.workspace = true
 raw-window-handle.workspace = true
 wgpu.workspace = true
+
+[lints]
+workspace = true

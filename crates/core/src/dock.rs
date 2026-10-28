@@ -3,8 +3,10 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum DockPosition {
     Top,
+    #[default]
     Bottom,
     Left,
     Right,
@@ -13,12 +15,6 @@ pub enum DockPosition {
 impl DockPosition {
     pub fn is_vertical(self) -> bool {
         matches!(self, Self::Left | Self::Right)
-    }
-}
-
-impl Default for DockPosition {
-    fn default() -> Self {
-        DockPosition::Bottom
     }
 }
 
@@ -35,16 +31,12 @@ pub enum DockDirection {
 /// configured to fill the available space.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum DockAlign {
+    #[default]
     Start,
     Center,
     End,
-}
-
-impl Default for DockAlign {
-    fn default() -> Self {
-        DockAlign::Start
-    }
 }
 
 /// Where a background color comes from: the active theme, or a color the
@@ -52,15 +44,11 @@ impl Default for DockAlign {
 /// and for its islands' background.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum BackgroundSource {
+    #[default]
     Theme,
     Custom,
-}
-
-impl Default for BackgroundSource {
-    fn default() -> Self {
-        BackgroundSource::Theme
-    }
 }
 
 fn default_opacity() -> f32 {

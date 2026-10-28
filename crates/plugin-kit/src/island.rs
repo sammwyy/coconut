@@ -31,12 +31,12 @@ pub trait Island {
     /// [`crate::PluginRegistry::island`].
     fn id(&self) -> &'static str;
 
-    fn build(&self, ctx: &IslandRenderContext) -> BoxedWidget;
+    fn build(&self, ctx: &IslandRenderContext<'_>) -> BoxedWidget;
 
     /// Whether this island should render at all right now, e.g.
     /// `current_playing` hiding itself with nothing playing. Re-checked on
     /// every dock rebuild; defaults to always visible.
-    fn is_visible(&self, _ctx: &IslandRenderContext) -> bool {
+    fn is_visible(&self, _ctx: &IslandRenderContext<'_>) -> bool {
         true
     }
 

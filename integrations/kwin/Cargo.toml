@@ -13,3 +13,6 @@ dbus.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 delib = { workspace = true }
+
+[lints]
+workspace = true

@@ -158,6 +158,29 @@ fn path() -> std::path::PathBuf {
     super::config_dir().join("coconut").join("shortcuts.toml")
 }
 
+impl ShellShortcut {
+    pub fn defaults() -> Vec<Self> {
+        use ShortcutAction::*;
+        [
+            ("Super", OpenLauncher),
+            ("Super+D", MinimizeFocused),
+            ("Alt+Tab", NextWindow),
+            ("Alt+Shift+Tab", PreviousWindow),
+            ("Alt+F4", CloseFocused),
+            ("XF86AudioRaiseVolume", VolumeUp),
+            ("XF86AudioLowerVolume", VolumeDown),
+            ("XF86MonBrightnessUp", BrightnessUp),
+            ("XF86MonBrightnessDown", BrightnessDown),
+        ]
+        .into_iter()
+        .map(|(accelerator, action)| Self {
+            accelerator: accelerator.into(),
+            action,
+        })
+        .collect()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -179,28 +202,5 @@ mod tests {
         assert!(config.validate().unwrap_err().contains("no command"));
         config.custom_shortcuts[0].accelerator.clear();
         assert!(config.validate().is_ok());
-    }
-}
-
-impl ShellShortcut {
-    pub fn defaults() -> Vec<Self> {
-        use ShortcutAction::*;
-        [
-            ("Super", OpenLauncher),
-            ("Super+D", MinimizeFocused),
-            ("Alt+Tab", NextWindow),
-            ("Alt+Shift+Tab", PreviousWindow),
-            ("Alt+F4", CloseFocused),
-            ("XF86AudioRaiseVolume", VolumeUp),
-            ("XF86AudioLowerVolume", VolumeDown),
-            ("XF86MonBrightnessUp", BrightnessUp),
-            ("XF86MonBrightnessDown", BrightnessDown),
-        ]
-        .into_iter()
-        .map(|(accelerator, action)| Self {
-            accelerator: accelerator.into(),
-            action,
-        })
-        .collect()
     }
 }

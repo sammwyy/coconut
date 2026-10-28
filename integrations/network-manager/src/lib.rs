@@ -243,7 +243,7 @@ fn run_event_bridge(
     refresh(&connection, &state);
     let _ = changes.try_send(());
 
-    let sender = dbus::strings::BusName::new(SERVICE).map_err(|error| error.to_string())?;
+    let sender = dbus::strings::BusName::new(SERVICE).map_err(|error| error.clone())?;
     let rule = PropertiesPropertiesChanged::match_rule(Some(&sender), None).static_clone();
     let _token = connection
         .add_match(

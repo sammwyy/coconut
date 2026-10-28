@@ -33,11 +33,11 @@ enum Device {
 impl Device {
     fn id(self) -> &'static str {
         match self {
-            Device::Wifi => "tray.wifi",
-            Device::Bluetooth => "tray.bluetooth",
-            Device::Battery => "tray.battery",
-            Device::Volume => "tray.volume",
-            Device::Brightness => "tray.brightness",
+            Self::Wifi => "tray.wifi",
+            Self::Bluetooth => "tray.bluetooth",
+            Self::Battery => "tray.battery",
+            Self::Volume => "tray.volume",
+            Self::Brightness => "tray.brightness",
         }
     }
 
@@ -47,21 +47,21 @@ impl Device {
     /// `tray_icon_button(battery_icon, open_energy)` wiring exactly.
     fn panel_id(self) -> &'static str {
         match self {
-            Device::Wifi => "network",
-            Device::Bluetooth => "bluetooth",
-            Device::Battery => "energy",
-            Device::Volume => "volume",
-            Device::Brightness => "brightness",
+            Self::Wifi => "network",
+            Self::Bluetooth => "bluetooth",
+            Self::Battery => "energy",
+            Self::Volume => "volume",
+            Self::Brightness => "brightness",
         }
     }
 
     fn shows_in_bar(self, tray: &TrayConfig) -> bool {
         match self {
-            Device::Wifi => tray.wifi.shows_in_bar(),
-            Device::Bluetooth => tray.bluetooth.shows_in_bar(),
-            Device::Battery => tray.battery.shows_in_bar(),
-            Device::Volume => tray.volume.shows_in_bar(),
-            Device::Brightness => tray.brightness.shows_in_bar(),
+            Self::Wifi => tray.wifi.shows_in_bar(),
+            Self::Bluetooth => tray.bluetooth.shows_in_bar(),
+            Self::Battery => tray.battery.shows_in_bar(),
+            Self::Volume => tray.volume.shows_in_bar(),
+            Self::Brightness => tray.brightness.shows_in_bar(),
         }
     }
 }
@@ -93,7 +93,7 @@ impl Island for DeviceIsland {
         self.device.id()
     }
 
-    fn build(&self, ctx: &IslandRenderContext) -> BoxedWidget {
+    fn build(&self, ctx: &IslandRenderContext<'_>) -> BoxedWidget {
         let icon = self.icon_name(ctx);
         let panel_id = self.device.panel_id();
         let open_panel = ctx.open_panel.clone();
@@ -110,28 +110,21 @@ impl Island for DeviceIsland {
             {
                 use creamui_core::Styled;
                 let s = ctx.scale;
-                let row = creamui_widgets::layout::Flex::row()
+                let row = Flex::row()
                     .size(74.0 * s, 32.0 * s)
                     .gap(6.0 * s)
-                    .align(creamui_widgets::layout::Align::Center)
-                    .justify(creamui_widgets::layout::Justify::Center)
-                    .child(coconut_plugin_kit::pixel_icon(
-                        icon,
-                        16.0 * s,
-                        coconut_plugin_kit::chrome::shell_text(),
-                    ))
+                    .align(Align::Center)
+                    .justify(Justify::Center)
+                    .child(pixel_icon(icon, 16.0 * s, shell_text()))
                     .child(Box::new(
                         creamui_widgets::Text::new(format!("{percent}%"))
                             .font_size(11.0 * s)
                             .bold(true),
                     ));
                 return Box::new(
-                    creamui_widgets::RawButton::new(
-                        super::island_button_style(74.0 * s, 32.0 * s, s),
-                        || {},
-                    )
-                    .with_click_position(move |point| open_panel(panel_id, point))
-                    .child(Box::new(row)),
+                    RawButton::new(island_button_style(74.0 * s, 32.0 * s, s), || {})
+                        .with_click_position(move |point| open_panel(panel_id, point))
+                        .child(Box::new(row)),
                 );
             }
         }
@@ -140,7 +133,7 @@ impl Island for DeviceIsland {
 }
 
 impl DeviceIsland {
-    fn icon_name(&self, ctx: &IslandRenderContext) -> &'static str {
+    fn icon_name(&self, ctx: &IslandRenderContext<'_>) -> &'static str {
         match self.device {
             Device::Wifi => {
                 if let Some(revision) = ctx.shared.get::<NetworkRevision>() {

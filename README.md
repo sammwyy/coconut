@@ -48,7 +48,13 @@ stay calm, responsive, and consistent.
 | `coconut-greeter --preview-multiple` | Preview the account switcher and session dropdown. |
 
 `coconut` now contains only the shell and transparent desktop-icon layer.
-Start `coconut-bg` alongside it in a Wayland session. It renders one bottom
+`coconut-bg` renders the desktop background as an independent session daemon;
+the installed session profile launches both automatically — `startcoconut`
+(the greeter-facing bootstrapper, which starts the compositor selected at
+install time) hands off to `coconut-session`, which spawns `coconut-bg` and
+then the shell. Future session components get added there, not to the shell.
+When running pieces by hand instead of through the session, start
+`coconut-bg` alongside `coconut` yourself. It renders one bottom
 layer surface per output, follows output size/scale changes, and stores its
 independent configuration in `~/.config/coconut/bg.toml` (or the equivalent
 XDG configuration directory). Coconut Settings updates it live. Image mode

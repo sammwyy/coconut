@@ -190,7 +190,7 @@ fn play_button(icon: &'static str, on_click: Rc<dyn Fn()>) -> BoxedWidget {
     Box::new(jsx! {
         <RawButton style={control_style()} on_click={move || on_click()}>
             <Flex size={(30.0, 28.0)} align={Align::Center} justify={Justify::Center}>
-                {pixel_icon(icon, 14.0, creamui_theme::Color::rgb(255, 255, 255))}
+                {pixel_icon(icon, 14.0, Color::rgb(255, 255, 255))}
             </Flex>
         </RawButton>
     })

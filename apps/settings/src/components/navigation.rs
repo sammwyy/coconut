@@ -16,14 +16,14 @@ use std::rc::Rc;
 
 fn sidebar_item(
     current: &Section,
-    section: routes::destination::Section,
+    section: Section,
     label: &str,
     icon: IconSource,
     color: creamui_theme::Color,
     view: &Router,
 ) -> BoxedWidget {
     let theme = creamui_theme::use_theme();
-    let active = crate::routes::destination::parent(current) == section;
+    let active = routes::destination::parent(current) == section;
     let select = view.clone();
     let item = RawButton::new(
         Style {
@@ -177,13 +177,9 @@ pub(crate) fn window_controls(
     )
 }
 
-pub(crate) fn detail_header(
-    current: &Section,
-    nav: &creamui_router::Router,
-    width: f32,
-) -> BoxedWidget {
-    let parent = crate::routes::destination::parent(current);
-    let title = crate::routes::destination::page_title(current);
+pub(crate) fn detail_header(current: &Section, nav: &Router, width: f32) -> BoxedWidget {
+    let parent = routes::destination::parent(current);
+    let title = routes::destination::page_title(current);
     let back = nav.clone();
     let decorations = creamui_render::use_window_decorations();
     let controls = decorations.controls;
@@ -201,7 +197,7 @@ pub(crate) fn detail_header(
     };
     Box::new(
         jsx! { <Flex direction={FlexDirection::Row} align={creamui_widgets::layout::Align::Center} gap={12.0} height={56.0} shrink={0.0} padding_left={left} padding_right={right}>
-            {crate::components::back_button(move || crate::routes::navigate(&back, &parent))}
+            {components::back_button(move || routes::navigate(&back, &parent))}
             {Box::new(Text::new(title).font_size(14.0).bold(true)) as BoxedWidget}
         </Flex> },
     )

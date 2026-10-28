@@ -89,9 +89,9 @@ fn scan_desktops(dir: &Path, prefix: &str, depth: usize, entries: &mut BTreeMap<
             );
         } else if name.ends_with(".desktop") {
             let id = format!("{prefix}{name}");
-            if !entries.contains_key(&id) {
-                if let Some(entry) = entry(&file.path(), id.clone()) {
-                    entries.insert(id, entry);
+            if let std::collections::btree_map::Entry::Vacant(e) = entries.entry(id.clone()) {
+                if let Some(entry) = entry(&file.path(), id) {
+                    e.insert(entry);
                 }
             }
         }

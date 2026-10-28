@@ -513,7 +513,7 @@ fn schedule_runtime_events(
                         warn_unknown_islands(&updated.bar_configs(), &registry);
                         let icon_theme_changed =
                             config.peek().appearance.icon_theme != updated.appearance.icon_theme;
-                        config.set(updated);
+                        config.set(*updated);
                         if icon_theme_changed {
                             let icon_theme = config.peek().appearance.icon_theme.clone();
                             if let Some(resolver) = shared.get::<WindowIconResolver>() {
@@ -632,7 +632,7 @@ fn schedule_shortcuts(
             };
             if let shortcuts::ShortcutEvent::Custom(shortcut) = &event {
                 if !shortcut.command.trim().is_empty() {
-                    let mut command = std::process::Command::new(&shortcut.command);
+                    let mut command = Command::new(&shortcut.command);
                     if !shortcut.argument.trim().is_empty() {
                         command.arg(&shortcut.argument);
                     }

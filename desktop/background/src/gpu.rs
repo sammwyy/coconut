@@ -143,6 +143,7 @@ impl ShaderRenderer {
     /// and offscreen targets submit identically. `time` is the shader clock
     /// (already speed-scaled) and `colors` the configured palette; missing
     /// slots fall back to this shader's defaults.
+    #[allow(clippy::too_many_arguments)]
     pub fn draw(
         &self,
         queue: &wgpu::Queue,
@@ -211,8 +212,12 @@ pub struct GpuSurface {
 }
 
 impl GpuSurface {
-    /// `display` and `surface` are the raw `wl_display`/`wl_surface` pointers;
-    /// both must stay valid for as long as the returned value lives.
+    /// `display` and `surface` are the raw `wl_display`/`wl_surface` pointers.
+    ///
+    /// # Safety
+    ///
+    /// Both pointers must be valid, non-null `wl_display`/`wl_surface`
+    /// pointers that stay valid for as long as the returned value lives.
     pub unsafe fn new(
         gpu: &Gpu,
         display: *mut c_void,

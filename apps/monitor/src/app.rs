@@ -797,7 +797,7 @@ fn detail_dialog(state: &State, size: Size, detail: Detail) -> BoxedWidget {
         ))
         .with_children(contents),
     );
-    Box::new(crate::ui::Modal(
+    Box::new(Modal(
         creamui_widgets::Overlay::fullscreen(move || close.set(None)).child(card),
     ))
 }

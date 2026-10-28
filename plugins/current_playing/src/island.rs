@@ -33,11 +33,11 @@ impl Island for CurrentPlayingIsland {
         "current_playing"
     }
 
-    fn is_visible(&self, ctx: &IslandRenderContext) -> bool {
+    fn is_visible(&self, ctx: &IslandRenderContext<'_>) -> bool {
         current_playback(ctx).is_some()
     }
 
-    fn build(&self, ctx: &IslandRenderContext) -> BoxedWidget {
+    fn build(&self, ctx: &IslandRenderContext<'_>) -> BoxedWidget {
         let s = ctx.scale;
         let open = ctx.open_panel.clone();
         if ctx.position.is_vertical() {
@@ -73,7 +73,7 @@ impl Island for CurrentPlayingIsland {
     }
 }
 
-fn current_playback(ctx: &IslandRenderContext) -> Option<Playback> {
+fn current_playback(ctx: &IslandRenderContext<'_>) -> Option<Playback> {
     ctx.shared
         .get::<CurrentPlayback>()
         .and_then(|current| (current.0)())

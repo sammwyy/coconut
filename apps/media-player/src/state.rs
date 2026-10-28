@@ -117,7 +117,7 @@ impl PlayerState {
         engine.set_volume(playback.volume.clamp(0.0, 1.0));
         engine.prime_speed(playback.speed);
         engine.set_backend(playback.backend);
-        PlayerState {
+        Self {
             engine: Rc::new(engine),
             app,
             icons: Icons::load(),
@@ -180,7 +180,7 @@ impl PlayerState {
             pending_seek: Rc::new(Cell::new(None)),
             last_video_frame: Rc::new(Cell::new(Instant::now() - Duration::from_secs(1))),
             rng: Rc::new(Cell::new(
-                std::time::SystemTime::now()
+                SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .map(|d| d.subsec_nanos() as u64)
                     .unwrap_or(0x9e3779b9),

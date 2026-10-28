@@ -78,12 +78,12 @@ fn navigation_history_branches_and_tabs_keep_their_state() {
     assert_eq!(browser.tab().cursor + 1, browser.tab().history.len());
     browser.navigate(Location::Directory(a.clone()));
     browser.tab().search.set_value("report");
-    browser.edit(|t| t.view = crate::navigation::DirectoryView::Grid);
+    browser.edit(|t| t.view = DirectoryView::Grid);
     browser.add_tab();
     browser.navigate(Location::Directory(b));
     browser.switch(0);
     assert_eq!(browser.tab().search.value(), "report");
-    assert_eq!(browser.tab().view, crate::navigation::DirectoryView::Grid);
+    assert_eq!(browser.tab().view, DirectoryView::Grid);
     browser.close_tab(1);
     assert_eq!(browser.tab().location(), &Location::Directory(a));
     browser.close_tab(0);
@@ -346,14 +346,11 @@ fn native_layout_and_portal_previews() {
         scene
             .hit_test(Point { x: 1056.0, y: 81.0 })
             .expect("grid toggle")();
-        assert_eq!(browser.tab().view, crate::navigation::DirectoryView::Grid);
+        assert_eq!(browser.tab().view, DirectoryView::Grid);
         let grid = render(&browser, size, "grid");
         grid.hit_test(Point { x: 1092.0, y: 81.0 })
             .expect("columns toggle")();
-        assert_eq!(
-            browser.tab().view,
-            crate::navigation::DirectoryView::Columns
-        );
+        assert_eq!(browser.tab().view, DirectoryView::Columns);
         browser.activate(fixture.path().join("Desktop"), true);
         assert_eq!(browser.tab().column_paths.len(), 2);
         render(&browser, size, "columns");
@@ -363,7 +360,7 @@ fn native_layout_and_portal_previews() {
         render(&browser, size, "portal-save");
         browser.context.request.mode = WindowMode::Portal(PortalRequest::new(PortalType::OpenFile));
         browser.context.request.title = "Open a document".into();
-        browser.edit(|t| t.view = crate::navigation::DirectoryView::List);
+        browser.edit(|t| t.view = DirectoryView::List);
         render(&browser, size, "portal-open");
         window.set(TitlebarMode::Client, Rect::default());
         let scene = render(&browser, size, "client-decorations");
@@ -486,7 +483,7 @@ fn browser_draws_one_set_of_client_controls_for_single_and_multiple_tabs() {
         creamui_reactive::provide_context(ThemeProvider::new(theme));
         let window = crate::test_window::TestWindow::install(TitlebarState::default());
         let mut browser = BrowserState::new(WindowRequest::manager(None));
-        browser.explorer = crate::config::ExplorerConfig::default();
+        browser.explorer = ExplorerConfig::default();
         let size = Size {
             width: 1120.0,
             height: 760.0,
@@ -510,11 +507,11 @@ fn browser_draws_one_set_of_client_controls_for_single_and_multiple_tabs() {
                 ] {
                     window.set(
                         match mode {
-                            creamui_render::WindowDecorationMode::Client => TitlebarMode::Client,
-                            creamui_render::WindowDecorationMode::Hybrid => TitlebarMode::Overlay,
-                            creamui_render::WindowDecorationMode::Server => TitlebarMode::Server,
-                            creamui_render::WindowDecorationMode::Pending => TitlebarMode::Pending,
-                            creamui_render::WindowDecorationMode::None => TitlebarMode::None,
+                            WindowDecorationMode::Client => TitlebarMode::Client,
+                            WindowDecorationMode::Hybrid => TitlebarMode::Overlay,
+                            WindowDecorationMode::Server => TitlebarMode::Server,
+                            WindowDecorationMode::Pending => TitlebarMode::Pending,
+                            WindowDecorationMode::None => TitlebarMode::None,
                         },
                         Rect {
                             x: 992.0,

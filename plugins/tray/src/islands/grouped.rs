@@ -37,7 +37,7 @@ impl Island for ControlCenterIsland {
         "control_center"
     }
 
-    fn build(&self, ctx: &IslandRenderContext) -> BoxedWidget {
+    fn build(&self, ctx: &IslandRenderContext<'_>) -> BoxedWidget {
         let s = ctx.scale;
         let network = ctx
             .shared

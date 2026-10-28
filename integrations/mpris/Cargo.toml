@@ -8,3 +8,6 @@ repository.workspace = true
 
 [dependencies]
 coconut-api = { workspace = true }
+
+[lints]
+workspace = true

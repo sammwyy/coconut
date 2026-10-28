@@ -154,7 +154,7 @@ fn connectivity_layout_matches_reference() {
         let root = |size| {
             RouterProvider::new(view.clone()).render(|| {
                 let context = crate::views::context::ViewContext {
-                    size: size,
+                    size,
                     config: config.clone(),
                     background: background.clone(),
                     integrations: integrations.clone(),
@@ -500,31 +500,31 @@ fn connectivity_layout_matches_reference() {
             Section::About,
         ];
         let details = [
-            crate::routes::detail::Page::Displays,
-            crate::routes::detail::Page::Devices,
-            crate::routes::detail::Page::Printers,
-            crate::routes::detail::Page::AddPrinter,
-            crate::routes::detail::Page::Fonts,
-            crate::routes::detail::Page::InstalledApps,
-            crate::routes::detail::Page::App("test.desktop".into()),
-            crate::routes::detail::Page::FileTypes,
-            crate::routes::detail::Page::Startup,
-            crate::routes::detail::Page::AddStartup,
-            crate::routes::detail::Page::Password,
-            crate::routes::detail::Page::AddUser,
-            crate::routes::detail::Page::OnlineAccounts,
-            crate::routes::detail::Page::Fingerprint,
-            crate::routes::detail::Page::Camera,
-            crate::routes::detail::Page::Microphone,
-            crate::routes::detail::Page::Notifications,
-            crate::routes::detail::Page::HotCorners,
-            crate::routes::detail::Page::WindowRules,
-            crate::routes::detail::Page::Updates,
-            crate::routes::detail::Page::Storage,
-            crate::routes::detail::Page::Activity,
-            crate::routes::detail::Page::DateTime,
-            crate::routes::detail::Page::Language,
-            crate::routes::detail::Page::Reset,
+            routes::detail::Page::Displays,
+            routes::detail::Page::Devices,
+            routes::detail::Page::Printers,
+            routes::detail::Page::AddPrinter,
+            routes::detail::Page::Fonts,
+            routes::detail::Page::InstalledApps,
+            routes::detail::Page::App("test.desktop".into()),
+            routes::detail::Page::FileTypes,
+            routes::detail::Page::Startup,
+            routes::detail::Page::AddStartup,
+            routes::detail::Page::Password,
+            routes::detail::Page::AddUser,
+            routes::detail::Page::OnlineAccounts,
+            routes::detail::Page::Fingerprint,
+            routes::detail::Page::Camera,
+            routes::detail::Page::Microphone,
+            routes::detail::Page::Notifications,
+            routes::detail::Page::HotCorners,
+            routes::detail::Page::WindowRules,
+            routes::detail::Page::Updates,
+            routes::detail::Page::Storage,
+            routes::detail::Page::Activity,
+            routes::detail::Page::DateTime,
+            routes::detail::Page::Language,
+            routes::detail::Page::Reset,
         ];
         for (name, base) in [
             ("light", Theme::light()),
@@ -581,7 +581,7 @@ fn connectivity_layout_matches_reference() {
                         "client clips {title}"
                     );
                 }
-                if crate::routes::destination::parent(&section) != section {
+                if routes::destination::parent(&section) != section {
                     assert!(
                         scene.window_drag_at(Point { x: 306.0, y: 28.0 }).is_none(),
                         "back button swallowed by drag: {title}"
@@ -590,7 +590,7 @@ fn connectivity_layout_matches_reference() {
                         .hit_test(Point { x: 306.0, y: 28.0 })
                         .expect("compact back button")();
                     assert!(
-                        routes::current(&view) == crate::routes::destination::parent(&section),
+                        routes::current(&view) == routes::destination::parent(&section),
                         "incorrect parent for {title}"
                     );
                 }

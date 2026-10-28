@@ -14,7 +14,7 @@ pub(super) fn application_list(startup: bool) -> BoxedWidget {
     let nav = &context.view;
     let body = vec![
         input(&state.search, "Search applications…"),
-        crate::views::applications::installed::app_list(state, nav, startup),
+        app_list(state, nav, startup),
     ];
     detail_page(body, state)
 }

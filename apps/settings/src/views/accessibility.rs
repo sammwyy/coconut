@@ -1,7 +1,7 @@
 use creamui_core::BoxedWidget;
 
 use crate::{components::system_settings::*, services::settings::State};
-pub(crate) fn overview() -> creamui_core::BoxedWidget {
+pub(crate) fn overview() -> BoxedWidget {
     let context = creamui_reactive::use_context::<crate::views::context::ViewContext>();
     let window_settings = &context.window_settings;
     let native = &context.native;

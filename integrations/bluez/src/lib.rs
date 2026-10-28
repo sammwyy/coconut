@@ -236,7 +236,7 @@ fn run_event_bridge(
     refresh(&connection, &state);
     let _ = changes.try_send(());
 
-    let sender = dbus::strings::BusName::new(SERVICE).map_err(|error| error.to_string())?;
+    let sender = dbus::strings::BusName::new(SERVICE).map_err(|error| error.clone())?;
 
     let properties_changes = changes.clone();
     let properties_state = state.clone();

@@ -19,15 +19,15 @@ pub enum ConfigValue {
 impl ConfigValue {
     pub fn as_bool(&self) -> Option<bool> {
         match self {
-            ConfigValue::Bool(value) => Some(*value),
+            Self::Bool(value) => Some(*value),
             _ => None,
         }
     }
 
     pub fn as_f64(&self) -> Option<f64> {
         match self {
-            ConfigValue::Float(value) => Some(*value),
-            ConfigValue::Int(value) => Some(*value as f64),
+            Self::Float(value) => Some(*value),
+            Self::Int(value) => Some(*value as f64),
             _ => None,
         }
     }

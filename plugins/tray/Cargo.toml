@@ -17,3 +17,6 @@ creamui-macros = { workspace = true }
 creamui-reactive = { workspace = true }
 creamui-widgets = { workspace = true }
 serde.workspace = true
+
+[lints]
+workspace = true

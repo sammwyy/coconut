@@ -1,7 +1,7 @@
 use coconut_core::UserProfile;
 use dbus::arg::{PropMap, RefArg};
 use dbus::blocking::Connection;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 pub fn list_accounts() -> Vec<Account> {
@@ -103,7 +103,7 @@ pub(crate) fn sync_own_account(profile: &UserProfile) -> Result<(), String> {
     Ok(())
 }
 
-pub(crate) fn set_own_avatar(path: &PathBuf) -> Result<(), String> {
+pub(crate) fn set_own_avatar(path: &Path) -> Result<(), String> {
     let connection = Connection::new_system().map_err(|error| error.to_string())?;
     let account = own_account_path(&connection)?;
     connection

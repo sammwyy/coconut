@@ -115,7 +115,7 @@ fn slider_row(
     let slider: BoxedWidget = Box::new(Slider::new(normalized, move |normalized: f32| {
         update_config(&apply, |c| *field(c) = min + normalized * (max - min));
     }));
-    let value_text = format!("{:.0} px", value);
+    let value_text = format!("{value:.0} px");
     let control: BoxedWidget = Box::new(creamui_macros::jsx! {
         <Flex direction={FlexDirection::Row} align={Align::Center} gap={theme.spacing_medium}>
             {slider}
@@ -125,12 +125,12 @@ fn slider_row(
     row(label, control)
 }
 
-pub(crate) fn route_view() -> creamui_core::BoxedWidget {
+pub(crate) fn route_view() -> BoxedWidget {
     let context = creamui_reactive::use_context::<crate::views::context::ViewContext>();
     let size = context.size;
     let config = &context.config;
     let desktop_icons_color_picker = &context.desktop_icons_color_picker;
     {
-        crate::views::desktop::icons::build(size, config, desktop_icons_color_picker)
+        build(size, config, desktop_icons_color_picker)
     }
 }

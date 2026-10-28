@@ -12,7 +12,7 @@ pub mod islands;
 pub mod notifications;
 pub mod tray;
 
-pub(crate) fn overview() -> creamui_core::BoxedWidget {
+pub(crate) fn overview() -> BoxedWidget {
     let context = creamui_reactive::use_context::<crate::views::context::ViewContext>();
     let config = &context.config;
     let view = &context.view;

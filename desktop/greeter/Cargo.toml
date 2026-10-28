@@ -22,3 +22,6 @@ creamui-render = { workspace = true, default-features = true, features = ["platf
 creamui-theme = { workspace = true }
 creamui-widgets = { workspace = true }
 serde_json.workspace = true
+
+[lints]
+workspace = true

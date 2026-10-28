@@ -106,7 +106,7 @@ pub fn load_settings_fonts() {
     coconut_plugin_kit::design::load_fonts();
 }
 
-pub fn icon_badge(icon: IconSource, color: creamui_theme::Color) -> BoxedWidget {
+pub fn icon_badge(icon: IconSource, color: Color) -> BoxedWidget {
     coconut_plugin_kit::design::icon_badge(icon, color, 24.0)
 }
 

@@ -8,3 +8,6 @@ repository.workspace = true
 
 [dependencies]
 creamui-render = { workspace = true, default-features = true }
+
+[lints]
+workspace = true

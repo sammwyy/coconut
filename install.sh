@@ -21,7 +21,7 @@ for pkg in \
     apps/files \
     apps/monitor \
     apps/media-player; do
-    cargo install --path "$ROOT/$pkg"
+    cargo install --force --path "$ROOT/$pkg"
 done
 
 INSTALL_BIN="${CARGO_INSTALL_ROOT:-$HOME/.cargo}/bin"
@@ -129,11 +129,16 @@ else
         "$ROOT/packaging/startcoconut" > "$INSTALL_BIN/startcoconut"
     chmod +x "$INSTALL_BIN/startcoconut"
 
+    # The session launcher resolves its siblings from its own directory, so
+    # it installs verbatim — no substitutions needed.
+    install -m 755 "$ROOT/packaging/coconut-session" "$INSTALL_BIN/coconut-session"
+
     sed "s|@INSTALL_BIN@|$bin_sed|g" \
         "$ROOT/packaging/coconut.desktop" > "$SESSIONS_DIR/coconut.desktop"
 
     echo "Session profile \"Coconut\" installed:"
     echo "  bootstrapper : $INSTALL_BIN/startcoconut (wm: $wm)"
+    echo "  session procs: $INSTALL_BIN/coconut-session (bg + shell)"
     echo "  session entry: $SESSIONS_DIR/coconut.desktop"
     if [ "$SESSIONS_DIR" != "/usr/share/wayland-sessions" ]; then
         echo "  note: system greeters may need it in /usr/share/wayland-sessions/"

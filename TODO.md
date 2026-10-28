@@ -49,6 +49,11 @@
   `app::visual_tests::tabs_stay_centered_in_the_window_for_server_client_and_hybrid_frames`).
   They already failed in the original `dmonitor` repository, so the cause is
   environmental rather than a migration regression.
+- One `apps/settings` visual test fails on this machine
+  (`visual_tests::connectivity_layout_matches_reference`, a window-drag
+  hit-test assertion). It already failed on the pre-lint HEAD (verified via
+  worktree checkout), so the cause predates the lint work — same
+  environmental category as the failures above.
 - Implement real multiple-file selection for `apps/files` portal requests:
   support Ctrl/Shift selection in the browser and return every selected file
   as a URI in the FileChooser portal response. (Inherited from the dfiles

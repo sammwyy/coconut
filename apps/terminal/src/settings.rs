@@ -980,7 +980,7 @@ mod tests {
                             raster
                                 .pixmap()
                                 .save_png(
-                                    std::path::PathBuf::from(dir)
+                                    PathBuf::from(dir)
                                         .join(format!("{appearance}-{name}-{width}.png")),
                                 )
                                 .unwrap();
@@ -1018,8 +1018,7 @@ mod tests {
                         raster
                             .pixmap()
                             .save_png(
-                                std::path::PathBuf::from(dir)
-                                    .join(format!("{appearance}-about-{width}.png")),
+                                PathBuf::from(dir).join(format!("{appearance}-about-{width}.png")),
                             )
                             .unwrap();
                     }

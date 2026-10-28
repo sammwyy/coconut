@@ -524,45 +524,6 @@ fn list_row_style(active: bool) -> Style {
         .pressed(StateStyle::new().background(shell_selected()))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn floating_chrome_preserves_dock_overrides_without_affecting_panel_cards() {
-        creamui_reactive::with_context_scope(|| {
-            let theme = design::coconut_theme(creamui_theme::Theme::light());
-            creamui_reactive::provide_context(creamui_theme::ThemeProvider::new(theme));
-            let default = shell_island();
-            let custom = Color::rgb(73, 94, 118);
-            with_island_chrome(
-                IslandChrome {
-                    background: true,
-                    border: false,
-                    background_color: Some(custom),
-                    background_opacity: 0.5,
-                },
-                || {
-                    assert_eq!(shell_island(), Color::rgba(73, 94, 118, 128));
-                    assert_eq!(shell_border().a, 0);
-                    assert_eq!(shell_panel(), theme.colors.surface_elevated);
-                    with_island_chrome(
-                        IslandChrome {
-                            background: false,
-                            border: false,
-                            background_color: None,
-                            background_opacity: 1.0,
-                        },
-                        || assert_eq!(shell_island().a, 0),
-                    );
-                    assert_eq!(shell_island().a, 128, "nested policies restore the parent");
-                },
-            );
-            assert_eq!(shell_island(), default);
-        });
-    }
-}
-
 /// One label/value line for a detail view (a connection's IP address, a
 /// device's Bluetooth address, ...). Placed directly as a plain row rather
 /// than a button, so it stretches full width without the explicit-size
@@ -607,4 +568,43 @@ fn action_button_style() -> Style {
         .corner_radius(8.0)
         .hover(StateStyle::new().background(shell_control_hover()))
         .pressed(StateStyle::new().background(shell_selected()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn floating_chrome_preserves_dock_overrides_without_affecting_panel_cards() {
+        creamui_reactive::with_context_scope(|| {
+            let theme = design::coconut_theme(creamui_theme::Theme::light());
+            creamui_reactive::provide_context(creamui_theme::ThemeProvider::new(theme));
+            let default = shell_island();
+            let custom = Color::rgb(73, 94, 118);
+            with_island_chrome(
+                IslandChrome {
+                    background: true,
+                    border: false,
+                    background_color: Some(custom),
+                    background_opacity: 0.5,
+                },
+                || {
+                    assert_eq!(shell_island(), Color::rgba(73, 94, 118, 128));
+                    assert_eq!(shell_border().a, 0);
+                    assert_eq!(shell_panel(), theme.colors.surface_elevated);
+                    with_island_chrome(
+                        IslandChrome {
+                            background: false,
+                            border: false,
+                            background_color: None,
+                            background_opacity: 1.0,
+                        },
+                        || assert_eq!(shell_island().a, 0),
+                    );
+                    assert_eq!(shell_island().a, 128, "nested policies restore the parent");
+                },
+            );
+            assert_eq!(shell_island(), default);
+        });
+    }
 }

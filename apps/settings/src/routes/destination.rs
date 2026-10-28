@@ -153,9 +153,7 @@ pub(crate) fn section_presentation(
         Section::Privacy => (icons.privacy.clone(), Color::rgb(54, 171, 107)),
         Section::Accessibility => (icons.accessibility.clone(), Color::rgb(0, 167, 187)),
         Section::System | Section::About => (icons.system.clone(), Color::rgb(77, 142, 229)),
-        Section::Detail(_) => {
-            section_presentation(&crate::routes::destination::parent(section), icons)
-        }
+        Section::Detail(_) => section_presentation(&parent(section), icons),
         Section::Unavailable(_) => (
             IconSource::Symbol(Symbol::Controls),
             Color::rgb(110, 105, 224),

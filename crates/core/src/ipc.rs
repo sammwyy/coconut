@@ -43,7 +43,7 @@ pub enum RuntimeEvent {
     /// Reload the selected CreamUI theme from its persisted selection.
     ReloadTheme,
     /// Replace Coconut's in-memory configuration with this validated value.
-    ShellConfig(ShellConfig),
+    ShellConfig(Box<ShellConfig>),
     /// The user's saved location changed and location-backed widgets should refresh.
     UserProfileChanged,
     /// A `modules/<id>.toml` changed on disk; islands should re-read their config.
@@ -261,7 +261,7 @@ fn publish_signal<A: dbus::arg::AppendAll>(
 ) -> Result<(), String> {
     let connection = Connection::new_session().map_err(|error| error.to_string())?;
     let mut message =
-        Message::new_signal(path, interface, member).map_err(|error| error.to_string())?;
+        Message::new_signal(path, interface, member).map_err(|error| error.clone())?;
     message.append_all(arguments);
     connection
         .send(message)
@@ -391,13 +391,16 @@ fn forward_debounced_shell_configs(
                 Ok(next) => config = next,
                 Err(mpsc::RecvTimeoutError::Timeout) => break,
                 Err(mpsc::RecvTimeoutError::Disconnected) => {
-                    let _ = sender.send(RuntimeEvent::ShellConfig(config));
+                    let _ = sender.send(RuntimeEvent::ShellConfig(Box::new(config)));
                     return;
                 }
             }
         }
 
-        if sender.send(RuntimeEvent::ShellConfig(config)).is_err() {
+        if sender
+            .send(RuntimeEvent::ShellConfig(Box::new(config)))
+            .is_err()
+        {
             return;
         }
     }

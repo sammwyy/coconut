@@ -9,3 +9,6 @@ repository.workspace = true
 [dependencies]
 coconut-api = { workspace = true }
 pipewire.workspace = true
+
+[lints]
+workspace = true

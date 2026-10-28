@@ -574,7 +574,7 @@ fn shader_content(
                 })
             },
         ));
-        tuning_rows.push(row(*label, picker));
+        tuning_rows.push(row(label, picker));
     }
 
     let card: BoxedWidget = Box::new(jsx! {
@@ -697,6 +697,22 @@ fn open_folder(path: &Path) {
     let _ = Command::new("xdg-open").arg(path).spawn();
 }
 
+pub(crate) fn route_view() -> BoxedWidget {
+    let context = creamui_reactive::use_context::<crate::views::context::ViewContext>();
+    let size = context.size;
+    let background = &context.background;
+    let window = &context.window;
+    let wallpaper_pickers = &context.wallpaper_pickers;
+    let wallpaper_gallery = &context.wallpaper_gallery;
+    build(
+        size,
+        background,
+        wallpaper_pickers,
+        wallpaper_gallery,
+        window,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -741,20 +757,4 @@ mod tests {
         fs::remove_dir_all(&directory).ok();
         assert_eq!(found, vec![directory.join("beach.png")]);
     }
-}
-
-pub(crate) fn route_view() -> creamui_core::BoxedWidget {
-    let context = creamui_reactive::use_context::<crate::views::context::ViewContext>();
-    let size = context.size;
-    let background = &context.background;
-    let window = &context.window;
-    let wallpaper_pickers = &context.wallpaper_pickers;
-    let wallpaper_gallery = &context.wallpaper_gallery;
-    crate::views::personalization::wallpaper::build(
-        size,
-        background,
-        wallpaper_pickers,
-        wallpaper_gallery,
-        window,
-    )
 }

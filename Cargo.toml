@@ -96,5 +96,20 @@ wgpu = { version = "22", default-features = false, features = ["wgsl"] }
 windows = "0.52"
 zbus = { version = "5", default-features = false, features = ["tokio"] }
 
+# Lint policy shared by every member; each opts in with
+# `[lints] workspace = true`. Keep the set high-signal: anything noisier
+# belongs in an explicit per-member allow.
+[workspace.lints.rust]
+unused_qualifications = "warn"
+unsafe_op_in_unsafe_fn = "warn"
+elided_lifetimes_in_paths = "warn"
+explicit_outlives_requirements = "warn"
+
+[workspace.lints.clippy]
+uninlined_format_args = "warn"
+redundant_else = "warn"
+use_self = "warn"
+implicit_clone = "warn"
+
 [profile.dev.package."*"]
 opt-level = 2

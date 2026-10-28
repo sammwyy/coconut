@@ -562,7 +562,7 @@ mod tests {
         fn id(&self) -> &'static str {
             self.0
         }
-        fn build(&self, _ctx: &IslandRenderContext) -> BoxedWidget {
+        fn build(&self, _ctx: &IslandRenderContext<'_>) -> BoxedWidget {
             Box::new(Flex::row())
         }
     }

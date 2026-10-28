@@ -21,3 +21,6 @@ creamui-render = { workspace = true, default-features = true }
 creamui-theme = { workspace = true }
 creamui-widgets = { workspace = true }
 serde.workspace = true
+
+[lints]
+workspace = true

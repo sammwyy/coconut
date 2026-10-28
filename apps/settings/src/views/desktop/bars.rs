@@ -34,7 +34,7 @@ impl BarKind {
             Self::Dockbar => &config.dockbar,
         }
     }
-    fn get_mut<'a>(self, config: &'a mut ShellConfig) -> &'a mut DockConfig {
+    fn get_mut(self, config: &mut ShellConfig) -> &mut DockConfig {
         match self {
             Self::Statusbar => &mut config.statusbar,
             Self::Dockbar => &mut config.dockbar,
@@ -283,28 +283,18 @@ fn content_card(config: &Signal<ShellConfig>, kind: BarKind, bar: &DockConfig) -
     section("Island groups", "Groups are the visual islands that separate widgets. Add widgets from the Islands page, then place them in either bar.", groups)
 }
 
-pub(crate) fn statusbar_view() -> creamui_core::BoxedWidget {
+pub(crate) fn statusbar_view() -> BoxedWidget {
     let context = creamui_reactive::use_context::<crate::views::context::ViewContext>();
     let size = context.size;
     let config = &context.config;
     let dock_scroll = &context.dock_scroll;
-    crate::views::desktop::bars::build_bar_page(
-        size,
-        config,
-        dock_scroll,
-        crate::views::desktop::bars::BarKind::Statusbar,
-    )
+    build_bar_page(size, config, dock_scroll, BarKind::Statusbar)
 }
 
-pub(crate) fn dock_view() -> creamui_core::BoxedWidget {
+pub(crate) fn dock_view() -> BoxedWidget {
     let context = creamui_reactive::use_context::<crate::views::context::ViewContext>();
     let size = context.size;
     let config = &context.config;
     let dock_scroll = &context.dock_scroll;
-    crate::views::desktop::bars::build_bar_page(
-        size,
-        config,
-        dock_scroll,
-        crate::views::desktop::bars::BarKind::Dockbar,
-    )
+    build_bar_page(size, config, dock_scroll, BarKind::Dockbar)
 }

@@ -101,7 +101,7 @@ impl Default for SessionOptions {
 
 /// Working directory for tests that only need a live PTY, on either platform.
 #[cfg(test)]
-pub(crate) fn idle_cwd() -> std::path::PathBuf {
+pub(crate) fn idle_cwd() -> PathBuf {
     crate::backends::idle_cwd()
 }
 
@@ -401,10 +401,10 @@ impl Session {
         });
         if crate::backends::waits_for_pty_startup()
             && startup_rx
-                .recv_timeout(std::time::Duration::from_secs(2))
+                .recv_timeout(Duration::from_secs(2))
                 .unwrap_or(false)
         {
-            let _ = handshake_rx.recv_timeout(std::time::Duration::from_secs(2));
+            let _ = handshake_rx.recv_timeout(Duration::from_secs(2));
         }
         Ok(Self {
             id,
@@ -580,13 +580,7 @@ mod tests {
     #[test]
     fn shell_markers_track_commands_and_navigate_boundaries() {
         let (tx, _rx) = mpsc::sync_channel(128);
-        let mut session = Session::spawn(
-            1,
-            &crate::terminal::idle_cwd(),
-            &crate::terminal::idle_command(),
-            tx,
-        )
-        .unwrap();
+        let mut session = Session::spawn(1, &idle_cwd(), &idle_command(), tx).unwrap();
         session.resize(2, 20).unwrap();
         session
             .process(b"\x1b]133;A\x07$ \x1b]133;B\x07echo done\x1b]133;C\x07done\r\n")
@@ -674,7 +668,7 @@ mod tests {
         session.resize(32, 100).unwrap();
         session.write(b"hello\r".to_vec()).unwrap();
         loop {
-            match rx.recv_timeout(std::time::Duration::from_secs(5)).unwrap() {
+            match rx.recv_timeout(Duration::from_secs(5)).unwrap() {
                 Event::Output(_, bytes) => session.process(&bytes).unwrap(),
                 Event::Exited(_, status) => {
                     session.finish(status);
@@ -710,7 +704,7 @@ mod tests {
         assert_eq!(session.cwd, Path::new("/tmp"));
         assert_eq!(session.theme, crate::config::TerminalTheme::Dracula);
         loop {
-            match rx.recv_timeout(std::time::Duration::from_secs(5)).unwrap() {
+            match rx.recv_timeout(Duration::from_secs(5)).unwrap() {
                 Event::Output(_, bytes) => session.process(&bytes).unwrap(),
                 Event::Exited(_, status) => {
                     session.finish(status);

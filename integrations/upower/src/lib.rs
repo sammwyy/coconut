@@ -84,7 +84,7 @@ fn run_event_bridge(
     let connection = SyncConnection::new_system().map_err(|error| error.to_string())?;
     refresh(&connection, &device, &state);
 
-    let sender = dbus::strings::BusName::new(SERVICE).map_err(|error| error.to_string())?;
+    let sender = dbus::strings::BusName::new(SERVICE).map_err(|error| error.clone())?;
     let rule = PropertiesPropertiesChanged::match_rule(Some(&sender), None).static_clone();
     let _token = connection
         .add_match(

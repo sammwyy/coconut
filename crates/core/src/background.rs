@@ -10,7 +10,9 @@ use std::path::PathBuf;
 /// both axes, and `Mosaic` repeats the image without scaling it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum BackgroundMode {
+    #[default]
     Full,
     Centered,
     Stretched,
@@ -18,26 +20,16 @@ pub enum BackgroundMode {
     Mosaic,
 }
 
-impl Default for BackgroundMode {
-    fn default() -> Self {
-        Self::Full
-    }
-}
-
 /// Chooses what Coconut Background draws on each output.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum WallpaperSource {
+    #[default]
     Image,
     SolidColor,
     Gradient,
     Shader,
-}
-
-impl Default for WallpaperSource {
-    fn default() -> Self {
-        Self::Image
-    }
 }
 
 /// A two-color linear gradient used when [`WallpaperSource::Gradient`] is
@@ -74,7 +66,9 @@ impl Default for GradientConfig {
 /// selectors in Settings.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum BuiltinShader {
+    #[default]
     Swirl,
     Waves,
 }
@@ -84,7 +78,7 @@ pub enum BuiltinShader {
 pub const MAX_SHADER_COLORS: usize = 4;
 
 impl BuiltinShader {
-    pub const ALL: &'static [BuiltinShader] = &[BuiltinShader::Swirl, BuiltinShader::Waves];
+    pub const ALL: &'static [Self] = &[Self::Swirl, Self::Waves];
 
     pub fn name(self) -> &'static str {
         match self {
@@ -136,12 +130,6 @@ impl BuiltinShader {
                 ),
             ],
         }
-    }
-}
-
-impl Default for BuiltinShader {
-    fn default() -> Self {
-        Self::Swirl
     }
 }
 

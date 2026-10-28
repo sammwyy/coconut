@@ -79,7 +79,7 @@ impl Island for AppLauncherIsland {
         "app_launcher"
     }
 
-    fn build(&self, ctx: &IslandRenderContext) -> BoxedWidget {
+    fn build(&self, ctx: &IslandRenderContext<'_>) -> BoxedWidget {
         let s = ctx.scale;
         let launcher_open = ctx
             .shared
@@ -143,11 +143,11 @@ impl Island for OpenWindowsIsland {
         ]
     }
 
-    fn is_visible(&self, ctx: &IslandRenderContext) -> bool {
+    fn is_visible(&self, ctx: &IslandRenderContext<'_>) -> bool {
         !window_list_state(ctx).windows.get().is_empty()
     }
 
-    fn build(&self, ctx: &IslandRenderContext) -> BoxedWidget {
+    fn build(&self, ctx: &IslandRenderContext<'_>) -> BoxedWidget {
         let icon_scale_pct = ctx
             .config
             .get(ICON_SCALE_KEY)
@@ -193,7 +193,7 @@ impl Island for OpenWindowsIsland {
     }
 }
 
-fn window_list_state(ctx: &IslandRenderContext) -> WindowListState {
+fn window_list_state(ctx: &IslandRenderContext<'_>) -> WindowListState {
     ctx.shared.get::<WindowListState>().unwrap_or_default()
 }
 

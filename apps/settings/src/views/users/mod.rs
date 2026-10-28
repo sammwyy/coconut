@@ -2,7 +2,7 @@ use crate::routes::destination::Section;
 use creamui_core::BoxedWidget;
 
 use crate::{components::system_settings::*, routes::detail::Page, services::settings::State};
-pub(crate) fn overview() -> creamui_core::BoxedWidget {
+pub(crate) fn overview() -> BoxedWidget {
     let context = creamui_reactive::use_context::<crate::views::context::ViewContext>();
     let view = &context.view;
     let native = &context.native;

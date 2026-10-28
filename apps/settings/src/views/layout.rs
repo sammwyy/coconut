@@ -30,7 +30,7 @@ pub(crate) fn build(context: &crate::views::context::ViewContext) -> BoxedWidget
 
     let current = routes::current(view);
     let connectivity_detail = current == Section::Connectivity && connectivity.showing_detail();
-    let native_detail = crate::routes::destination::parent(&current) != current;
+    let native_detail = routes::destination::parent(&current) != current;
     let decorations = creamui_render::use_window_decorations();
     let show_page_header = !connectivity_detail && !native_detail;
     let account_list = users.get();
@@ -106,7 +106,7 @@ pub(crate) fn build(context: &crate::views::context::ViewContext) -> BoxedWidget
     });
     let panel_content: BoxedWidget = if content_has_own_scroll {
         let header = if native_detail {
-            crate::components::navigation::detail_header(&current, view, size.width)
+            components::navigation::detail_header(&current, view, size.width)
         } else {
             page_header
         };
@@ -192,7 +192,7 @@ pub(crate) fn build(context: &crate::views::context::ViewContext) -> BoxedWidget
             let header = if connectivity_detail {
                 crate::views::connectivity::detail_header(connectivity, size.width)
             } else {
-                crate::components::navigation::detail_header(&current, view, size.width)
+                components::navigation::detail_header(&current, view, size.width)
             };
             Box::new(jsx! {
                 <Flex direction={FlexDirection::Column} grow={1.0} gap={0.0}>
@@ -231,7 +231,7 @@ pub(crate) fn build(context: &crate::views::context::ViewContext) -> BoxedWidget
         .fallback_color(theme.colors.accent)
         .initials(profile_initial)
         .initials_color(theme.colors.selection_text);
-    if let Some(IconSource::Image(image)) = account.map(crate::components::account::account_icon) {
+    if let Some(IconSource::Image(image)) = account.map(components::account::account_icon) {
         avatar = avatar.image(Box::new(
             Icon::new(IconSource::Image(image), theme.colors.text_primary).size(40.0),
         ));

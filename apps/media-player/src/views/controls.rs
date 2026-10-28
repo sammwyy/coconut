@@ -333,7 +333,7 @@ pub fn build(p: &PlayerState, reveal: f32, size: Size) -> BoxedWidget {
             .corner_radius(8.0)
             .hover_style(StateStyle::new().background(t.colors.surface_hover))
             .child(Box::new(
-                Text::new(format!("{}×", speed)).font_size(11.5).color(
+                Text::new(format!("{speed}×")).font_size(11.5).color(
                     if (speed - 1.0).abs() > 0.001 {
                         t.colors.accent
                     } else {

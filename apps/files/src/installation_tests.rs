@@ -66,6 +66,12 @@ fn user_installer_uses_one_binary_and_preserves_existing_policy() {
         .exists());
     let session = fs::read_to_string(install_root.join("bin/startcoconut")).unwrap();
     assert!(session.contains("WM=\"kwin_wayland\""));
-    assert!(session.contains(&format!("SHELL=\"{}/bin/coconut\"", install_root.display())));
+    assert!(session.contains(&format!(
+        "SESSION=\"{}/bin/coconut-session\"",
+        install_root.display()
+    )));
+    let launcher = fs::read_to_string(install_root.join("bin/coconut-session")).unwrap();
+    assert!(launcher.contains("coconut-bg"));
+    assert!(launcher.contains("coconut\""));
     assert!(data.join("wayland-sessions/coconut.desktop").exists());
 }

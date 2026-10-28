@@ -57,3 +57,6 @@ coconut-registry = { workspace = true, default-features = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 coconut-registry = { workspace = true, default-features = false, features = ["windows"] }
+
+[lints]
+workspace = true

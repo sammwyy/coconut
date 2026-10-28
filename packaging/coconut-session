@@ -1,0 +1,20 @@
+#!/bin/sh
+# coconut-session — session component launcher for the Coconut desktop.
+#
+# startcoconut runs this as the single "session app" under whichever
+# compositor was selected at install time. Session-scoped daemons are
+# spawned in the background first; the shell then execs over this process
+# so the compositor's session hook treats the shell as the session owner
+# (kwin's --exit-with-session, blair's --run, the generic wait -n path).
+#
+# The daemons are Wayland clients: when the compositor exits their socket
+# dies and they terminate with it — no explicit cleanup needed here.
+#
+# Add future session components (policy agent, clipboard sync, OSD daemon,
+# …) as background spawns above the exec line.
+
+DIR="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
+
+"$DIR/coconut-bg" &
+
+exec "$DIR/coconut"

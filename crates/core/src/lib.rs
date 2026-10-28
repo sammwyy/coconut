@@ -38,14 +38,9 @@ pub struct BatteryAlertsConfig {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
+#[derive(Default)]
 pub struct LocationConfig {
     pub enabled: bool,
-}
-
-impl Default for LocationConfig {
-    fn default() -> Self {
-        Self { enabled: false }
-    }
 }
 
 impl Default for BatteryAlertsConfig {
@@ -322,15 +317,15 @@ impl ShellConfig {
                     "config: failed to parse {}: {error}; using defaults",
                     path.display()
                 );
-                ShellConfig::default()
+                Self::default()
             }),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => ShellConfig::default(),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Self::default(),
             Err(error) => {
                 eprintln!(
                     "config: failed to read {}: {error}; using defaults",
                     path.display()
                 );
-                ShellConfig::default()
+                Self::default()
             }
         }
     }
@@ -342,7 +337,7 @@ impl ShellConfig {
     pub fn load() -> Self {
         let path = config_file_path();
         match std::fs::read_to_string(&path) {
-            Ok(contents) => match toml::from_str::<ShellConfig>(&contents) {
+            Ok(contents) => match toml::from_str::<Self>(&contents) {
                 Ok(config) => {
                     if legacy_dock_config(&contents) {
                         if let Err(error) = config.save() {
@@ -359,19 +354,19 @@ impl ShellConfig {
                         "config: failed to parse {}: {error}; using defaults",
                         path.display()
                     );
-                    ShellConfig::default()
+                    Self::default()
                 }
             },
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
                 write_default_config(&path);
-                ShellConfig::default()
+                Self::default()
             }
             Err(error) => {
                 eprintln!(
                     "config: failed to read {}: {error}; using defaults",
                     path.display()
                 );
-                ShellConfig::default()
+                Self::default()
             }
         }
     }

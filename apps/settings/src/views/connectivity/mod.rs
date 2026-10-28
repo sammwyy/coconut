@@ -598,13 +598,13 @@ fn device_summary(kind: NetworkDeviceKind, device: Option<&NetworkDevice>) -> (S
     (name, hint)
 }
 
-pub(crate) fn route_view() -> creamui_core::BoxedWidget {
+pub(crate) fn route_view() -> BoxedWidget {
     let context = creamui_reactive::use_context::<crate::views::context::ViewContext>();
     let size = context.size;
     let integrations = &context.integrations;
     let icons = &context.icons;
     let connectivity = &context.connectivity;
-    crate::views::connectivity::build(
+    build(
         size,
         integrations.network.clone(),
         integrations.bluetooth.clone(),

@@ -92,7 +92,7 @@ impl IconLayout {
             label_line_height,
             UNSELECTED_LABEL_LINES,
         );
-        IconLayout {
+        Self {
             icon_box,
             glyph: (icon_box - padding * 2.0).max(8.0),
             corner_radius,
@@ -665,7 +665,7 @@ fn parse_exec(value: &str) -> Vec<String> {
 fn desktop_directory() -> PathBuf {
     std::env::var_os("XDG_DESKTOP_DIR")
         .map(PathBuf::from)
-        .or_else(|| desktop_directory_from_config())
+        .or_else(desktop_directory_from_config)
         .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join("Desktop")))
         .unwrap_or_else(|| PathBuf::from("."))
 }

@@ -11,3 +11,6 @@ repository.workspace = true
 creamui-core = { workspace = true }
 creamui-theme = { workspace = true }
 creamui-widgets = { workspace = true }
+
+[lints]
+workspace = true

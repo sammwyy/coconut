@@ -47,3 +47,6 @@ kwin = ["dep:coconut-integration-kwin"]
 blair = ["dep:coconut-integration-blair"]
 windows = ["dep:coconut-integration-windows"]
 notifications = ["dep:coconut-integration-notifications"]
+
+[lints]
+workspace = true

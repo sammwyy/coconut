@@ -43,3 +43,6 @@ creamui-render = { workspace = true, default-features = false, features = ["plat
 
 [target.'cfg(target_os = "windows")'.dependencies]
 creamui-render = { workspace = true, default-features = false, features = ["platform-windows"] }
+
+[lints]
+workspace = true

@@ -8,7 +8,7 @@ pub mod appearance;
 pub mod asset_packs;
 pub mod wallpaper;
 
-pub(crate) fn overview() -> creamui_core::BoxedWidget {
+pub(crate) fn overview() -> BoxedWidget {
     let context = creamui_reactive::use_context::<crate::views::context::ViewContext>();
     let config = &context.config;
     let background = &context.background;
@@ -24,7 +24,7 @@ pub(crate) fn overview() -> creamui_core::BoxedWidget {
         background,
         appearance,
         view,
-        crate::views::personalization::appearance::overview(
+        appearance::overview(
             appearance,
             window,
             appearance_accent_picker,
@@ -39,12 +39,12 @@ fn build(
     background: &Signal<BackgroundConfig>,
     appearance: &Signal<creamui_theme::ResolvedAppearance>,
     nav: &creamui_router::Router,
-    appearance_controls: crate::views::personalization::appearance::OverviewControls,
+    appearance_controls: appearance::OverviewControls,
 ) -> BoxedWidget {
     let config = config.get();
     let background = background.get();
     let selected = appearance.get();
-    let crate::views::personalization::appearance::OverviewControls {
+    let appearance::OverviewControls {
         theme,
         style,
         accent,

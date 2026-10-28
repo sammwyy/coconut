@@ -294,7 +294,7 @@ impl DecodeSession {
             control.suspend();
         }
 
-        Ok(DecodeSession {
+        Ok(Self {
             control,
             audio_rx,
             primed,

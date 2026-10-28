@@ -30,7 +30,7 @@ impl Island for WeatherIsland {
         "weather"
     }
 
-    fn build(&self, ctx: &IslandRenderContext) -> BoxedWidget {
+    fn build(&self, ctx: &IslandRenderContext<'_>) -> BoxedWidget {
         let s = ctx.scale;
         let open = ctx.open_panel.clone();
         if ctx.position.is_vertical() {

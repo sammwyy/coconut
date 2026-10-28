@@ -16,3 +16,6 @@ toml.workspace = true
 delib = { workspace = true }
 creamui-theme-loader = { workspace = true }
 creamui-theme-watch = { workspace = true }
+
+[lints]
+workspace = true

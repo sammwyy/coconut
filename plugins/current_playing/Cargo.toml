@@ -16,3 +16,6 @@ creamui-jsx = { workspace = true }
 creamui-macros = { workspace = true }
 creamui-theme = { workspace = true }
 creamui-widgets = { workspace = true }
+
+[lints]
+workspace = true

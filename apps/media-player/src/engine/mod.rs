@@ -243,7 +243,7 @@ impl Engine {
     pub fn new() -> Self {
         let (events_tx, events_rx) = channel();
         let (video_tx, video_rx) = std::sync::mpsc::sync_channel(2);
-        Engine {
+        Self {
             events_tx,
             events_rx: Arc::new(Mutex::new(events_rx)),
             video_tx,

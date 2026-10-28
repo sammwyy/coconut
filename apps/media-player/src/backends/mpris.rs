@@ -528,7 +528,7 @@ fn handle(message: &Message, published: &mut Published) -> Option<Message> {
             )
         }
         (PLAYER, "SetPosition") => {
-            let (track, position): (dbus::Path, i64) = message.read2().ok()?;
+            let (track, position): (dbus::Path<'_>, i64) = message.read2().ok()?;
             let current = published.snapshot.track.as_ref().map(|t| track_path(t.id));
             if current.as_ref() == Some(&track) && position >= 0 {
                 dispatch(

@@ -60,8 +60,8 @@ enum PaneTree {
     Split {
         orientation: SplitOrientation,
         ratio: f32,
-        first: Box<PaneTree>,
-        second: Box<PaneTree>,
+        first: Box<Self>,
+        second: Box<Self>,
     },
 }
 
@@ -2469,7 +2469,7 @@ mod tests {
                 ligatures: true,
                 background_opacity: 100,
             };
-            creamui_core::Widget::on_scroll(&screen).unwrap()(-40.0);
+            Widget::on_scroll(&screen).unwrap()(-40.0);
             let id = tab.session.borrow().id;
             state.event(Event::Output(id, b"output".to_vec()));
             assert!(

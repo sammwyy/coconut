@@ -43,7 +43,7 @@ fn run() -> Result<(), String> {
     let (globals, event_queue) = registry_queue_init(&connection)
         .map_err(|error| format!("could not enumerate Wayland globals: {error}"))?;
     let queue_handle = event_queue.handle();
-    let mut event_loop: EventLoop<BackgroundApp> =
+    let mut event_loop: EventLoop<'_, BackgroundApp> =
         EventLoop::try_new().map_err(|error| format!("could not create event loop: {error}"))?;
     let loop_handle = event_loop.handle();
     WaylandSource::new(connection.clone(), event_queue)
@@ -136,7 +136,7 @@ struct BackgroundApp {
     image: Option<RgbaImage>,
     surfaces: Vec<BackgroundSurface>,
     backend: Backend,
-    queue: QueueHandle<BackgroundApp>,
+    queue: QueueHandle<Self>,
     start: Instant,
     gpu: Option<gpu::Gpu>,
     gpu_failed: bool,

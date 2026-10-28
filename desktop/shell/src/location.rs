@@ -8,7 +8,11 @@ struct LocationAgent;
 fn decision(enabled: bool, requested_accuracy: u32) -> (bool, u32) {
     (
         enabled,
-        enabled.then_some(requested_accuracy).unwrap_or_default(),
+        if enabled {
+            requested_accuracy
+        } else {
+            Default::default()
+        },
     )
 }
 
@@ -17,17 +21,6 @@ impl LocationAgent {
     fn authorize_app(&self, _desktop_id: &str, requested_accuracy: u32) -> (bool, u32) {
         let enabled = ShellConfig::load_existing().location.enabled;
         decision(enabled, requested_accuracy)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::decision;
-
-    #[test]
-    fn policy_denies_requests_when_location_is_disabled() {
-        assert_eq!(decision(false, 8), (false, 0));
-        assert_eq!(decision(true, 8), (true, 8));
     }
 }
 
@@ -88,4 +81,15 @@ pub fn start() {
                 std::future::pending::<()>().await;
             });
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::decision;
+
+    #[test]
+    fn policy_denies_requests_when_location_is_disabled() {
+        assert_eq!(decision(false, 8), (false, 0));
+        assert_eq!(decision(true, 8), (true, 8));
+    }
 }

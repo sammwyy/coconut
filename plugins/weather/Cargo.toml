@@ -19,3 +19,6 @@ creamui-theme = { workspace = true }
 creamui-widgets = { workspace = true }
 reqwest.workspace = true
 serde.workspace = true
+
+[lints]
+workspace = true
