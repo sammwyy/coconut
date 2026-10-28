@@ -45,10 +45,16 @@ done
 # -------------------------------------------------------------------- size
 
 if command -v upx >/dev/null 2>&1; then
+    # Default UCL compression; --best (LZMA) is ~50x slower for only ~2%
+    # better ratio. Binaries compress in parallel — each is independent.
     for entry in "${PACKAGES[@]}"; do
         bin="${entry##*:}"
-        upx --best "$BUILD_DIR/$bin" || echo "warning: upx could not compress $bin" >&2
+        upx -q "$BUILD_DIR/$bin" || echo "warning: upx could not compress $bin" >&2 &
     done
+    wait
+    # upx works through <name>.upx temp files; sweep any orphaned by a
+    # failed or interrupted compression.
+    rm -f "$BUILD_DIR"/*.upx
 else
     echo "upx not found; binaries staged uncompressed."
 fi
