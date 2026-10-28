@@ -1,60 +1,76 @@
 #!/bin/bash
-# Coconut installer: builds and installs every binary in this repository,
-# registers File Explorer's portal backend, and creates a "Coconut" session
-# profile (startcoconut + wayland-sessions entry) so greeters and session
-# managers can discover it.
+# Coconut installer: lays down the release binaries staged by ./build.sh in
+# .build/, registers File Explorer's portal backend, and creates a "Coconut"
+# session profile (startcoconut + wayland-sessions entry) so greeters and
+# session managers can discover it. Nothing is compiled here.
+#
+# Run ./build.sh first as your regular user, then run this script with sudo
+# for a system-wide install (/usr/bin, /usr/share, /etc) or without sudo for
+# a user-local one (~/.local/bin, XDG data/config dirs).
 #
 # The window manager for the session is detected interactively; set
 # COCONUT_WM (e.g. blair, kwin_wayland, Hyprland) to skip the prompt.
 # External compositors are only *used*, never installed or configured here.
 set -e
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BUILD_DIR="${COCONUT_BUILD_DIR:-$ROOT/.build}"
 
 # ---------------------------------------------------------------- binaries
 
-for pkg in \
-    desktop/shell \
-    desktop/background \
-    desktop/greeter \
-    apps/settings \
-    apps/terminal \
-    apps/files \
-    apps/monitor \
-    apps/media-player; do
-    cargo install --force --path "$ROOT/$pkg"
+BINARIES=(coconut coconut-bg coconut-greeter coconut-settings
+    cterm cfiles cmonitor cplayer)
+
+missing=()
+for bin in "${BINARIES[@]}"; do
+    [ -f "$BUILD_DIR/$bin" ] || missing+=("$bin")
+done
+if [ "${#missing[@]}" -ne 0 ]; then
+    echo "install.sh: staged binaries missing: ${missing[*]}" >&2
+    echo "Run ./build.sh first (as a regular user), then re-run this script." >&2
+    exit 1
+fi
+
+# ------------------------------------------------------------ install root
+
+if [ "$(id -u)" -eq 0 ]; then
+    INSTALL_BIN=/usr/bin
+    DATA=/usr/share
+    CONF_DIR=/etc/xdg-desktop-portal
+    USER_UNITS=/usr/lib/systemd/user
+else
+    INSTALL_BIN="${COCONUT_INSTALL_BIN:-$HOME/.local/bin}"
+    DATA="${XDG_DATA_HOME:-$HOME/.local/share}"
+    CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}"
+    CONF_DIR="$CONFIG/xdg-desktop-portal"
+    USER_UNITS="$CONFIG/systemd/user"
+fi
+
+mkdir -p "$INSTALL_BIN" \
+    "$DATA/dbus-1/services" \
+    "$DATA/xdg-desktop-portal/portals" \
+    "$DATA/applications" \
+    "$USER_UNITS" \
+    "$CONF_DIR"
+
+for bin in "${BINARIES[@]}"; do
+    install -m 755 "$BUILD_DIR/$bin" "$INSTALL_BIN/$bin"
 done
 
-INSTALL_BIN="${CARGO_INSTALL_ROOT:-$HOME/.cargo}/bin"
-DATA="${XDG_DATA_HOME:-$HOME/.local/share}"
-CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}"
+# sed replacement treats &, | and \ specially; escape them so install
+# roots like "cargo & apps" survive the substitution.
+bin_sed="$(printf '%s' "$INSTALL_BIN" | sed 's/[&|\\]/\\&/g')"
 
 # --------------------------------------------------- portal + applications
 
-mkdir -p "$DATA/dbus-1/services" \
-    "$DATA/xdg-desktop-portal/portals" \
-    "$DATA/applications" \
-    "$CONFIG/systemd/user" \
-    "$CONFIG/xdg-desktop-portal"
+# The service definitions ship in the repo referencing /usr/bin; rewrite the
+# prefix for user-local installs.
+sed "s|/usr/bin|$bin_sed|g" \
+    "$ROOT/apps/files/data/org.freedesktop.impl.portal.desktop.cfiles.service" \
+    > "$DATA/dbus-1/services/org.freedesktop.impl.portal.desktop.cfiles.service"
 
-cat > "$DATA/dbus-1/services/org.freedesktop.impl.portal.desktop.cfiles.service" <<EOF
-[D-BUS Service]
-Name=org.freedesktop.impl.portal.desktop.cfiles
-Exec="$INSTALL_BIN/cfiles" --portal
-SystemdService=cfiles-portal.service
-EOF
-
-cat > "$CONFIG/systemd/user/cfiles-portal.service" <<EOF
-[Unit]
-Description=File Explorer XDG Desktop Portal backend
-PartOf=graphical-session.target
-After=graphical-session.target
-
-[Service]
-Type=dbus
-BusName=org.freedesktop.impl.portal.desktop.cfiles
-ExecStart="$INSTALL_BIN/cfiles" --portal
-Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=%t/bus
-EOF
+sed "s|/usr/bin|$bin_sed|g" \
+    "$ROOT/apps/files/data/cfiles-portal.service" \
+    > "$USER_UNITS/cfiles-portal.service"
 
 cp "$ROOT/apps/files/data/cfiles.portal" \
     "$DATA/xdg-desktop-portal/portals/"
@@ -65,8 +81,8 @@ cp "$ROOT/apps/files/data/cfiles.desktop" \
     "$DATA/applications/"
 
 for conf in blair-portals.conf coconut-portals.conf; do
-    if [ ! -f "$CONFIG/xdg-desktop-portal/$conf" ]; then
-        cat > "$CONFIG/xdg-desktop-portal/$conf" <<EOF
+    if [ ! -f "$CONF_DIR/$conf" ]; then
+        cat > "$CONF_DIR/$conf" <<EOF
 [preferred]
 org.freedesktop.impl.portal.FileChooser=cfiles
 EOF
@@ -75,7 +91,12 @@ done
 
 command -v update-desktop-database >/dev/null &&
     update-desktop-database "$DATA/applications" || true
-command -v systemctl >/dev/null && systemctl --user daemon-reload || true
+# User managers load units from ~/.config/systemd/user eagerly; the packaged
+# /usr/lib/systemd/user path is picked up on next login, so only the
+# user-local install needs a reload.
+if [ "$(id -u)" -ne 0 ]; then
+    command -v systemctl >/dev/null && systemctl --user daemon-reload || true
+fi
 
 # ------------------------------------------------------------- WM + session
 
@@ -112,17 +133,12 @@ fi
 if [ -z "${wm:-}" ]; then
     echo "Skipping session profile (no window manager selected)."
 else
-    if [ "$(id -u)" -eq 0 ]; then
-        SESSIONS_DIR=/usr/share/wayland-sessions
-    else
-        SESSIONS_DIR="${COCONUT_SESSIONS_DIR:-$DATA/wayland-sessions}"
-    fi
-    mkdir -p "$INSTALL_BIN" "$SESSIONS_DIR"
+    SESSIONS_DIR="${COCONUT_SESSIONS_DIR:-$DATA/wayland-sessions}"
+    mkdir -p "$SESSIONS_DIR"
 
     # sed replacement treats &, | and \ specially; escape them so install
     # roots like "cargo & apps" survive the substitution.
     wm_sed="$(printf '%s' "$wm" | sed 's/[&|\\]/\\&/g')"
-    bin_sed="$(printf '%s' "$INSTALL_BIN" | sed 's/[&|\\]/\\&/g')"
 
     sed -e "s|@COCONUT_WM@|$wm_sed|g" \
         -e "s|@INSTALL_BIN@|$bin_sed|g" \
@@ -142,6 +158,6 @@ else
     echo "  session entry: $SESSIONS_DIR/coconut.desktop"
     if [ "$SESSIONS_DIR" != "/usr/share/wayland-sessions" ]; then
         echo "  note: system greeters may need it in /usr/share/wayland-sessions/"
-        echo "        (e.g. sudo cp \"$SESSIONS_DIR/coconut.desktop\" /usr/share/wayland-sessions/)"
+        echo "        (re-run this script with sudo for a system-wide install)"
     fi
 fi

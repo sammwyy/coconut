@@ -154,6 +154,18 @@ installation:
 cargo build --release
 ```
 
+To produce a full set of staged release binaries (compressed with `upx` when
+available) and install them, use the repository scripts:
+
+```bash
+./build.sh
+sudo ./install.sh
+```
+
+`build.sh` compiles every installable binary into `.build/`; `install.sh`
+lays them down without compiling, system-wide with `sudo` or under
+`~/.local` without it.
+
 ## Verification and useful commands
 
 ```bash
