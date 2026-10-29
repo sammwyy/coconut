@@ -21,9 +21,9 @@ impl PluginInitContext {
 }
 
 /// One domain's contribution to the shell: zero or more islands and/or
-/// panels. A plugin with only islands (e.g. `logo`) leaves `panels` at its
-/// default; a plugin with only panels (e.g. `app_drawer`) leaves `islands`
-/// at its default.
+/// panels. A plugin with only islands (e.g. `workspaces`) leaves `panels`
+/// at its default; a plugin with only panels (e.g. `app_drawer`) leaves
+/// `islands` at its default.
 pub trait Plugin {
     /// A stable identifier for this plugin, used only for diagnostics (it
     /// does not need to match any island or panel id).

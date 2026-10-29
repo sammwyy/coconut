@@ -1,4 +1,7 @@
-use coconut_api::desktop::{DesktopIntegration, DesktopWorkArea, OpenWindow, WindowChangeListener};
+use coconut_api::desktop::{
+    DesktopIntegration, DesktopWorkArea, OpenWindow, WindowChangeListener, Workspace,
+    WorkspaceCapabilities,
+};
 use creamui_render::WindowHandle;
 use dbus::{
     blocking::{Connection as DbusConnection, SyncConnection},
@@ -24,6 +27,10 @@ const GLOBAL_ACCEL: &str = "org.kde.kglobalaccel";
 const GLOBAL_ACCEL_PATH: &str = "/kglobalaccel";
 const GLOBAL_ACCEL_INTERFACE: &str = "org.kde.KGlobalAccel";
 const COCONUT_COMPONENT: &str = "org.coconut.Shell";
+const VDM_SERVICE: &str = "org.kde.KWin";
+const VDM_PATH: &str = "/VirtualDesktopManager";
+const VDM_INTERFACE: &str = "org.kde.KWin.VirtualDesktopManager";
+const PROPERTIES_INTERFACE: &str = "org.freedesktop.DBus.Properties";
 
 pub fn register_global_shortcuts(bindings: Vec<(String, String)>) -> Option<Receiver<String>> {
     let (sender, receiver) = mpsc::channel();
@@ -200,12 +207,99 @@ impl DesktopIntegration for KWinDbus {
     fn work_area(&self) -> Option<DesktopWorkArea> {
         self.windows.lock().ok().and_then(|cache| cache.work_area)
     }
+
+    fn workspaces(&self) -> Vec<Workspace> {
+        self.windows
+            .lock()
+            .map(|cache| {
+                cache
+                    .desktops
+                    .iter()
+                    .map(|desktop| Workspace {
+                        id: desktop.id.clone(),
+                        name: desktop.name.clone(),
+                        active: desktop.active,
+                        window_count: cache
+                            .window_desktops
+                            .values()
+                            .filter(|desktops| desktops.contains(&desktop.id))
+                            .count(),
+                        output: None,
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    fn activate_workspace(&self, id: &str) {
+        let id = id.to_owned();
+        thread::spawn(move || {
+            let Ok(connection) = SyncConnection::new_session() else {
+                return;
+            };
+            let proxy = connection.with_proxy(VDM_SERVICE, VDM_PATH, Duration::from_secs(2));
+            let _: Result<(), _> = proxy.method_call(
+                PROPERTIES_INTERFACE,
+                "Set",
+                (VDM_INTERFACE, "current", dbus::arg::Variant(id)),
+            );
+        });
+    }
+
+    fn create_workspace(&self) -> Option<String> {
+        let connection = SyncConnection::new_session().ok()?;
+        let proxy = connection.with_proxy(VDM_SERVICE, VDM_PATH, Duration::from_secs(2));
+        let position = self.windows.lock().ok()?.desktops.len() as u32;
+        proxy
+            .method_call::<(), _, _, _>(VDM_INTERFACE, "createDesktop", (position, ""))
+            .ok()?;
+        let (desktops,): (dbus::arg::Variant<Vec<(i32, String, String)>>,) = proxy
+            .method_call(PROPERTIES_INTERFACE, "Get", (VDM_INTERFACE, "desktops"))
+            .ok()?;
+        desktops
+            .0
+            .into_iter()
+            .find(|(desktop_position, _, _)| *desktop_position as u32 == position)
+            .map(|(_, id, _)| id)
+    }
+
+    fn destroy_workspace(&self, id: &str) {
+        let id = id.to_owned();
+        thread::spawn(move || {
+            let Ok(connection) = SyncConnection::new_session() else {
+                return;
+            };
+            let proxy = connection.with_proxy(VDM_SERVICE, VDM_PATH, Duration::from_secs(2));
+            let _: Result<(), _> = proxy.method_call(VDM_INTERFACE, "removeDesktop", (id,));
+        });
+    }
+
+    fn workspace_capabilities(&self) -> WorkspaceCapabilities {
+        let supported = self
+            .windows
+            .lock()
+            .map(|cache| cache.workspaces_supported)
+            .unwrap_or_default();
+        WorkspaceCapabilities {
+            create: supported,
+            destroy: supported,
+        }
+    }
+}
+
+struct KwinDesktop {
+    id: String,
+    name: String,
+    active: bool,
 }
 
 #[derive(Default)]
 struct WindowCache {
     revision: u64,
     windows: Vec<OpenWindow>,
+    desktops: Vec<KwinDesktop>,
+    window_desktops: HashMap<String, Vec<String>>,
+    workspaces_supported: bool,
     work_area: Option<DesktopWorkArea>,
 }
 
@@ -236,6 +330,9 @@ struct EventWindow {
     desktop_file: String,
     pid: Option<u32>,
     active: bool,
+    /// Virtual-desktop ids; an empty list means the window is on all of them.
+    #[serde(default)]
+    desktops: Vec<String>,
 }
 
 fn run_window_event_bridge(
@@ -261,6 +358,22 @@ fn run_window_event_bridge(
             true
         }),
     );
+
+    let desktops_seen = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let callback_desktops_seen = desktops_seen.clone();
+    let desktops_rule = MatchRule::new()
+        .with_type(MessageType::Signal)
+        .with_interface(VDM_INTERFACE)
+        .with_path(VDM_PATH);
+    let _ = event_connection.add_match_no_cb(&desktops_rule.match_str());
+    let _desktops_receiver = event_connection.start_receive(
+        desktops_rule.static_clone(),
+        Box::new(move |_message, _connection| {
+            callback_desktops_seen.store(true, std::sync::atomic::Ordering::Release);
+            true
+        }),
+    );
+    refresh_desktops(&event_connection, &cache);
 
     let kwin_connection = DbusConnection::new_session().map_err(|error| error.to_string())?;
     let scripting =
@@ -311,6 +424,11 @@ fn run_window_event_bridge(
         if let Err(error) = event_connection.process(Duration::from_millis(100)) {
             break Err(error.to_string());
         }
+        if desktops_seen.swap(false, std::sync::atomic::Ordering::AcqRel)
+            && refresh_desktops(&event_connection, &cache)
+        {
+            let _ = changes.try_send(());
+        }
     };
 
     let _: Result<(), _> = script.method_call("org.kde.kwin.Script", "stop", ());
@@ -320,6 +438,45 @@ fn run_window_event_bridge(
         (KWIN_EVENT_SCRIPT_NAME,),
     );
     event_result
+}
+
+/// Re-reads the desktop list and the current desktop from KWin's native
+/// `VirtualDesktopManager` interface. Per-desktop window counts stay
+/// derived from the injected script's window snapshots.
+fn refresh_desktops(connection: &SyncConnection, cache: &Arc<Mutex<WindowCache>>) -> bool {
+    let proxy = connection.with_proxy(VDM_SERVICE, VDM_PATH, Duration::from_secs(2));
+    let Ok((desktops,)) = proxy
+        .method_call::<(dbus::arg::Variant<Vec<(i32, String, String)>>,), _, _, _>(
+            PROPERTIES_INTERFACE,
+            "Get",
+            (VDM_INTERFACE, "desktops"),
+        )
+    else {
+        return false;
+    };
+    let current = proxy
+        .method_call::<(dbus::arg::Variant<String>,), _, _, _>(
+            PROPERTIES_INTERFACE,
+            "Get",
+            (VDM_INTERFACE, "current"),
+        )
+        .map(|(current,)| current.0)
+        .unwrap_or_default();
+    let mut desktops = desktops.0;
+    desktops.sort_by_key(|(position, _, _)| *position);
+    let Ok(mut cache) = cache.lock() else {
+        return false;
+    };
+    cache.workspaces_supported = true;
+    cache.desktops = desktops
+        .into_iter()
+        .map(|(_, id, name)| KwinDesktop {
+            active: id == current,
+            id,
+            name,
+        })
+        .collect();
+    true
 }
 
 fn apply_event_snapshot(
@@ -337,6 +494,12 @@ fn apply_event_snapshot(
         return false;
     }
     current.revision = snapshot.revision;
+    current.window_desktops = snapshot
+        .windows
+        .iter()
+        .filter(|window| !window.title.is_empty() && !window.title.starts_with("Coconut"))
+        .map(|window| (window.id.clone(), window.desktops.clone()))
+        .collect();
     current.work_area = snapshot.work_area.and_then(|area| {
         (area.width > 0.0 && area.height > 0.0).then_some(DesktopWorkArea {
             x: area.x,
@@ -411,7 +574,8 @@ function sendSnapshot() {
             appName: String(window.resourceClass || window.desktopFileName || window.resourceName || ""),
             desktopFile: String(window.desktopFileName || ""),
             pid: Number(window.pid) || null,
-            active: Boolean(window.active)
+            active: Boolean(window.active),
+            desktops: (window.desktops || []).map(desktop => String(desktop.id))
         }));
     // Window snapshots are the primary job of this hook. Work-area support
     // must never prevent them from reaching Coconut on an older KWin API.
@@ -431,7 +595,7 @@ function sendSnapshot() {
 }
 
 function watchWindow(window) {
-    ["captionChanged", "resourceClassChanged", "skipTaskbarChanged"].forEach(name => {
+    ["captionChanged", "resourceClassChanged", "skipTaskbarChanged", "desktopsChanged"].forEach(name => {
         if (window[name]) {
             window[name].connect(sendSnapshot);
         }

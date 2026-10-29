@@ -106,7 +106,7 @@ impl Default for ShellConfig {
                         enabled: true,
                         gap: "10px".to_owned(),
                         islands: vec![
-                            IslandEntry::with_id("logo"),
+                            IslandEntry::with_id("workspaces"),
                             IslandEntry::with_id("open_windows"),
                         ],
                     },
@@ -214,7 +214,7 @@ island_background_opacity = 0.72
 # percentage of the section's length ("30%"), or "between"/"evenly".
 gap = "10px"
 [[statusbar.section.island]]
-id = "logo"
+id = "workspaces"
 [[statusbar.section.island]]
 id = "open_windows"
 

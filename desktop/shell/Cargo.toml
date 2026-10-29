@@ -24,7 +24,7 @@ coconut-api = { workspace = true }
 coconut-core = { workspace = true, default-features = true }
 coconut-plugin-kit = { workspace = true }
 delib = { workspace = true }
-coconut-plugin-logo = { workspace = true }
+coconut-plugin-workspaces = { workspace = true }
 coconut-plugin-clock = { workspace = true }
 coconut-plugin-weather = { workspace = true }
 coconut-plugin-current-playing = { workspace = true }

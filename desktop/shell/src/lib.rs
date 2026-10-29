@@ -13,7 +13,10 @@ use crate::bar::build_dock;
 use crate::plugins::all_plugins;
 use chrono::Local;
 use coconut_api::audio::{AudioIntegration, Playback};
-use coconut_api::desktop::{DesktopIntegration, DesktopWorkArea, OpenWindow, WindowChangeListener};
+use coconut_api::desktop::{
+    DesktopIntegration, DesktopWorkArea, OpenWindow, WindowChangeListener, Workspace,
+    WorkspaceCapabilities,
+};
 use coconut_core::{
     ipc::RuntimeEvent, DockConfig, DockPosition, ShellConfig, ShortcutAction, ShortcutConfig,
     UserProfile,
@@ -31,6 +34,7 @@ use coconut_plugin_tray::{
     NetworkRevision, PowerProfileRevision, ToggleKeepAwake, VolumeLevel, WifiEnabled,
 };
 use coconut_plugin_weather::WeatherState;
+use coconut_plugin_workspaces::WorkspaceListState;
 use creamui_core::{BoxedWidget, Point, Size};
 use creamui_reactive::Signal;
 use creamui_render::{
@@ -87,6 +91,26 @@ pub fn run() {
             windows: windows.clone(),
             refresh,
             activate,
+        });
+    }
+
+    let workspaces = Signal::new(integrations.desktop.workspaces());
+    let workspace_capabilities = Signal::new(integrations.desktop.workspace_capabilities());
+    {
+        let backend = integrations.desktop.clone();
+        let activate_backend = integrations.desktop.clone();
+        let create_backend = integrations.desktop.clone();
+        let refresh_workspaces = workspaces.clone();
+        let refresh_capabilities = workspace_capabilities.clone();
+        shared.insert(WorkspaceListState {
+            workspaces: workspaces.clone(),
+            capabilities: workspace_capabilities.clone(),
+            activate: Rc::new(move |id: String| activate_backend.activate_workspace(&id)),
+            create: Rc::new(move || create_backend.create_workspace()),
+            refresh: Rc::new(move || {
+                refresh_workspaces.set(backend.workspaces());
+                refresh_capabilities.set(backend.workspace_capabilities());
+            }),
         });
     }
 
@@ -304,6 +328,8 @@ pub fn run() {
                 app.clone(),
                 bar_windows_backend.clone(),
                 windows.clone(),
+                workspaces.clone(),
+                workspace_capabilities.clone(),
                 desktop_work_area.clone(),
             ) {
                 for delay in [Duration::from_secs(1), Duration::from_secs(3)] {
@@ -595,12 +621,22 @@ fn schedule_window_events(
     app: AppHandle,
     backend: Rc<dyn DesktopIntegration>,
     windows: Signal<Vec<OpenWindow>>,
+    workspaces: Signal<Vec<Workspace>>,
+    capabilities: Signal<WorkspaceCapabilities>,
     work_area: Signal<Option<DesktopWorkArea>>,
 ) -> bool {
     let Some(listener) = backend.window_changes() else {
         return false;
     };
-    wait_for_window_event(app, backend, windows, work_area, listener);
+    wait_for_window_event(
+        app,
+        backend,
+        windows,
+        workspaces,
+        capabilities,
+        work_area,
+        listener,
+    );
     true
 }
 
@@ -722,6 +758,8 @@ fn wait_for_window_event(
     app: AppHandle,
     backend: Rc<dyn DesktopIntegration>,
     windows: Signal<Vec<OpenWindow>>,
+    workspaces: Signal<Vec<Workspace>>,
+    capabilities: Signal<WorkspaceCapabilities>,
     work_area: Signal<Option<DesktopWorkArea>>,
     listener: WindowChangeListener,
 ) {
@@ -732,8 +770,18 @@ fn wait_for_window_event(
         move |changed| {
             if changed {
                 windows.set(backend.windows());
+                workspaces.set(backend.workspaces());
+                capabilities.set(backend.workspace_capabilities());
                 work_area.set(backend.work_area());
-                wait_for_window_event(next_app, backend, windows, work_area, listener);
+                wait_for_window_event(
+                    next_app,
+                    backend,
+                    windows,
+                    workspaces,
+                    capabilities,
+                    work_area,
+                    listener,
+                );
             }
         },
     );

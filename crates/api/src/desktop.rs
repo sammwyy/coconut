@@ -22,6 +22,23 @@ pub struct DesktopWorkArea {
     pub height: f32,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Workspace {
+    pub id: String,
+    pub name: String,
+    pub active: bool,
+    pub window_count: usize,
+    /// Output currently displaying this workspace, if the compositor maps
+    /// workspaces to outputs individually.
+    pub output: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct WorkspaceCapabilities {
+    pub create: bool,
+    pub destroy: bool,
+}
+
 pub trait DesktopIntegration {
     fn prepare_window(&self, window: &WindowHandle);
     fn windows(&self) -> Vec<OpenWindow>;
@@ -32,6 +49,18 @@ pub trait DesktopIntegration {
     }
     fn work_area(&self) -> Option<DesktopWorkArea> {
         None
+    }
+    fn workspaces(&self) -> Vec<Workspace> {
+        Vec::new()
+    }
+    fn activate_workspace(&self, _id: &str) {}
+    /// Creates a workspace and returns its id so the caller can activate it.
+    fn create_workspace(&self) -> Option<String> {
+        None
+    }
+    fn destroy_workspace(&self, _id: &str) {}
+    fn workspace_capabilities(&self) -> WorkspaceCapabilities {
+        WorkspaceCapabilities::default()
     }
 }
 

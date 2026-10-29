@@ -17,7 +17,7 @@ struct KnownIsland {
 fn known_islands() -> Vec<KnownIsland> {
     vec![
         KnownIsland {
-            id: "logo",
+            id: "workspaces",
             label: "Workspaces",
             schema: Vec::new(),
         },

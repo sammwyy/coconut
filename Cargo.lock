@@ -1054,18 +1054,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "coconut-plugin-logo"
-version = "0.1.0"
-dependencies = [
- "coconut-plugin-kit",
- "creamui-core",
- "creamui-jsx",
- "creamui-macros",
- "creamui-theme",
- "creamui-widgets",
-]
-
-[[package]]
 name = "coconut-plugin-tray"
 version = "0.1.0"
 dependencies = [
@@ -1095,6 +1083,20 @@ dependencies = [
  "creamui-widgets",
  "reqwest",
  "serde",
+]
+
+[[package]]
+name = "coconut-plugin-workspaces"
+version = "0.1.0"
+dependencies = [
+ "coconut-api",
+ "coconut-plugin-kit",
+ "creamui-core",
+ "creamui-jsx",
+ "creamui-macros",
+ "creamui-reactive",
+ "creamui-theme",
+ "creamui-widgets",
 ]
 
 [[package]]
@@ -1165,9 +1167,9 @@ dependencies = [
  "coconut-plugin-clock",
  "coconut-plugin-current-playing",
  "coconut-plugin-kit",
- "coconut-plugin-logo",
  "coconut-plugin-tray",
  "coconut-plugin-weather",
+ "coconut-plugin-workspaces",
  "coconut-registry",
  "creamui-core",
  "creamui-devtools",

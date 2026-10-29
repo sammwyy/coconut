@@ -4,7 +4,10 @@
 //! directly to its org.blair.Compositor1 D-Bus service, without an injected
 //! script or compatibility tool.
 
-use coconut_api::desktop::{DesktopIntegration, DesktopWorkArea, OpenWindow, WindowChangeListener};
+use coconut_api::desktop::{
+    DesktopIntegration, DesktopWorkArea, OpenWindow, WindowChangeListener, Workspace,
+    WorkspaceCapabilities,
+};
 use creamui_render::WindowHandle;
 use dbus::{blocking::SyncConnection, channel::MatchingReceiver, message::MatchRule, MessageType};
 use delib::{application_icons::ApplicationIconResolver, icons::system_icon_theme};
@@ -120,15 +123,67 @@ impl DesktopIntegration for BlairDbus {
     fn work_area(&self) -> Option<DesktopWorkArea> {
         self.cache.lock().ok().and_then(|cache| cache.work_area)
     }
+
+    fn workspaces(&self) -> Vec<Workspace> {
+        self.cache
+            .lock()
+            .map(|cache| cache.workspaces.clone())
+            .unwrap_or_default()
+    }
+
+    fn activate_workspace(&self, id: &str) {
+        let Ok(id) = id.parse::<u64>() else {
+            return;
+        };
+        thread::spawn(move || {
+            let Ok(connection) = SyncConnection::new_session() else {
+                return;
+            };
+            let proxy = connection.with_proxy(SERVICE, PATH, Duration::from_secs(2));
+            let _: Result<(bool,), _> = proxy.method_call(INTERFACE, "SwitchWorkspace", (id,));
+        });
+    }
+
+    fn create_workspace(&self) -> Option<String> {
+        let connection = SyncConnection::new_session().ok()?;
+        let proxy = connection.with_proxy(SERVICE, PATH, Duration::from_secs(2));
+        let (id,): (u64,) = proxy
+            .method_call(INTERFACE, "CreateWorkspace", ("",))
+            .ok()?;
+        (id > 0).then(|| id.to_string())
+    }
+
+    fn destroy_workspace(&self, id: &str) {
+        let Ok(id) = id.parse::<u64>() else {
+            return;
+        };
+        thread::spawn(move || {
+            let Ok(connection) = SyncConnection::new_session() else {
+                return;
+            };
+            let proxy = connection.with_proxy(SERVICE, PATH, Duration::from_secs(2));
+            let _: Result<(bool,), _> = proxy.method_call(INTERFACE, "DestroyWorkspace", (id,));
+        });
+    }
+
+    fn workspace_capabilities(&self) -> WorkspaceCapabilities {
+        self.cache
+            .lock()
+            .map(|cache| cache.workspace_capabilities)
+            .unwrap_or_default()
+    }
 }
 
 #[derive(Default)]
 struct WindowCache {
     windows: Vec<OpenWindow>,
+    workspaces: Vec<Workspace>,
+    workspace_capabilities: WorkspaceCapabilities,
     work_area: Option<DesktopWorkArea>,
 }
 
 type DbusWindow = (u64, String, String, i32, i32, i32, i32, bool, bool, bool);
+type DbusWorkspace = (u64, String, bool, String, u32);
 
 fn run_event_bridge(
     cache: Arc<Mutex<WindowCache>>,
@@ -194,6 +249,21 @@ fn refresh_snapshot(connection: &SyncConnection, cache: &Arc<Mutex<WindowCache>>
     };
     current.windows = windows;
     current.work_area = work_area;
+    if let Ok(workspaces) = list_workspaces(connection) {
+        current.workspaces = workspaces
+            .into_iter()
+            .map(|(id, name, active, output, window_count)| Workspace {
+                id: id.to_string(),
+                name,
+                active,
+                window_count: window_count as usize,
+                output: (!output.is_empty()).then_some(output),
+            })
+            .collect();
+    }
+    if let Ok((create, destroy)) = workspace_capabilities(connection) {
+        current.workspace_capabilities = WorkspaceCapabilities { create, destroy };
+    }
     true
 }
 
@@ -201,6 +271,18 @@ fn list_windows(connection: &SyncConnection) -> Result<Vec<DbusWindow>, dbus::Er
     let proxy = connection.with_proxy(SERVICE, PATH, Duration::from_secs(2));
     let (windows,): (Vec<DbusWindow>,) = proxy.method_call(INTERFACE, "ListWindows", ())?;
     Ok(windows)
+}
+
+fn list_workspaces(connection: &SyncConnection) -> Result<Vec<DbusWorkspace>, dbus::Error> {
+    let proxy = connection.with_proxy(SERVICE, PATH, Duration::from_secs(2));
+    let (workspaces,): (Vec<DbusWorkspace>,) =
+        proxy.method_call(INTERFACE, "ListWorkspaces", ())?;
+    Ok(workspaces)
+}
+
+fn workspace_capabilities(connection: &SyncConnection) -> Result<(bool, bool), dbus::Error> {
+    let proxy = connection.with_proxy(SERVICE, PATH, Duration::from_secs(2));
+    proxy.method_call(INTERFACE, "WorkspaceCapabilities", ())
 }
 
 fn query_work_area(connection: &SyncConnection) -> Option<DesktopWorkArea> {

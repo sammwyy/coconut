@@ -57,7 +57,7 @@ coconut-plugin-app-drawer = { path = "plugins/app_drawer" }
 coconut-plugin-app-launcher = { path = "plugins/app_launcher" }
 coconut-plugin-clock = { path = "plugins/clock" }
 coconut-plugin-current-playing = { path = "plugins/current_playing" }
-coconut-plugin-logo = { path = "plugins/logo" }
+coconut-plugin-workspaces = { path = "plugins/workspaces" }
 coconut-plugin-tray = { path = "plugins/tray" }
 coconut-plugin-weather = { path = "plugins/weather" }
 

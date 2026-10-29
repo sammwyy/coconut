@@ -11,7 +11,7 @@ use coconut_plugin_kit::Plugin;
 
 pub fn all_plugins() -> Vec<Box<dyn Plugin>> {
     vec![
-        Box::new(coconut_plugin_logo::LogoPlugin),
+        Box::new(coconut_plugin_workspaces::WorkspacesPlugin),
         Box::new(coconut_plugin_weather::WeatherPlugin),
         Box::new(coconut_plugin_clock::ClockPlugin),
         Box::new(coconut_plugin_current_playing::CurrentPlayingPlugin),

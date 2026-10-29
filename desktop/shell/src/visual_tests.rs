@@ -277,6 +277,7 @@ fn full_bars_render_and_keep_window_and_media_actions() {
     use coconut_core::ShellConfig;
     use coconut_plugin_app_launcher::{AppLauncherIsland, OpenWindowsIsland, WindowListState};
     use coconut_plugin_current_playing::{NextPlayback, PreviousPlayback, TogglePlayback};
+    use coconut_plugin_workspaces::WorkspaceListState;
     use creamui_core::layout::{Position, Style as LayoutStyle};
     use creamui_core::{BoxedWidget, Styled};
     use creamui_image::{Image, ImageData, ImageFit};
@@ -331,6 +332,38 @@ fn full_bars_render_and_keep_window_and_media_actions() {
                     Rc::new(move || refreshed.set(refreshed.get() + 1))
                 },
             });
+            let ws_activated = Rc::new(RefCell::new(String::new()));
+            shared.insert(WorkspaceListState {
+                workspaces: Signal::new(
+                    [
+                        ("1", true, 2_usize),
+                        ("2", false, 3),
+                        ("3", false, 0),
+                        ("4", false, 1),
+                    ]
+                    .into_iter()
+                    .map(
+                        |(name, active, window_count)| coconut_api::desktop::Workspace {
+                            id: name.into(),
+                            name: name.into(),
+                            active,
+                            window_count,
+                            output: None,
+                        },
+                    )
+                    .collect(),
+                ),
+                capabilities: Signal::new(coconut_api::desktop::WorkspaceCapabilities {
+                    create: true,
+                    destroy: true,
+                }),
+                activate: {
+                    let ws_activated = ws_activated.clone();
+                    Rc::new(move |id| *ws_activated.borrow_mut() = id)
+                },
+                create: Rc::new(|| None),
+                refresh: Rc::new(|| {}),
+            });
             let previous = Rc::new(Cell::new(0));
             let toggled = Rc::new(Cell::new(0));
             let next = Rc::new(Cell::new(0));
@@ -347,7 +380,7 @@ fn full_bars_render_and_keep_window_and_media_actions() {
                 Rc::new(move || count.set(count.get() + 1))
             }));
             let islands: Vec<Rc<dyn Island>> = vec![
-                Rc::new(coconut_plugin_logo::LogoIsland),
+                Rc::new(coconut_plugin_workspaces::WorkspacesIsland("workspaces")),
                 Rc::new(AppLauncherIsland),
                 Rc::new(OpenWindowsIsland),
                 Rc::new(coconut_plugin_weather::WeatherIsland),
@@ -466,7 +499,12 @@ fn full_bars_render_and_keep_window_and_media_actions() {
                         .unwrap();
                 }
                 if label == "statusbar" {
-                    let active_window = Point { x: 176.0, y: 22.0 };
+                    let workspace_chip = Point { x: 61.0, y: 22.0 };
+                    scene
+                        .hit_test(workspace_chip)
+                        .expect("workspace chip is clickable")();
+                    assert_eq!(&*ws_activated.borrow(), "2");
+                    let active_window = Point { x: 197.0, y: 22.0 };
                     scene
                         .hit_test(active_window)
                         .expect("active window is clickable")();
