@@ -1,0 +1,39 @@
+[package]
+name = "coconut-permission-portal"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Coconut's permission service and consent prompt"
+
+[[bin]]
+name = "coconut-permission-portal"
+path = "src/main.rs"
+
+[dependencies]
+coconut-integration-cream.workspace = true
+delib.workspace = true
+creamui-core.workspace = true
+creamui-reactive.workspace = true
+creamui-theme.workspace = true
+creamui-theme-watch.workspace = true
+creamui-fonts.workspace = true
+creamui-widgets.workspace = true
+creamui-image = { workspace = true, features = ["svg"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+zbus = { workspace = true, features = ["blocking-api"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "sync", "time", "process"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+creamui-render = { workspace = true, features = ["platform-winit", "platform-wayland", "platform-x11", "platform-window-integration-blair", "platform-blur-blair", "platform-blur-kwin"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+creamui-render = { workspace = true, features = ["platform-windows"] }
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

@@ -29,6 +29,7 @@ PACKAGES=(
     coconut-calculator:ccalc
     coconut-image-viewer:cviewer
     coconut-screenshots:coconut-screenshots
+    coconut-permission-portal:coconut-permission-portal
 )
 
 pkgs=()

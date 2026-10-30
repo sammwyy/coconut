@@ -1,0 +1,4 @@
+[portal]
+DBusName=org.coconut.Permissions
+Interfaces=org.freedesktop.impl.portal.Access
+UseIn=Coconut;

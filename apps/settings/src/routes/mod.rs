@@ -347,6 +347,11 @@ fn routes() -> Vec<RouteDefinition> {
             crate::views::privacy::microphone::route_view,
         ),
         (
+            "/privacy/screen-capture",
+            Section::Detail(Page::ScreenCapture),
+            crate::views::privacy::screen_capture::route_view,
+        ),
+        (
             "/desktop/notifications",
             Section::Detail(Page::Notifications),
             crate::views::desktop::notifications::route_view,

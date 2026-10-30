@@ -1081,6 +1081,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "coconut-permission-portal"
+version = "0.1.0"
+dependencies = [
+ "coconut-integration-cream",
+ "creamui-core",
+ "creamui-fonts",
+ "creamui-image",
+ "creamui-reactive",
+ "creamui-render",
+ "creamui-theme",
+ "creamui-theme-watch",
+ "creamui-widgets",
+ "delib",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "zbus",
+]
+
+[[package]]
 name = "coconut-plugin-app-drawer"
 version = "0.1.0"
 dependencies = [

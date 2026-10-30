@@ -40,6 +40,7 @@ stay calm, responsive, and consistent.
 | `ccalc [--scientific]` | Open Calculator with standard/scientific modes and unit conversions. |
 | `cviewer [IMAGE ...]` | Open Image Viewer with zoom, pan, rotation, temporary color adjustments and metadata. |
 | `coconut-screenshots` | Take a screenshot and annotate it: drag to select, draw, blur, erase, then copy or save. `--screen` captures headlessly, `--save-as` asks where to save. |
+| `coconut-permission-portal --service` | Run the permission service that stores per-application decisions and shows consent prompts. |
 | `cterm --settings` | Open Terminal Settings. |
 | `coconut files` | Start the file manager. |
 | `cfiles --settings` | Open File Explorer settings. |

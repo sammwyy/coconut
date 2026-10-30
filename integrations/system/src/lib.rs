@@ -178,6 +178,9 @@ impl SettingsIntegration for LinuxSettings {
                 app,
                 allowed,
             } => set_device_permission(&device, &app, allowed)?,
+            Action::SetScreenCapturePermission { subject, allowed } => {
+                set_screen_capture_permission(&subject, allowed)?
+            }
             Action::AddPrinter { name, uri } => hardware::add_printer(&name, &uri)?,
             Action::CheckUpdates => {
                 return command_timeout(
@@ -605,6 +608,22 @@ fn discover_privacy(snapshot: &mut Snapshot) {
             }
         }
     }
+    match screen_capture_permissions() {
+        Ok(entries) => {
+            snapshot
+                .collections
+                .insert("screen-capture-permissions".into(), entries);
+            snapshot.facts.insert(
+                "screen-capture-service".into(),
+                "Coconut permission portal".into(),
+            );
+        }
+        Err(error) => {
+            snapshot
+                .facts
+                .insert("screen-capture-service".into(), error);
+        }
+    }
     discover_online_accounts(snapshot);
     if let Ok(connection) = Connection::new_system() {
         let device: Result<(dbus::Path<'static>,), _> = connection
@@ -720,6 +739,53 @@ fn set_device_permission(device: &str, app: &str, allowed: bool) -> Result<(), S
         )
         .map_err(|e| e.to_string())?;
     Ok(())
+}
+
+fn screen_capture_permissions() -> Result<Vec<Entry>, String> {
+    let connection = Connection::new_session().map_err(|e| e.to_string())?;
+    let (entries,): (Vec<(String, String, String, u64)>,) = connection
+        .with_proxy(
+            "org.coconut.Permissions",
+            "/org/coconut/Permissions1",
+            TIMEOUT,
+        )
+        .method_call("org.coconut.Permissions1", "List", ())
+        .map_err(|e| e.to_string())?;
+    Ok(entries
+        .into_iter()
+        .map(|(subject, permission, verdict, _)| Entry {
+            name: subject.rsplit('/').next().unwrap_or(&subject).to_owned(),
+            description: format!("{permission} · {subject}"),
+            id: subject,
+            enabled: verdict == "allow",
+            ..Default::default()
+        })
+        .collect())
+}
+
+fn set_screen_capture_permission(subject: &str, allowed: bool) -> Result<(), String> {
+    let connection = Connection::new_session().map_err(|e| e.to_string())?;
+    let (applied,): (bool,) = connection
+        .with_proxy(
+            "org.coconut.Permissions",
+            "/org/coconut/Permissions1",
+            TIMEOUT,
+        )
+        .method_call(
+            "org.coconut.Permissions1",
+            "SetDecision",
+            (
+                subject.to_owned(),
+                "screen-capture".to_owned(),
+                if allowed { "allow" } else { "deny" }.to_owned(),
+            ),
+        )
+        .map_err(|e| e.to_string())?;
+    if applied {
+        Ok(())
+    } else {
+        Err("The permission portal rejected the decision".into())
+    }
 }
 fn change_password(password: String) -> Result<(), String> {
     use std::io::Write;

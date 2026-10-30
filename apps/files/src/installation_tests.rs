@@ -43,6 +43,7 @@ fn user_installer_installs_theme_integrations_and_preserves_existing_policy() {
         "ccalc",
         "cviewer",
         "coconut-screenshots",
+        "coconut-permission-portal",
     ] {
         executable(&staged.join(binary), "#!/bin/sh\nexit 0\n");
     }
@@ -54,8 +55,20 @@ fn user_installer_installs_theme_integrations_and_preserves_existing_policy() {
     let policy = config.join("xdg-desktop-portal/coconut-portals.conf");
     fs::create_dir_all(policy.parent().unwrap()).unwrap();
     fs::write(&policy, "user preferences\n").unwrap();
+    // A leftover copy of the previously shipped policy must be upgraded in
+    // place so new portal backends (like Access) get registered.
+    let blair_policy = config.join("xdg-desktop-portal/blair-portals.conf");
+    fs::write(
+        &blair_policy,
+        "[preferred]\ndefault=gtk\norg.freedesktop.impl.portal.Settings=coconut\norg.freedesktop.impl.portal.FileChooser=cfiles;gtk\n",
+    )
+    .unwrap();
     let output = Command::new("bash")
         .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../install.sh"))
+        .arg("--user")
+        // Positional compositor names resolve through the alias table even
+        // when the binary is not on PATH.
+        .arg("kwin")
         .current_dir(root)
         .env("PATH", format!("{}:/usr/bin:/bin", commands.display()))
         .env("COCONUT_BUILD_DIR", &staged)
@@ -63,7 +76,6 @@ fn user_installer_installs_theme_integrations_and_preserves_existing_policy() {
         .env("XDG_DATA_HOME", &data)
         .env("XDG_CONFIG_HOME", &config)
         .env("COCONUT_SESSIONS_DIR", data.join("wayland-sessions"))
-        .env("COCONUT_WM", "kwin_wayland")
         .output()
         .unwrap();
     assert!(
@@ -98,8 +110,22 @@ fn user_installer_installs_theme_integrations_and_preserves_existing_policy() {
     assert!(viewer.contains("Exec=cviewer %F"));
     assert!(viewer.contains("MimeType=image/png;image/jpeg;"));
     assert!(install_root.join("bin/coconut-screenshots").exists());
-    let screenshots = fs::read_to_string(data.join("applications/coconut-screenshots.desktop")).unwrap();
+    let screenshots =
+        fs::read_to_string(data.join("applications/coconut-screenshots.desktop")).unwrap();
     assert!(screenshots.contains("Exec=coconut-screenshots"));
+    assert!(install_root.join("bin/coconut-permission-portal").exists());
+    let permissions =
+        fs::read_to_string(data.join("dbus-1/services/org.coconut.Permissions.service")).unwrap();
+    assert!(permissions.contains(&format!(
+        "Exec=\"{}/bin/coconut-permission-portal\" --service",
+        install_root.display()
+    )));
+    assert!(config
+        .join("systemd/user/coconut-permission-portal.service")
+        .exists());
+    assert!(data
+        .join("xdg-desktop-portal/portals/coconut-permissions.portal")
+        .exists());
     assert_eq!(fs::read_to_string(policy).unwrap(), "user preferences\n");
     assert!(config
         .join("xdg-desktop-portal/blair-portals.conf")
@@ -128,4 +154,5 @@ fn user_installer_installs_theme_integrations_and_preserves_existing_policy() {
     let default_policy =
         fs::read_to_string(config.join("xdg-desktop-portal/blair-portals.conf")).unwrap();
     assert!(default_policy.contains("org.freedesktop.impl.portal.Settings=coconut"));
+    assert!(default_policy.contains("org.freedesktop.impl.portal.Access=coconut-permissions"));
 }

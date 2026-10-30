@@ -1,0 +1,4 @@
+[D-BUS Service]
+Name=org.coconut.Permissions
+Exec="/usr/bin/coconut-permission-portal" --service
+SystemdService=coconut-permission-portal.service

@@ -1,24 +1,80 @@
 #!/bin/bash
 # Coconut installer: lays down the release binaries staged by ./build.sh in
-# .build/, registers File Explorer's portal backend, and creates a "Coconut"
-# session profile (startcoconut + wayland-sessions entry) so greeters and
-# session managers can discover it. Nothing is compiled here.
+# .build/, registers the portal backends, and creates a "Coconut" session
+# profile (startcoconut + wayland-sessions entry) so greeters and session
+# managers can discover it.
 #
-# Run ./build.sh first as your regular user, then run this script with sudo
-# for a system-wide install (/usr/bin, /usr/share, /etc) or without sudo for
-# a user-local one (~/.local/bin, XDG data/config dirs).
+# Usage: ./install.sh [WM] [--build] [--user] [--force|force]
 #
-# The window manager for the session is detected interactively; set
-# COCONUT_WM (e.g. blair, kwin_wayland, Hyprland) to skip the prompt.
+#   WM        compositor for the session profile (e.g. blair, kwin,
+#             hyprland); used even when not auto-detected. No WM argument
+#             asks interactively.
+#   --build   run ./build.sh first to compile and stage the binaries.
+#   --user    install for the current user (~/.local) instead of
+#             system-wide; without it the script elevates with sudo.
+#   --force   never prompt: a missing WM detection is accepted silently and
+#             an unset WM picks the first detected (or blair).
+#
+# COCONUT_WM still selects the compositor when no WM argument is given.
 # External compositors are only *used*, never installed or configured here.
 set -e
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_DIR="${COCONUT_BUILD_DIR:-$ROOT/.build}"
 
+# -------------------------------------------------------------- arguments
+
+WM_ARG=""
+DO_BUILD=0
+USER_INSTALL=0
+FORCE=0
+for arg in "$@"; do
+    case "$arg" in
+        --build) DO_BUILD=1 ;;
+        --user) USER_INSTALL=1 ;;
+        --force | force) FORCE=1 ;;
+        -h | --help)
+            sed -n '7,18p' "$0" | sed 's/^# \?//'
+            exit 0
+            ;;
+        --*)
+            echo "install.sh: unknown flag: $arg" >&2
+            exit 2
+            ;;
+        *)
+            if [ -z "$WM_ARG" ]; then
+                WM_ARG="$arg"
+            else
+                echo "install.sh: unexpected extra argument: $arg" >&2
+                exit 2
+            fi
+            ;;
+    esac
+done
+
+# ------------------------------------------------------------------ build
+
+# Build as the invoking user, before any sudo elevation, so target/ stays
+# owned by them and sudo never touches the toolchain.
+if [ "$DO_BUILD" -eq 1 ] && [ "${COCONUT_INSTALL_BUILT:-}" != 1 ]; then
+    bash "$ROOT/build.sh"
+fi
+
+# ------------------------------------------------------- privilege check
+
+# Global install is the default: elevate with sudo unless --user was given.
+# COCONUT_INSTALL_BUILT marks that the build already ran pre-elevation.
+if [ "$USER_INSTALL" -eq 0 ] && [ "$(id -u)" -ne 0 ]; then
+    if ! command -v sudo >/dev/null 2>&1; then
+        echo "install.sh: a system-wide install needs root; install sudo or pass --user" >&2
+        exit 1
+    fi
+    exec sudo COCONUT_INSTALL_BUILT=1 bash "$ROOT/install.sh" "$@"
+fi
+
 # ---------------------------------------------------------------- binaries
 
 BINARIES=(coconut coconut-bg coconut-greeter coconut-settings coconut-appearance
-    cterm cfiles cmonitor cplayer cedit ccalc cviewer coconut-screenshots)
+    cterm cfiles cmonitor cplayer cedit ccalc cviewer coconut-screenshots coconut-permission-portal)
 
 missing=()
 for bin in "${BINARIES[@]}"; do
@@ -99,6 +155,15 @@ sed "s|/usr/bin|$bin_sed|g" \
     "$ROOT/integrations/appearance/data/coconut-appearance.service" \
     > "$USER_UNITS/coconut-appearance.service"
 cp "$ROOT/integrations/appearance/data/coconut.portal" "$DATA/xdg-desktop-portal/portals/"
+
+sed "s|/usr/bin|$bin_sed|g" \
+    "$ROOT/apps/permission-portal/data/org.coconut.Permissions.service" \
+    > "$DATA/dbus-1/services/org.coconut.Permissions.service"
+sed "s|/usr/bin|$bin_sed|g" \
+    "$ROOT/apps/permission-portal/data/coconut-permission-portal.service" \
+    > "$USER_UNITS/coconut-permission-portal.service"
+cp "$ROOT/apps/permission-portal/data/coconut-permissions.portal" \
+    "$DATA/xdg-desktop-portal/portals/"
 cp "$ROOT/apps/files/data/cfiles.desktop" \
     "$ROOT/apps/terminal/data/cterm.desktop" \
     "$ROOT/apps/monitor/data/cmonitor.desktop" \
@@ -110,9 +175,11 @@ cp "$ROOT/apps/files/data/cfiles.desktop" \
     "$DATA/applications/"
 
 for conf in blair-portals.conf coconut-portals.conf; do
-    # Upgrade the old generated policy; preserve custom user selections.
+    # Upgrade previously generated policies; preserve custom user selections.
     old_policy=$(printf '[preferred]\norg.freedesktop.impl.portal.FileChooser=cfiles')
-    if [ ! -f "$CONF_DIR/$conf" ] || [ "$(cat "$CONF_DIR/$conf")" = "$old_policy" ]; then
+    shipped_policy=$(printf '[preferred]\ndefault=gtk\norg.freedesktop.impl.portal.Settings=coconut\norg.freedesktop.impl.portal.FileChooser=cfiles;gtk')
+    current="$(cat "$CONF_DIR/$conf" 2>/dev/null)"
+    if [ ! -f "$CONF_DIR/$conf" ] || [ "$current" = "$old_policy" ] || [ "$current" = "$shipped_policy" ]; then
         cp "$ROOT/integrations/appearance/data/coconut-portals.conf" "$CONF_DIR/$conf"
     fi
 done
@@ -138,8 +205,30 @@ for wm in "${WM_CANDIDATES[@]}"; do
     command -v "$wm" >/dev/null 2>&1 && detected+=("$wm")
 done
 
-if [ -n "${COCONUT_WM:-}" ]; then
-    wm="$COCONUT_WM"
+# Friendly aliases for the candidate names: kwin -> kwin_wayland and
+# case-insensitive matching for the rest (hyprland -> Hyprland, ...).
+resolve_wm() {
+    local want="${1,,}" candidate
+    [ "$want" = "kwin" ] && want="kwin_wayland"
+    for candidate in "${WM_CANDIDATES[@]}"; do
+        if [ "${candidate,,}" = "$want" ]; then
+            printf '%s' "$candidate"
+            return 0
+        fi
+    done
+    printf '%s' "$1"
+}
+
+if [ -n "$WM_ARG" ]; then
+    # An explicit compositor wins even when it is not installed yet.
+    wm="$(resolve_wm "$WM_ARG")"
+    if ! printf '%s\n' "${detected[@]}" | grep -qxF "$wm" && [ "$FORCE" -eq 0 ]; then
+        echo "note: '$wm' was not found in PATH; installing the session profile anyway."
+    fi
+elif [ -n "${COCONUT_WM:-}" ]; then
+    wm="$(resolve_wm "$COCONUT_WM")"
+elif [ "$FORCE" -eq 1 ]; then
+    wm="${detected[0]:-blair}"
 elif [ "${#detected[@]}" -eq 0 ]; then
     echo "No supported window manager found (looked for: ${WM_CANDIDATES[*]})."
     read -rp "Enter a compositor command to use, or leave empty to skip the session profile: " wm

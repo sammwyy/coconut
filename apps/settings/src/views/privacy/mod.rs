@@ -43,6 +43,12 @@ fn build(state: &State, nav: &creamui_router::Router) -> BoxedWidget {
                         Page::Microphone,
                         nav,
                     ),
+                    detail_link(
+                        "Screen capture permissions",
+                        "Which applications may capture the screen",
+                        Page::ScreenCapture,
+                        nav,
+                    ),
                     unsupported(
                         "Usage analytics",
                         "Coconut has no analytics setting or telemetry service to enable",
@@ -56,3 +62,4 @@ fn build(state: &State, nav: &creamui_router::Router) -> BoxedWidget {
 pub mod camera;
 pub mod fingerprint;
 pub mod microphone;
+pub mod screen_capture;

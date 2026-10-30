@@ -88,6 +88,10 @@ pub enum Action {
         app: String,
         allowed: bool,
     },
+    SetScreenCapturePermission {
+        subject: String,
+        allowed: bool,
+    },
     AddPrinter {
         name: String,
         uri: String,

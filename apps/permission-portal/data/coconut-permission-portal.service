@@ -1,0 +1,10 @@
+[Unit]
+Description=Coconut permission service and consent prompts
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=dbus
+BusName=org.coconut.Permissions
+ExecStart="/usr/bin/coconut-permission-portal" --service
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=%t/bus
