@@ -1,5 +1,7 @@
 use crate::{browser::BrowserState, window::WindowRequest};
-use creamui_render::{AppBuilder, AppHandle, BlurRegion, WindowHandle, WindowOptions};
+use creamui_render::{
+    AppBuilder, AppHandle, BlurRegion, RenderBackend, WindowHandle, WindowOptions,
+};
 use creamui_theme::{Color, Theme};
 use creamui_theme_watch::ThemeListener;
 use std::{
@@ -23,6 +25,7 @@ pub fn show_window(request: WindowRequest) -> Option<crate::portal::PortalSelect
         decorations: true,
         blur: Some(BlurRegion::Window),
         theme: load_system_theme(),
+        backend: RenderBackend::Cpu,
         ..Default::default()
     };
     let theme_events = Arc::new(Mutex::new(ThemeListener::start()));
@@ -61,6 +64,7 @@ pub fn show_settings() {
         decorations: true,
         blur: Some(BlurRegion::Window),
         theme: load_system_theme(),
+        backend: RenderBackend::Cpu,
         ..Default::default()
     };
     let theme_events = Arc::new(Mutex::new(ThemeListener::start()));
