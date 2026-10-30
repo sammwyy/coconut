@@ -87,3 +87,5 @@
 - The permission portal does not yet implement the XDG PermissionStore
   database itself, so `xdg-desktop-portal` clients that query it directly
   keep using `xdg-permission-store`.
+- `apps/screenshots` has no generic XDG Screenshot fallback for Wayland
+  compositors without `wlr-screencopy` or KWin's `ScreenShot2` interface.

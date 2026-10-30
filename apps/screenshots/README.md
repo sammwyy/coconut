@@ -12,9 +12,14 @@ coconut-screenshots --help
 
 Launching with no arguments captures the whole screen and opens a maximized,
 undecorated editor with the desktop dimmed behind it. Works on Wayland
-(`wlr-screencopy` + `xdg-output`) and X11 (root window image) — the app picks
-the backend from `WAYLAND_DISPLAY`/`DISPLAY` and stays independent of the
-running compositor.
+(`wlr-screencopy` + `xdg-output`, or KWin's `ScreenShot2` API) and X11
+(root window image). The app picks the backend from `WAYLAND_DISPLAY`/`DISPLAY`.
+On KWin it requests `CaptureWorkspace`, reads raw pixels asynchronously from
+a pipe, and uses the returned dimensions, row stride, and QImage format.
+The installed desktop entry declares the restricted screenshot interface
+required by Plasma versions that enforce that permission. Other Wayland
+compositors must offer `wlr-screencopy`; there is no generic XDG Screenshot
+fallback yet.
 
 ## Selecting
 
@@ -58,3 +63,14 @@ Coconut ships three shell shortcuts, editable under Settings → Keyboard:
 | `Print` | Take screenshot (opens the editor) |
 | `Ctrl+Print` | Capture screen (`--screen`) |
 | `Ctrl+Shift+Print` | Capture and save as (`--screen --save-as`) |
+
+## Validation
+
+```bash
+cargo test -p coconut-screenshots
+cargo clippy -p coconut-screenshots --all-targets --no-deps -- -D warnings
+```
+
+KWin tests cover padded raw pixels, alpha conversion, invalid metadata,
+truncated and timed-out streams, and a private D-Bus backend that writes
+pixels after replying to `CaptureWorkspace`. They require `dbus-daemon`.

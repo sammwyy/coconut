@@ -113,6 +113,7 @@ fn user_installer_installs_theme_integrations_and_preserves_existing_policy() {
     let screenshots =
         fs::read_to_string(data.join("applications/coconut-screenshots.desktop")).unwrap();
     assert!(screenshots.contains("Exec=coconut-screenshots"));
+    assert!(screenshots.contains("X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2"));
     assert!(install_root.join("bin/coconut-permission-portal").exists());
     let permissions =
         fs::read_to_string(data.join("dbus-1/services/org.coconut.Permissions.service")).unwrap();
