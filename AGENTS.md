@@ -1,5 +1,6 @@
 # Development guidance
 
+Follow [CONTRIBUTING.md](CONTRIBUTING.md) for contribution and commit rules.
 Read [CODESTYLE.md](CODESTYLE.md) before changing source code.
 
 For work under `apps/`, or changes to shared application UI, follow

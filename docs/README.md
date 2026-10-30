@@ -2,6 +2,8 @@
 
 ## Development
 
+- [Contributing](../CONTRIBUTING.md): commit conventions, change boundaries, and
+  contribution checks.
 - [Shell and session development](dev/SHELL.md): toolchain, sibling repositories,
   system dependencies, shell/background/settings launch commands, greeter previews,
   release staging, installation, and troubleshooting.

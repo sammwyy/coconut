@@ -107,6 +107,8 @@ from MET Norway. Disabling the widget prevents new weather requests.
 
 See the [development documentation](docs/README.md):
 
+- [Contributing](CONTRIBUTING.md): commit conventions, change boundaries, and
+  contribution checks.
 - [Shell and session development](docs/dev/SHELL.md): checkout layout, native
   dependencies, build commands, greeter previews, and troubleshooting.
 - [Application development](docs/dev/APPS.md): architecture, CreamUI components,
