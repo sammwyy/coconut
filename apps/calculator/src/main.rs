@@ -3,7 +3,7 @@ use coconut_calculator::{
     appearance,
     navigation::Mode,
 };
-use creamui_render::{AppBuilder, WindowOptions};
+use creamui_render::{AppBuilder, RenderBackend, WindowOptions};
 use creamui_theme_watch::ThemeListener;
 use std::sync::{Arc, Mutex};
 
@@ -35,6 +35,7 @@ fn main() -> Result<(), String> {
         height: sizing.default.1,
         theme: appearance::load_system_theme(),
         decorations: true,
+        backend: RenderBackend::Cpu,
         ..Default::default()
     };
     AppBuilder::new()

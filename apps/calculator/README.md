@@ -12,7 +12,8 @@ ccalc --help
 The app follows the system theme and preferred font, including live appearance
 changes. Linux supports Wayland and X11 with optional Blair/KWin integration.
 The manifest also selects CreamUI's Windows backend; Windows runtime behavior
-has not been validated.
+has not been validated. Windows render through CreamUI's CPU backend;
+`CUI_OVERRIDE_RENDER_BACKEND=gpu` opts into `wgpu` per launch.
 
 ## Navigation and window sizes
 
