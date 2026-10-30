@@ -36,6 +36,7 @@ stay calm, responsive, and consistent.
 | `coconut-settings` | Open Coconut Settings directly. |
 | `coconut-bg` | Render the desktop background directly. |
 | `coconut terminal` | Start the terminal emulator. |
+| `cedit [FILE ...]` | Open CEdit, the text, code, Markdown and byte editor. |
 | `cterm --settings` | Open Terminal Settings. |
 | `coconut files` | Start the file manager. |
 | `cfiles --settings` | Open File Explorer settings. |

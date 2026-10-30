@@ -83,6 +83,9 @@ pollster = "0.3"
 portable-pty = "0.9"
 raw-window-handle = "0.6"
 regex = "1"
+unicode-width = "0.2"
+ropey = "1.6"
+pulldown-cmark = "0.13"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "gzip", "json", "rustls-tls"] }
 resvg = "0.45.1"
 rfd = { version = "0.17", default-features = false }

@@ -25,6 +25,7 @@ PACKAGES=(
     coconut-files:cfiles
     coconut-monitor:cmonitor
     coconut-media-player:cplayer
+    coconut-editor:cedit
 )
 
 pkgs=()

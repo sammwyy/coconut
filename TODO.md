@@ -58,3 +58,6 @@
   support Ctrl/Shift selection in the browser and return every selected file
   as a URI in the FileChooser portal response. (Inherited from the dfiles
   TODO.)
+- Extend CEdit with soft wrapping, multiple cursors and rectangular selections.
+- Extend CEdit's source-aligned Markdown renderer with table layout, reference
+  links and multiline inline formatting.
