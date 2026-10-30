@@ -81,9 +81,6 @@
   connecting process (`/proc/<pid>/exe`) or its Flatpak app id. Permanent
   grants therefore apply to every script run by an interpreter binary such
   as `python3`; granting an interpreter "always" is a user decision.
-- Blair's `integrations.screencopy` policy (`allow`, `ask`, `ask-safe`,
-  `deny`) only governs the `wlr-screencopy` global; it cannot mediate other
-  compositor-owned capture paths.
 - The permission portal does not yet implement the XDG PermissionStore
   database itself, so `xdg-desktop-portal` clients that query it directly
   keep using `xdg-permission-store`.

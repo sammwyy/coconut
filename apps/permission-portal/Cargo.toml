@@ -14,6 +14,7 @@ path = "src/main.rs"
 [dependencies]
 coconut-integration-cream.workspace = true
 delib.workspace = true
+futures-util.workspace = true
 creamui-core.workspace = true
 creamui-reactive.workspace = true
 creamui-theme.workspace = true

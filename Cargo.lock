@@ -1094,6 +1094,7 @@ dependencies = [
  "creamui-theme-watch",
  "creamui-widgets",
  "delib",
+ "futures-util",
  "serde",
  "serde_json",
  "tempfile",

@@ -15,18 +15,28 @@ The service is activated through `org.coconut.Permissions.service` or its
 systemd user unit. It exposes:
 
 - `org.coconut.Permissions1` at `/org/coconut/Permissions1`: `Ask`,
-  `Decide`, `DescribeRequest`, `List`, `Revoke`, `SetDecision`, `Forget`,
-  `Manage`, and the `Changed` signal.
+  `BeginRequest`, `WaitRequest`, `CancelRequest`, `Decide`, `DescribeRequest`,
+  `List`, `Revoke`, `SetDecision`, `Forget`, `Manage`, and the `Changed` signal.
 - `org.freedesktop.impl.portal.Access` at
   `/org/freedesktop/portal/desktop`: the XDG Access backend selected by
   `coconut-permissions.portal` and `coconut-portals.conf`.
 
 ## Consent and caller identity
 
-Only the D-Bus connection owning `org.blair.Compositor` may call `Ask` on
-behalf of a screen-capture client. Blair supplies the executable path from
+Only the D-Bus connection owning `org.blair.Compositor` may begin a capture
+permission request on behalf of a Wayland or D-Bus client. Blair supplies the
+executable path from
 `/proc/<pid>/exe` or the verified `flatpak:<app-id>` subject. The service
 currently accepts `screen-capture` requests.
+
+`BeginRequest(subject, permission)` returns a request ID immediately, allowing
+the compositor to cancel it even while the consent dialog is open.
+`WaitRequest(id)` returns `allow` or `deny`; `CancelRequest(id)` cancels only
+that caller's request. A cancelled waiter is removed from its shared prompt,
+and the final cancellation closes the prompt and reaps its process. The
+service also cancels native requests when their D-Bus owner disconnects.
+At most 256 native requests may be outstanding. The original blocking `Ask`
+method remains available for older compositor clients.
 
 An unknown decision opens a separate `--prompt <request-id>` process.
 Only that child's PID may describe or decide its request; manually starting
@@ -75,7 +85,9 @@ this service does not provide process isolation.
 
 Blair's `integrations.screencopy` policy controls enforcement: `allow` and
 `deny` bypass the service, `ask` denies when it is unreachable, and `ask-safe`
-allows instead. This policy covers Blair's `wlr-screencopy` capture path.
+allows instead. This policy covers Blair's `wlr-screencopy` capture path and
+its D-Bus `Screenshot` method. Install the current portal before updating Blair
+so its cancellable native protocol is available.
 
 ## Validation
 
@@ -89,7 +101,8 @@ PERMISSION_PORTAL_PREVIEW_DIR=/tmp/coconut-permission-previews \
 The D-Bus tests start private `dbus-daemon` instances and separate prompt
 processes. They exercise caller authentication, concurrent calls, stored and
 one-time decisions, coalescing, cancellation, timeouts, storage failures, and
-standard Access replies and choices. Scene tests render the dialog in light
-and dark themes at normal and compact sizes.
+standard Access replies and choices, native request ownership, shared-prompt
+cancellation, and compositor disconnection. Scene tests render the dialog in
+light and dark themes at normal and compact sizes.
 
 Other known limitations are tracked in the root `TODO.md`.

@@ -68,6 +68,7 @@ coconut-plugin-weather = { path = "plugins/weather" }
 
 # crates.io.
 anyhow = "1"
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
 arboard = "3"
 chrono = "0.4"
 dbus = "0.9"

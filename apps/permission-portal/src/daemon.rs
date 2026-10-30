@@ -2,6 +2,7 @@ use crate::{
     identity,
     store::{store_path, Store, Verdict, SCREEN_CAPTURE},
 };
+use futures_util::StreamExt;
 use std::{
     collections::HashMap,
     path::PathBuf,
@@ -58,14 +59,21 @@ impl Answer {
 struct Pending {
     spec: PromptSpec,
     pair: Option<(String, String)>,
-    waiters: Vec<oneshot::Sender<Answer>>,
+    waiters: Vec<(Option<String>, oneshot::Sender<Answer>)>,
     prompt_pid: Option<u32>,
     stop: Option<oneshot::Sender<()>>,
+}
+
+struct NativeRequest {
+    owner: String,
+    prompt: Option<String>,
+    receiver: Option<oneshot::Receiver<Answer>>,
 }
 
 struct Daemon {
     store: Mutex<Store>,
     pending: Mutex<HashMap<String, Pending>>,
+    native: Mutex<HashMap<String, NativeRequest>>,
     seq: AtomicU64,
     prompt_executable: PathBuf,
     settings: PathBuf,
@@ -85,6 +93,7 @@ impl Daemon {
         Self {
             store: Mutex::new(store),
             pending: Mutex::new(HashMap::new()),
+            native: Mutex::new(HashMap::new()),
             seq: AtomicU64::new(0),
             settings: directory.join("coconut-settings"),
             prompt_timeout: PROMPT_TIMEOUT,
@@ -97,6 +106,15 @@ impl Daemon {
         spec: PromptSpec,
         pair: Option<(String, String)>,
     ) -> (String, oneshot::Receiver<Answer>, bool) {
+        self.register_for(spec, pair, None)
+    }
+
+    fn register_for(
+        &self,
+        spec: PromptSpec,
+        pair: Option<(String, String)>,
+        request: Option<String>,
+    ) -> (String, oneshot::Receiver<Answer>, bool) {
         let (tx, rx) = oneshot::channel();
         let mut pending = self.pending.lock().unwrap();
         if let Some(pair) = &pair {
@@ -104,7 +122,7 @@ impl Daemon {
                 .iter_mut()
                 .find(|(_, entry)| entry.pair.as_ref() == Some(pair))
             {
-                entry.waiters.push(tx);
+                entry.waiters.push((request, tx));
                 return (id.clone(), rx, false);
             }
         }
@@ -114,7 +132,7 @@ impl Daemon {
             Pending {
                 spec,
                 pair,
-                waiters: vec![tx],
+                waiters: vec![(request, tx)],
                 prompt_pid: None,
                 stop: None,
             },
@@ -124,7 +142,7 @@ impl Daemon {
 
     fn deliver(&self, id: &str, answer: Answer) {
         if let Some(pending) = self.pending.lock().unwrap().remove(id) {
-            for waiter in pending.waiters {
+            for (_, waiter) in pending.waiters {
                 let _ = waiter.send(answer.clone());
             }
         }
@@ -178,6 +196,42 @@ impl Daemon {
             }
         }
         (id, rx)
+    }
+
+    fn cancel_native(&self, owner: &str, id: &str) -> bool {
+        let request = {
+            let mut native = self.native.lock().unwrap();
+            if !native.get(id).is_some_and(|request| request.owner == owner) {
+                return false;
+            }
+            native.remove(id).unwrap()
+        };
+        if let Some(prompt) = request.prompt {
+            let mut pending = self.pending.lock().unwrap();
+            if let Some(entry) = pending.get_mut(&prompt) {
+                entry
+                    .waiters
+                    .retain(|(request, _)| request.as_deref() != Some(id));
+                if entry.waiters.is_empty() {
+                    pending.remove(&prompt);
+                }
+            }
+        }
+        true
+    }
+
+    fn cancel_owner(&self, owner: &str) {
+        let ids: Vec<_> = self
+            .native
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(_, request)| request.owner == owner)
+            .map(|(id, _)| id.clone())
+            .collect();
+        for id in ids {
+            self.cancel_native(owner, &id);
+        }
     }
 
     async fn emit_changed(connection: &Connection) {
@@ -276,6 +330,109 @@ impl Permissions {
             .into())
     }
 
+    async fn begin_request(
+        &self,
+        subject: String,
+        permission: String,
+        #[zbus(header)] header: Header<'_>,
+        #[zbus(connection)] connection: &Connection,
+    ) -> fdo::Result<String> {
+        identity::require_owner("org.blair.Compositor", &header, connection).await?;
+        if permission != SCREEN_CAPTURE
+            || !(subject.starts_with('/') || subject.starts_with("flatpak:"))
+            || subject.len() > 4096
+        {
+            return Err(fdo::Error::InvalidArgs(
+                "Unsupported capture request".into(),
+            ));
+        }
+        let owner = header.sender().unwrap().to_string();
+        let id = format!(
+            "request-{}",
+            self.daemon.seq.fetch_add(1, Ordering::Relaxed)
+        );
+        let mut native = self.daemon.native.lock().unwrap();
+        if native.len() >= 256 {
+            return Err(fdo::Error::LimitsExceeded(
+                "Too many capture permission requests".into(),
+            ));
+        }
+        let verdict = self
+            .daemon
+            .store
+            .lock()
+            .unwrap()
+            .lookup(&subject, &permission);
+        let (prompt, rx, fresh) = if let Some(verdict) = verdict {
+            let (tx, rx) = oneshot::channel();
+            let _ = tx.send(Answer {
+                verdict,
+                choices: Vec::new(),
+            });
+            (None, rx, false)
+        } else {
+            let (prompt, rx, fresh) = self.daemon.register_for(
+                capture_spec(&subject),
+                Some((subject, permission)),
+                Some(id.clone()),
+            );
+            (Some(prompt), rx, fresh)
+        };
+        native.insert(
+            id.clone(),
+            NativeRequest {
+                owner,
+                prompt: prompt.clone(),
+                receiver: Some(rx),
+            },
+        );
+        drop(native);
+        if fresh {
+            let prompt = prompt.unwrap();
+            if let Err(error) = self.daemon.spawn_prompt(prompt.clone()) {
+                failure(error);
+                self.daemon.deliver(&prompt, Answer::denied());
+            }
+        }
+        Ok(id)
+    }
+
+    async fn wait_request(
+        &self,
+        request_id: String,
+        #[zbus(header)] header: Header<'_>,
+    ) -> fdo::Result<String> {
+        let owner = header
+            .sender()
+            .ok_or_else(|| fdo::Error::AccessDenied("Missing caller".into()))?
+            .to_string();
+        let receiver = {
+            let mut native = self.daemon.native.lock().unwrap();
+            let request = native
+                .get_mut(&request_id)
+                .filter(|request| request.owner == owner)
+                .ok_or_else(|| fdo::Error::AccessDenied("Unknown capture request".into()))?;
+            request
+                .receiver
+                .take()
+                .ok_or_else(|| fdo::Error::InvalidArgs("Request already has a waiter".into()))?
+        };
+        let answer = receiver.await.unwrap_or_else(|_| Answer::denied());
+        self.daemon.native.lock().unwrap().remove(&request_id);
+        Ok(answer.verdict.name().into())
+    }
+
+    async fn cancel_request(
+        &self,
+        request_id: String,
+        #[zbus(header)] header: Header<'_>,
+    ) -> fdo::Result<bool> {
+        let owner = header
+            .sender()
+            .ok_or_else(|| fdo::Error::AccessDenied("Missing caller".into()))?;
+        Ok(self.daemon.cancel_native(owner.as_str(), &request_id))
+    }
+
     async fn decide(
         &self,
         request_id: String,
@@ -315,7 +472,7 @@ impl Permissions {
             }
             pending.remove(&request_id).unwrap()
         };
-        for waiter in pending.waiters {
+        for (_, waiter) in pending.waiters {
             let _ = waiter.send(Answer {
                 verdict,
                 choices: choices.clone(),
@@ -645,9 +802,52 @@ async fn connect(daemon: Arc<Daemon>, connection: Connection) -> Result<Connecti
         .await
         .map_err(|error| error.to_string())?;
     server
-        .at(ACCESS_PATH, Access { daemon })
+        .at(
+            ACCESS_PATH,
+            Access {
+                daemon: daemon.clone(),
+            },
+        )
         .await
         .map_err(|error| error.to_string())?;
+    let rule = zbus::MatchRule::builder()
+        .msg_type(zbus::message::Type::Signal)
+        .sender("org.freedesktop.DBus")
+        .map_err(|error| error.to_string())?
+        .interface("org.freedesktop.DBus")
+        .map_err(|error| error.to_string())?
+        .member("NameOwnerChanged")
+        .map_err(|error| error.to_string())?
+        .build();
+    let mut owners = zbus::MessageStream::for_match_rule(rule, &connection, Some(64))
+        .await
+        .map_err(|error| error.to_string())?;
+    tokio::spawn(async move {
+        while let Some(message) = owners.next().await {
+            match message
+                .and_then(|message| message.body().deserialize::<(String, String, String)>())
+            {
+                Ok((name, _, new_owner)) if name.starts_with(':') && new_owner.is_empty() => {
+                    daemon.cancel_owner(&name)
+                }
+                Err(error) => {
+                    failure(error);
+                    break;
+                }
+                _ => {}
+            }
+        }
+        let owners: Vec<_> = daemon
+            .native
+            .lock()
+            .unwrap()
+            .values()
+            .map(|request| request.owner.clone())
+            .collect();
+        for owner in owners {
+            daemon.cancel_owner(&owner);
+        }
+    });
     connection
         .request_name(SERVICE)
         .await

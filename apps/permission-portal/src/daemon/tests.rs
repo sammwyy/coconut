@@ -488,3 +488,121 @@ async fn settings_changes_succeed_and_report_failed_writes_to_the_caller() {
     assert!(proxy.forget("app".into()).await.is_err());
     assert_eq!(proxy.list().await.unwrap()[0].2, "deny");
 }
+
+#[tokio::test]
+async fn native_cancellation_is_owned_and_preserves_other_waiters() {
+    let bus = Bus::new();
+    let root = tempfile::tempdir().unwrap();
+    let daemon = daemon(root.path(), &bus, "hold");
+    let _server = connect(daemon.clone(), bus.connection().await)
+        .await
+        .unwrap();
+    let connection = bus.connection().await;
+    connection
+        .request_name("org.blair.Compositor")
+        .await
+        .unwrap();
+    let proxy = PermissionsProxy::new(&connection).await.unwrap();
+    let first = proxy
+        .begin_request("/usr/bin/grim".into(), SCREEN_CAPTURE.into())
+        .await
+        .unwrap();
+    let second = proxy
+        .begin_request("/usr/bin/grim".into(), SCREEN_CAPTURE.into())
+        .await
+        .unwrap();
+    let (prompt, pid) = wait_prompt(&daemon).await;
+    assert_eq!(daemon.pending.lock().unwrap().len(), 1);
+    assert_eq!(daemon.pending.lock().unwrap()[&prompt].waiters.len(), 2);
+    let attacker_connection = bus.connection().await;
+    let attacker = PermissionsProxy::new(&attacker_connection).await.unwrap();
+    assert!(attacker
+        .begin_request("/usr/bin/grim".into(), SCREEN_CAPTURE.into())
+        .await
+        .is_err());
+    assert!(attacker.wait_request(first.clone()).await.is_err());
+    assert!(!attacker.cancel_request(first.clone()).await.unwrap());
+    let waiter = proxy.clone();
+    let first_wait = first.clone();
+    let wait = tokio::spawn(async move { waiter.wait_request(first_wait).await });
+    tokio::time::timeout(Duration::from_secs(2), async {
+        while daemon.native.lock().unwrap()[&first].receiver.is_some() {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert!(proxy.cancel_request(first).await.unwrap());
+    assert_eq!(wait.await.unwrap().unwrap(), "deny");
+    assert_eq!(daemon.pending.lock().unwrap()[&prompt].waiters.len(), 1);
+    assert!(proxy.cancel_request(second).await.unwrap());
+    assert!(daemon.pending.lock().unwrap().is_empty());
+    tokio::time::timeout(Duration::from_secs(2), async {
+        while std::path::Path::new(&format!("/proc/{pid}")).exists() {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert!(daemon.native.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn native_stored_verdicts_return_without_opening_a_prompt() {
+    let bus = Bus::new();
+    let root = tempfile::tempdir().unwrap();
+    let daemon = daemon(root.path(), &bus, "hold");
+    daemon
+        .store
+        .lock()
+        .unwrap()
+        .set("/usr/bin/grim", SCREEN_CAPTURE, Verdict::Allow)
+        .unwrap();
+    let _server = connect(daemon.clone(), bus.connection().await)
+        .await
+        .unwrap();
+    let connection = bus.connection().await;
+    connection
+        .request_name("org.blair.Compositor")
+        .await
+        .unwrap();
+    let proxy = PermissionsProxy::new(&connection).await.unwrap();
+    let id = proxy
+        .begin_request("/usr/bin/grim".into(), SCREEN_CAPTURE.into())
+        .await
+        .unwrap();
+    assert_eq!(proxy.wait_request(id).await.unwrap(), "allow");
+    assert!(daemon.pending.lock().unwrap().is_empty());
+    assert!(daemon.native.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn native_requests_are_cancelled_when_the_compositor_disconnects() {
+    let bus = Bus::new();
+    let root = tempfile::tempdir().unwrap();
+    let daemon = daemon(root.path(), &bus, "hold");
+    let _server = connect(daemon.clone(), bus.connection().await)
+        .await
+        .unwrap();
+    let connection = bus.connection().await;
+    connection
+        .request_name("org.blair.Compositor")
+        .await
+        .unwrap();
+    let proxy = PermissionsProxy::new(&connection).await.unwrap();
+    proxy
+        .begin_request("/usr/bin/grim".into(), SCREEN_CAPTURE.into())
+        .await
+        .unwrap();
+    wait_prompt(&daemon).await;
+    connection.close().await.unwrap();
+    tokio::time::timeout(Duration::from_secs(3), async {
+        while !daemon.pending.lock().unwrap().is_empty()
+            || !daemon.native.lock().unwrap().is_empty()
+        {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .expect("compositor requests were retained after disconnect");
+}
