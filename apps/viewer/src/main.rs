@@ -1,5 +1,5 @@
 use coconut_image_viewer::{app::State, appearance};
-use creamui_render::{AppBuilder, WindowOptions};
+use creamui_render::{AppBuilder, RenderBackend, WindowOptions};
 use creamui_theme_watch::ThemeListener;
 use std::{
     path::PathBuf,
@@ -37,6 +37,7 @@ fn main() -> Result<(), String> {
         height: 680,
         theme: appearance::load_system_theme(),
         decorations: true,
+        backend: RenderBackend::Cpu,
         ..Default::default()
     };
     AppBuilder::new()

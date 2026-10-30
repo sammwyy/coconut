@@ -116,7 +116,9 @@ The application does not promise tiled gigapixel viewing.
 
 Linux uses Wayland/X11 and the XDG portal file chooser, with optional Blair/KWin
 window integration. Windows backend dependencies are selected separately;
-Windows runtime behavior has not been validated.
+Windows runtime behavior has not been validated. The window renders through
+CreamUI's CPU backend; `CUI_OVERRIDE_RENDER_BACKEND=gpu` opts into `wgpu` per
+launch.
 
 ## Validation
 
