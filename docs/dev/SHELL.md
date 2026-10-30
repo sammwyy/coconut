@@ -81,7 +81,7 @@ install `cmake qt6-qtbase-devel qt6-qtbase-private-devel`; on Debian/Ubuntu use
 GTK runtime integration needs GLib/GSettings, dconf,
 `gsettings-desktop-schemas`, `xdg-desktop-portal`,
 `xdg-desktop-portal-gtk`, and `xsettingsd` for X11/XWayland clients.
-See [THEMES.md](../../THEMES.md) for adapter builds and isolated native tests.
+See [THEMES.md](../THEMES.md) for adapter builds and isolated native tests.
 
 ## Build and run
 

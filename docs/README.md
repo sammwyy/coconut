@@ -11,7 +11,7 @@
 
 ## Desktop integration
 
-- [Themes](../THEMES.md): Coconut, CreamUI, GTK, and Qt appearance integration.
+- [Themes](THEMES.md): Coconut, CreamUI, GTK, and Qt appearance integration.
 - [Project overview](../README.md): applications, session behavior, and platform notes.
 
 The application guide applies to both human contributors and coding agents.
