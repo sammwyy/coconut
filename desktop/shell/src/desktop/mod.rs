@@ -1,3 +1,4 @@
+mod menus;
 use coconut_api::desktop::DesktopWorkArea;
 use coconut_core::{ClickAction, DesktopIconsConfig, IconShape, ShellConfig};
 use coconut_plugin_kit::{pixel_icon, IconRequest, IconResolver};
@@ -151,6 +152,9 @@ fn tile_height_for(
 
 #[derive(Clone)]
 pub struct DesktopState {
+    file_menu: coconut_file_menu::FileMenuController,
+    icon_theme: Rc<RefCell<String>>,
+    load_generation: Rc<Cell<u64>>,
     positions: Signal<HashMap<usize, Point>>,
     entries: Signal<Vec<DesktopEntry>>,
     selected: Signal<Option<usize>>,
@@ -176,6 +180,9 @@ pub struct DesktopState {
 impl Default for DesktopState {
     fn default() -> Self {
         Self {
+            file_menu: coconut_file_menu::FileMenuController::new(),
+            icon_theme: Rc::new(RefCell::new(String::new())),
+            load_generation: Rc::new(Cell::new(0)),
             positions: Signal::new(HashMap::new()),
             entries: Signal::new(Vec::new()),
             selected: Signal::new(None),
@@ -189,14 +196,59 @@ impl Default for DesktopState {
 
 impl DesktopState {
     pub fn start_loading(&self, app: &AppHandle, icon_theme: String) {
-        let entries = self.entries.clone();
+        *self.icon_theme.borrow_mut() = icon_theme.clone();
+        let generation = self.load_generation.get().wrapping_add(1);
+        self.load_generation.set(generation);
+        let state = self.clone();
         app.spawn_background(
             move || load_entries(&icon_theme),
-            move |next| entries.set(next),
+            move |next| {
+                if state.load_generation.get() != generation {
+                    return;
+                }
+                let previous = state.entries.peek();
+                let positions = state.positions.peek();
+                let selected = state
+                    .selected
+                    .peek()
+                    .and_then(|index| previous.get(index))
+                    .map(|entry| entry.path.clone());
+                let previous_positions: HashMap<_, _> = positions
+                    .iter()
+                    .filter_map(|(index, position)| {
+                        Some((previous.get(*index)?.path.clone(), *position))
+                    })
+                    .collect();
+                let next_positions = next
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(index, entry)| {
+                        Some((index, *previous_positions.get(&entry.path)?))
+                    })
+                    .collect();
+                let next_selected =
+                    selected.and_then(|path| next.iter().position(|entry| entry.path == path));
+                creamui_reactive::batch(|| {
+                    state.selected.set(next_selected);
+                    state.positions.set(next_positions);
+                    state.entries.set(next);
+                });
+            },
         );
     }
 
     pub fn set_desktop_window(&self, window: WindowHandle) {
+        let pending = self.file_menu.clone();
+        window.on_pointer_button(move |button, pressed, _| {
+            if pressed && button == creamui_render::platform::MouseButton::Left {
+                pending.cancel_pending();
+            }
+            false
+        });
+        let keys = self.file_menu.clone();
+        window.on_keyboard_input(move |event, _| keys.handle_key(&event.key, event.pressed));
+        let blur = self.file_menu.clone();
+        window.on_focus_lost(move || blur.parent_focus_lost());
         *self.desktop_window.borrow_mut() = Some(window);
     }
 }
@@ -220,6 +272,7 @@ enum EntryKind {
 
 #[derive(Clone)]
 struct DesktopEntry {
+    path: PathBuf,
     label: String,
     icon: Option<ImageData>,
     kind: EntryKind,
@@ -242,6 +295,12 @@ pub fn build(
     let dock_position = shell.dockbar.position;
     let dock_thickness = shell.dockbar.thickness.max(1.0);
     let work_area = usable_area(viewport, work_area.get(), dock_position, dock_thickness);
+    let context = state.clone();
+    let mut layers = vec![
+        widget_layer(),
+        icon_layer(viewport, state.clone(), layout, work_area),
+    ];
+    layers.extend(state.file_menu.overlays(viewport));
     Box::new(
         RawView::new(
             Style::new()
@@ -251,10 +310,17 @@ pub fn build(
                 })
                 .background(TRANSPARENT),
         )
-        .with_children(vec![
-            widget_layer(),
-            icon_layer(viewport, state, layout, work_area),
-        ]),
+        .with_context_menu(move |point| {
+            creamui_reactive::batch(|| {
+                context.selected.set(None);
+                context.last_click.set(None);
+            });
+            context.open_context_menu(
+                point,
+                coconut_file_menu::FileMenuTarget::Background(desktop_directory()),
+            );
+        })
+        .with_children(layers),
     )
 }
 
@@ -312,6 +378,9 @@ fn desktop_icon(
     work_area: Rect,
     selected: bool,
 ) -> BoxedWidget {
+    let context = state.clone();
+    let context_path = entry.path.clone();
+    let context_directory = matches!(entry.kind, EntryKind::Folder);
     let click_target = entry.target.clone();
     let click_state = state.clone();
     let click_action = layout.click;
@@ -346,6 +415,19 @@ fn desktop_icon(
                 }
             },
         )
+        .with_context_menu(move |point| {
+            creamui_reactive::batch(|| {
+                context.selected.set(Some(index));
+                context.last_click.set(None);
+            });
+            context.open_context_menu(
+                point,
+                coconut_file_menu::FileMenuTarget::Item {
+                    path: context_path.clone(),
+                    directory: context_directory,
+                },
+            );
+        })
         .with_drag_start(move |local, _| {
             drag_start_grab.set(local);
             if let Some(window) = drag_start_window.borrow().as_ref() {
@@ -484,6 +566,7 @@ fn desktop_entry(path: PathBuf, icons: &IconResolver) -> Option<DesktopEntry> {
     }
     if path.is_dir() {
         return Some(DesktopEntry {
+            path: path.clone(),
             label: name.to_owned(),
             icon: load_best_icon(icons, &folder_icon_names(&path), ICON_RASTER_SIZE),
             kind: EntryKind::Folder,
@@ -497,6 +580,7 @@ fn desktop_entry(path: PathBuf, icons: &IconResolver) -> Option<DesktopEntry> {
         return launcher_entry(&path, icons);
     }
     Some(DesktopEntry {
+        path: path.to_path_buf(),
         label: name.to_owned(),
         icon: load_best_icon(icons, &file_icon_names(&path), ICON_RASTER_SIZE),
         kind: EntryKind::File,
@@ -529,6 +613,7 @@ fn launcher_entry(path: &Path, icons: &IconResolver) -> Option<DesktopEntry> {
         .get("Icon")
         .and_then(|name| icons.load(IconRequest::named(*name, ICON_RASTER_SIZE)));
     Some(DesktopEntry {
+        path: path.to_path_buf(),
         label: fields
             .get("Name[en_US]")
             .or_else(|| fields.get("Name[en]"))
@@ -893,6 +978,66 @@ mod tests {
             ColorScheme::default(),
             Color::rgb(255, 255, 255),
         )
+    }
+
+    #[test]
+    fn desktop_secondary_click_selects_icons_and_background_clears_selection() {
+        creamui_reactive::with_context_scope(|| {
+            creamui_reactive::provide_context(creamui_theme::ThemeProvider::new(
+                creamui_theme::Theme::light(),
+            ));
+            let state = DesktopState::default();
+            let path = PathBuf::from("/tmp/document.txt");
+            state.entries.set(vec![DesktopEntry {
+                path: path.clone(),
+                label: "Document".into(),
+                icon: None,
+                kind: EntryKind::File,
+                target: DesktopTarget::Path(path),
+            }]);
+            state.positions.update(|positions| {
+                positions.insert(0, Point { x: 80.0, y: 80.0 });
+            });
+            let size = Size {
+                width: 900.0,
+                height: 600.0,
+            };
+            let mut recorder = creamui_render::SceneRecorder::new();
+            recorder.begin(900, 600, 1.0, TRANSPARENT, use_theme().colors);
+            let scene = creamui_core::Renderer::new().render(
+                build(
+                    size,
+                    state.clone(),
+                    Signal::new(ShellConfig::default()),
+                    Signal::new(None),
+                ),
+                size,
+                &mut recorder,
+            );
+            let shell = ShellConfig::default();
+            let layout = IconLayout::from_config(
+                &shell.desktop.icons,
+                use_theme().colors,
+                Color::rgb(255, 255, 255),
+            );
+            let area = usable_area(
+                size,
+                None,
+                shell.dockbar.position,
+                shell.dockbar.thickness.max(1.0),
+            );
+            let position = icon_position_in_area(Point { x: 80.0, y: 80.0 }, size, &layout, area);
+            let icon = Point {
+                x: position.x + 10.0,
+                y: position.y + 10.0,
+            };
+            scene.context_menu_at(icon).unwrap()(icon);
+            assert_eq!(state.selected.peek(), Some(0));
+            assert!(state.last_click.get().is_none());
+            let background = Point { x: 700.0, y: 450.0 };
+            scene.context_menu_at(background).unwrap()(background);
+            assert_eq!(state.selected.peek(), None);
+        });
     }
 
     #[test]

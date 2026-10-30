@@ -8,6 +8,9 @@ pub(crate) fn home_view(b: &BrowserState, tab: &Tab, width: f32) -> BoxedWidget 
     for path in b.pins.get().into_iter().filter(|p| matches(p)) {
         let state = b.clone();
         let name = files::name(&path);
+        let context = b.clone();
+        let context_path = path.clone();
+        let selected = tab.selected.as_ref() == Some(&path);
         cards.push(Box::new(
             button(
                 pad(
@@ -18,13 +21,22 @@ pub(crate) fn home_view(b: &BrowserState, tab: &Tab, width: f32) -> BoxedWidget 
                     12.0,
                     8.0,
                 ),
-                false,
+                selected,
                 move || state.navigate(Location::Directory(path.clone())),
                 vec![
                     glyph(b, "folder-large", 76.0, t.colors.accent),
                     label(short(&name, 16), 13.0, false),
                 ],
             )
+            .with_context_menu(move |point| {
+                context.open_context_menu(
+                    point,
+                    coconut_file_menu::FileMenuTarget::Item {
+                        path: context_path.clone(),
+                        directory: true,
+                    },
+                )
+            })
             .width(116.0),
         ) as BoxedWidget);
     }
@@ -48,6 +60,9 @@ pub(crate) fn home_view(b: &BrowserState, tab: &Tab, width: f32) -> BoxedWidget 
     {
         let state = b.clone();
         let path = drive.path.clone();
+        let context = b.clone();
+        let context_path = path.clone();
+        let selected = tab.selected.as_ref() == Some(&path);
         let card_width = ((width - 72.0) / 2.0).clamp(210.0, 286.0);
         let mut details = vec![
             label(&drive.label, 13.0, false),
@@ -101,14 +116,27 @@ pub(crate) fn home_view(b: &BrowserState, tab: &Tab, width: f32) -> BoxedWidget 
                     16.0,
                     12.0,
                 ),
-                false,
+                selected,
                 move || state.navigate(Location::Directory(path.clone())),
                 vec![
                     glyph(b, "drive", 40.0, t.colors.accent),
                     view(column(9.0), details),
                 ],
             )
-            .background(t.colors.surface.mix(t.colors.text_secondary, 0.055)),
+            .with_context_menu(move |point| {
+                context.open_context_menu(
+                    point,
+                    coconut_file_menu::FileMenuTarget::Item {
+                        path: context_path.clone(),
+                        directory: true,
+                    },
+                )
+            })
+            .background(if selected {
+                t.colors.selection_background
+            } else {
+                t.colors.surface.mix(t.colors.text_secondary, 0.055)
+            }),
         ) as BoxedWidget);
     }
     let mut recent_rows = Vec::new();

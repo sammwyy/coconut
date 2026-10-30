@@ -442,6 +442,8 @@ pub(crate) fn columns_view(b: &BrowserState, tab: &Tab, width: f32) -> BoxedWidg
             .get(index)
             .cloned()
             .unwrap_or_else(|| tab.scroll.clone());
+        let context = b.clone();
+        let context_path = path.clone();
         columns.push(Box::new(
             RawView::new(Style {
                 flex_grow: 1.0,
@@ -451,6 +453,12 @@ pub(crate) fn columns_view(b: &BrowserState, tab: &Tab, width: f32) -> BoxedWidg
                     height: Dimension::Length(0.0),
                 },
                 ..column(0.0)
+            })
+            .with_context_menu(move |point| {
+                context.open_context_menu(
+                    point,
+                    coconut_file_menu::FileMenuTarget::Background(context_path.clone()),
+                )
             })
             .background(if active_column {
                 t.colors.surface_elevated.mix(t.colors.accent, 0.075)

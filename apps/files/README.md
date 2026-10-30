@@ -73,3 +73,25 @@ cargo fmt --check
 `CFILES_SNAPSHOT_DIR` and `CFILES_SETTINGS_SNAPSHOT_DIR` rasterize rendered
 scenes for visual comparisons and are only used by tests.
 `CFILES_ICON_THEME` overrides the resolved desktop icon theme.
+
+## Context menus
+
+Right-click a file or folder in Grid, List or Columns mode to act on that item
+without opening it. Right-click empty directory space for New, Paste, Sort by,
+hidden files, Refresh and File Explorer settings. In Columns mode the background
+menu acts on the clicked column's directory. Home's pinned folders, drives and
+recent files use the shared item menu. Its background offers Open home folder,
+terminal, explorer, properties and settings actions; creation stays in directory
+views. The chooser disables creation, rename and paste; a Save chooser uses
+Use file name for file items.
+
+Menus and file operation dialogs come from `coconut-file-menu`; generic menu
+presentation and popup hosting come from CreamUI. The native Wayland backend opens
+menus and submenus in compositor-managed popup surfaces at the pointer, allowing
+them outside the File Explorer window. Other backends and failed popup requests
+use the same component inside the window. The shell desktop uses the same common file
+and directory actions. Arrow keys navigate submenus, Enter activates, Left closes
+a submenu, and Escape or an outside click dismisses the menu. File operations run
+in the background and surface failures in a dialog. See the
+[shared crate](../../crates/file-menu/README.md) for integration and clipboard
+support.

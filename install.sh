@@ -20,6 +20,9 @@
 set -e
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_DIR="${COCONUT_BUILD_DIR:-$ROOT/.build}"
+CALLER_PATH="${COCONUT_INSTALL_CALLER_PATH:-$PATH}"
+BINARIES=(coconut coconut-bg coconut-greeter coconut-settings coconut-appearance
+    cterm cfiles cmonitor cplayer cedit ccalc cviewer coconut-screenshots coconut-permission-portal)
 
 # -------------------------------------------------------------- arguments
 
@@ -51,6 +54,11 @@ for arg in "$@"; do
     esac
 done
 
+if [ "$USER_INSTALL" -eq 1 ] && [ "$(id -u)" -eq 0 ]; then
+    echo "install.sh: run --user without sudo; it installs into the invoking user's directories" >&2
+    exit 2
+fi
+
 # ------------------------------------------------------------------ build
 
 # Build as the invoking user, before any sudo elevation, so target/ stays
@@ -68,13 +76,11 @@ if [ "$USER_INSTALL" -eq 0 ] && [ "$(id -u)" -ne 0 ]; then
         echo "install.sh: a system-wide install needs root; install sudo or pass --user" >&2
         exit 1
     fi
-    exec sudo COCONUT_INSTALL_BUILT=1 bash "$ROOT/install.sh" "$@"
+    exec sudo COCONUT_INSTALL_BUILT=1 COCONUT_BUILD_DIR="$BUILD_DIR" \
+        COCONUT_INSTALL_CALLER_PATH="$CALLER_PATH" bash "$ROOT/install.sh" "$@"
 fi
 
 # ---------------------------------------------------------------- binaries
-
-BINARIES=(coconut coconut-bg coconut-greeter coconut-settings coconut-appearance
-    cterm cfiles cmonitor cplayer cedit ccalc cviewer coconut-screenshots coconut-permission-portal)
 
 missing=()
 for bin in "${BINARIES[@]}"; do
@@ -278,4 +284,25 @@ else
         echo "  note: system greeters may need it in /usr/share/wayland-sessions/"
         echo "        (re-run this script with sudo for a system-wide install)"
     fi
+fi
+
+printf '\nInstalled %s staged binaries from %s into %s.\n' "${#BINARIES[@]}" "$BUILD_DIR" "$INSTALL_BIN"
+shadowed=()
+unresolved=()
+for bin in "${BINARIES[@]}"; do
+    resolved="$(PATH="$CALLER_PATH" command -v "$bin" || true)"
+    if [ -z "$resolved" ]; then
+        unresolved+=("$bin")
+    elif [ ! "$resolved" -ef "$INSTALL_BIN/$bin" ]; then
+        shadowed+=("$bin: $resolved")
+    fi
+done
+if [ "${#shadowed[@]}" -ne 0 ]; then
+    echo "Warning: your PATH selects other copies instead of the binaries just installed:"
+    printf '  %s\n' "${shadowed[@]}"
+    echo "Update those copies with --user, remove obsolete installations, or adjust PATH."
+fi
+if [ "${#unresolved[@]}" -ne 0 ]; then
+    echo "Note: these installed commands are not in your PATH: ${unresolved[*]}"
+    echo "Add $INSTALL_BIN to PATH or launch them by their full path."
 fi

@@ -41,6 +41,7 @@ coconut-core = { path = "crates/core", default-features = false }
 coconut-plugin-kit = { path = "crates/plugin-kit" }
 coconut-registry = { path = "crates/registry", default-features = false }
 coconut-ui = { path = "crates/ui" }
+coconut-file-menu = { path = "crates/file-menu" }
 coconut-theme = { path = "crates/theme" }
 coconut-integration-blair = { path = "integrations/blair" }
 coconut-integration-appearance = { path = "integrations/appearance" }

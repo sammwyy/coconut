@@ -154,6 +154,9 @@ pub(crate) fn entry_button(
     entry: files::Entry,
     children: Vec<BoxedWidget>,
 ) -> RawButton {
+    let context = b.clone();
+    let context_path = entry.path.clone();
+    let context_directory = entry.directory;
     let pointer = b.clone();
     let keyboard = b.clone();
     let keyboard_entry = entry.clone();
@@ -169,6 +172,15 @@ pub(crate) fn entry_button(
         },
         children,
     )
+    .with_context_menu(move |point| {
+        context.open_context_menu(
+            point,
+            coconut_file_menu::FileMenuTarget::Item {
+                path: context_path.clone(),
+                directory: context_directory,
+            },
+        )
+    })
     .on_key_press(move |input| {
         if input.key == creamui_core::Key::Enter && !input.modifiers.ctrl {
             // RawButton invokes its click callback after Enter. Consume that

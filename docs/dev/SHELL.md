@@ -88,6 +88,52 @@ See [THEMES.md](../THEMES.md) for adapter builds and isolated native tests.
 From the Coconut checkout:
 
 ```bash
+./dev.sh --build
+./dev.sh
+```
+
+`dev.sh --build` runs `build.sh --no-upx`, then starts Blair with `--run` and
+launches Coconut's shell, background, Appearance, Permissions and FileChooser
+services from `.build/`. Without `--build`, it uses the staged binaries as they
+are. Application launches resolve `.build/` first, including apps opened from
+the shell and file operation menus. The greeter is a separate login process and
+is not started inside the desktop session.
+
+The runner creates a private session bus and fresh XDG configuration, data,
+cache, state and runtime directories under `.build/dev/session-*/`. D-Bus
+activation definitions point to the staged binaries and avoid systemd activation;
+the host session's services and activation environment are left alone. Coconut's
+portal policy selects local Settings, FileChooser and Access implementations;
+the portal broker and optional GTK fallback come from the system installation.
+Install `python3`, `dbus-run-session`, GLib's `gdbus`, `xdg-desktop-portal` and
+the native dependencies listed above. Other system services are not built by
+Coconut. Development preferences start fresh on each run; normal files remain
+accessible through the file manager.
+
+Blair is selected from `.build/blair`, `../blair/.build/blair`,
+`../blair/target/release/blair`, then `PATH`. `--build` builds Coconut; build Blair
+in its checkout separately. Override its executable with `COCONUT_DEV_BLAIR`,
+the broker with `COCONUT_DEV_PORTAL`, or the staging directory with
+`COCONUT_BUILD_DIR`. Forward compositor arguments after `--`, for example
+`./dev.sh -- --profile development`. A graphical parent session selects Blair's
+Winit backend for a nested window; a TTY uses its normal backend selection.
+
+Each run prints its directory. Component logs and a sourceable `environment`
+file remain there after shutdown. To connect another terminal to the running
+development session, source that file and start an app:
+
+```bash
+source .build/dev/session-EXAMPLE/environment
+cfiles
+```
+
+Exit the nested compositor, close the shell, or press Ctrl+C in the launching
+terminal to stop the session and its services. The runner checks service bus
+ownership during startup and while the session is active.
+
+For individual components on your current desktop:
+
+```bash
 cargo build
 cargo run -p coconut-background &
 cargo run -p coconut-shell
@@ -192,12 +238,20 @@ available) and install them, use the repository scripts:
 
 ```bash
 ./build.sh
-sudo ./install.sh
+./install.sh
+# Or install into ~/.local without sudo:
+./install.sh --user
 ```
 
 `build.sh` compiles every installable binary into `.build/`; `install.sh`
-lays them down without compiling, system-wide with `sudo` or under
-`~/.local` without it.
+copies all staged binaries without compiling. Its default is system-wide
+installation into `/usr/bin`, requesting `sudo` when needed. `--user` selects
+`~/.local` and must run without `sudo`. Add `--build` to compile and stage before
+installation; `build.sh --no-upx` stages without compression for development.
+The installer reports the source and destination and warns when another copy
+has priority in the invoking shell's `PATH`. For example, old `~/.local/bin`
+copies can hide newly installed `/usr/bin` binaries. Update the preferred prefix
+or remove obsolete copies, then restart running apps to load the new binaries.
 
 ## Verification and useful commands
 
@@ -205,7 +259,12 @@ lays them down without compiling, system-wide with `sudo` or under
 cargo fmt --check
 cargo check --workspace
 cargo test --workspace
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_dev_session.py -v
 ```
+
+The development runner tests use a real private session bus with fixture
+components. They require the system Python's GObject introspection bindings
+(`python3-gobject` or `python3-gi`).
 
 ### Troubleshooting native dependencies
 
@@ -226,3 +285,20 @@ Confirm the PipeWire metadata is visible with:
 ```bash
 pkg-config --modversion libpipewire-0.3
 ```
+
+## Desktop context menus
+
+The desktop uses `coconut-file-menu` for item and directory-background actions.
+Right-clicking an icon selects it without activating it; empty-space clicks clear
+the selection. Common file actions match File Explorer. The desktop adds Sort
+icons, Align to grid, Refresh and Desktop settings. Refresh preserves icon
+positions by file path and discards superseded background loads.
+
+Keep generic menu behavior in CreamUI, file operations and shared menu composition
+in [coconut-file-menu](../../crates/file-menu/README.md), and desktop-only actions
+in `desktop/shell/src/desktop/menus.rs`. The native Wayland backend uses
+`xdg_popup` and layer-shell parenting, with a separate surface for each submenu.
+The compositor places and constrains menus, and owns grabs and dismissal. Native
+menus stay open when focus moves into a child popup; call `parent_focus_lost`
+instead of closing them unconditionally. Other backends use an in-window overlay.
+File creation and rename use the same themed input dialogs on both surfaces.

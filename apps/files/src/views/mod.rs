@@ -67,7 +67,23 @@ fn build_scoped(b: &BrowserState, size: Size) -> BoxedWidget {
         // available while a long directory is being scrolled.
         main.push(directory_header(b, &tab, content_width));
     }
-    main.push(scroll);
+    let context = b.clone();
+    let location = tab.location().clone();
+    main.push(Box::new(
+        RawView::new(Style {
+            flex_grow: 1.0,
+            flex_basis: Dimension::Length(0.0),
+            ..column(0.0)
+        })
+        .with_context_menu(move |point| {
+            let path = match &location {
+                Location::Home => files::home(),
+                Location::Directory(path) => path.clone(),
+            };
+            context.open_context_menu(point, coconut_file_menu::FileMenuTarget::Background(path));
+        })
+        .child(scroll),
+    ));
     if let Some(message) = b.message.get() {
         main.push(view(
             pad(row(8.0), 24.0, 8.0),
@@ -111,7 +127,7 @@ fn build_scoped(b: &BrowserState, size: Size) -> BoxedWidget {
     } else if let Some(tabs) = tab_bar(b, content_width, sidebar_width, false) {
         main.push(tabs);
     }
-    view(
+    let content = view(
         Style {
             size: creamui_core::layout::Size {
                 width: Dimension::Length(size.width),
@@ -154,5 +170,17 @@ fn build_scoped(b: &BrowserState, size: Size) -> BoxedWidget {
                 .with_children(main),
             ),
         ],
+    );
+    let mut layers = vec![content];
+    layers.extend(b.file_menu.overlays(size));
+    view(
+        Style {
+            size: creamui_core::layout::Size {
+                width: Dimension::Length(size.width),
+                height: Dimension::Length(size.height),
+            },
+            ..Default::default()
+        },
+        layers,
     )
 }

@@ -548,3 +548,156 @@ fn browser_draws_one_set_of_client_controls_for_single_and_multiple_tabs() {
         }
     });
 }
+
+#[derive(Default)]
+struct Recorder(Vec<(String, Rect)>);
+impl creamui_core::Painter for Recorder {
+    fn fill_rect(&mut self, _: Rect, _: Color, _: f32) {}
+    fn stroke_rect(&mut self, _: Rect, _: Color, _: f32, _: f32) {}
+    fn fill_text(&mut self, rect: Rect, text: &str, _: Color, _: f32, _: creamui_core::TextAlign) {
+        self.0.push((text.into(), rect));
+    }
+}
+
+#[test]
+fn secondary_click_targets_items_and_background_in_every_directory_view() {
+    creamui_reactive::with_context_scope(|| {
+        creamui_reactive::provide_context(ThemeProvider::new(Theme::light()));
+        creamui_reactive::provide_context(creamui_core::WindowDragHandle::new(|| {}));
+        crate::test_window::TestWindow::install(TitlebarState::default());
+        let fixture = tempfile::tempdir().unwrap();
+        let folder = fixture.path().join("Folder");
+        let file = fixture.path().join("notes.txt");
+        fs::create_dir(&folder).unwrap();
+        fs::write(&file, "notes").unwrap();
+        let mut browser =
+            BrowserState::new(WindowRequest::manager(Some(fixture.path().to_path_buf())));
+        browser.explorer = ExplorerConfig::default();
+        let location = browser.tab().location().clone();
+        for mode in [
+            DirectoryView::Grid,
+            DirectoryView::List,
+            DirectoryView::Columns,
+        ] {
+            browser.edit(|tab| tab.view = mode);
+            let mut recorder = Recorder::default();
+            let scene = Renderer::new().render(
+                view::build(
+                    &browser,
+                    Size {
+                        width: 1000.0,
+                        height: 700.0,
+                    },
+                ),
+                Size {
+                    width: 1000.0,
+                    height: 700.0,
+                },
+                &mut recorder,
+            );
+            for path in [&file, &folder] {
+                let label = path.file_name().unwrap().to_str().unwrap();
+                let rect = recorder
+                    .0
+                    .iter()
+                    .find(|(text, _)| text == label)
+                    .unwrap_or_else(|| panic!("Missing {label} in {mode:?}: {:?}", recorder.0))
+                    .1;
+                let point = Point {
+                    x: rect.x + 2.0,
+                    y: rect.y + rect.height / 2.0,
+                };
+                scene.context_menu_at(point).expect("item context target")(point);
+                assert_eq!(browser.tab().selected.as_ref(), Some(path));
+                assert_eq!(browser.tab().location(), &location);
+                assert!(browser.last_click.borrow().is_none());
+            }
+            let point = Point { x: 800.0, y: 600.0 };
+            scene
+                .context_menu_at(point)
+                .expect("directory background context target")(point);
+            assert!(browser.tab().selected.is_none());
+        }
+    });
+}
+
+#[test]
+fn save_chooser_context_action_uses_the_name_without_accepting_the_request() {
+    let fixture = tempfile::tempdir().unwrap();
+    let path = fixture.path().join("notes.txt");
+    fs::write(&path, "notes").unwrap();
+    let mut request = WindowRequest::save("Save".into(), "draft.txt".into());
+    request.start_directory = Some(fixture.path().to_path_buf());
+    let browser = BrowserState::new(request);
+    let location = browser.tab().location().clone();
+    let options = browser.context_menu_options(&coconut_file_menu::FileMenuTarget::Item {
+        path: path.clone(),
+        directory: false,
+    });
+    assert_eq!(options.open_label, "Use file name");
+    assert!(!options.editable);
+    (options.open)(path.clone(), false);
+    assert_eq!(browser.name.peek(), "notes.txt");
+    assert_eq!(browser.tab().selected, Some(path));
+    assert_eq!(browser.tab().location(), &location);
+    assert!(browser.result.lock().unwrap().is_none());
+}
+
+#[test]
+fn home_context_targets_pinned_folders_drives_recent_files_and_background() {
+    creamui_reactive::with_context_scope(|| {
+        creamui_reactive::provide_context(ThemeProvider::new(Theme::light()));
+        creamui_reactive::provide_context(creamui_core::WindowDragHandle::new(|| {}));
+        crate::test_window::TestWindow::install(TitlebarState::default());
+        let fixture = tempfile::tempdir().unwrap();
+        let pinned = fixture.path().join("Pinned folder");
+        let drive = fixture.path().join("Volume");
+        let file = fixture.path().join("recent.txt");
+        fs::create_dir(&pinned).unwrap();
+        fs::create_dir(&drive).unwrap();
+        fs::write(&file, "recent").unwrap();
+        let mut browser = BrowserState::new(WindowRequest::manager(None));
+        browser.explorer = ExplorerConfig::default();
+        browser.pins.set(vec![pinned.clone()]);
+        browser.recent.set(vec![file.clone()]);
+        browser.drives.set(vec![files::Drive {
+            label: "Test volume".into(),
+            path: drive.clone(),
+            space: None,
+        }]);
+        let mut recorder = Recorder::default();
+        let size = Size {
+            width: 1000.0,
+            height: 760.0,
+        };
+        let scene = Renderer::new().render(view::build(&browser, size), size, &mut recorder);
+        for (label, path) in [
+            ("Pinned folder", pinned),
+            ("Test volume", drive),
+            ("recent.txt", file),
+        ] {
+            let rect = recorder
+                .0
+                .iter()
+                .find(|(text, rect)| text == label && rect.x > 236.0)
+                .unwrap()
+                .1;
+            let point = Point {
+                x: rect.x + 2.0,
+                y: rect.y + rect.height / 2.0,
+            };
+            scene.context_menu_at(point).unwrap()(point);
+            assert_eq!(browser.tab().selected, Some(path));
+            assert_eq!(browser.tab().location(), &Location::Home);
+        }
+        let point = Point { x: 900.0, y: 680.0 };
+        scene
+            .context_menu_at(point)
+            .expect("Home background context target")(point);
+        assert!(browser.tab().selected.is_none());
+        let options = browser
+            .context_menu_options(&coconut_file_menu::FileMenuTarget::Background(files::home()));
+        assert!(!options.editable);
+        assert!(options.extras.iter().any(|item| item.id == "open-home"));
+    });
+}

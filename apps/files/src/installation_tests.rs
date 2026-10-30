@@ -15,6 +15,7 @@ fn user_installer_installs_theme_integrations_and_preserves_existing_policy() {
     // Keep this a user-local fixture even on a root-run CI worker.
     executable(&commands.join("id"), "#!/bin/sh\nprintf '1000\\n'\n");
     executable(&commands.join("cargo"), "#!/bin/sh\nexit 0\n");
+    executable(&commands.join("cfiles"), "#!/bin/sh\nexit 99\n");
     executable(&commands.join("fc-cache"), "#!/bin/sh\nexit 0\n");
     executable(
         &commands.join("systemctl"),
@@ -83,6 +84,20 @@ fn user_installer_installs_theme_integrations_and_preserves_existing_policy() {
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Installed 14 staged binaries"));
+    assert!(stdout.contains("PATH selects other copies"));
+    assert!(stdout.contains(&format!("cfiles: {}", commands.join("cfiles").display())));
+    for binary in fs::read_dir(&staged)
+        .unwrap()
+        .filter_map(Result::ok)
+        .filter(|entry| entry.file_type().unwrap().is_file())
+    {
+        assert_eq!(
+            fs::read(binary.path()).unwrap(),
+            fs::read(install_root.join("bin").join(binary.file_name())).unwrap()
+        );
+    }
     let service = fs::read_to_string(
         data.join("dbus-1/services/org.freedesktop.impl.portal.desktop.cfiles.service"),
     )
@@ -156,4 +171,58 @@ fn user_installer_installs_theme_integrations_and_preserves_existing_policy() {
         fs::read_to_string(config.join("xdg-desktop-portal/blair-portals.conf")).unwrap();
     assert!(default_policy.contains("org.freedesktop.impl.portal.Settings=coconut"));
     assert!(default_policy.contains("org.freedesktop.impl.portal.Access=coconut-permissions"));
+}
+
+#[test]
+fn system_installer_preserves_staging_directory_and_caller_path_when_elevating() {
+    let fixture = tempfile::tempdir().unwrap();
+    let root = fixture.path();
+    let commands = root.join("commands");
+    fs::create_dir(&commands).unwrap();
+    executable(&commands.join("id"), "#!/bin/sh\nprintf '1000\n'\n");
+    executable(
+        &commands.join("sudo"),
+        "#!/bin/sh\nprintf '%s\n' \"$@\" > \"$COCONUT_TEST_SUDO_ARGS\"\n",
+    );
+    let staged = root.join("custom staged binaries");
+    let arguments = root.join("sudo-arguments");
+    let path = format!("{}:/usr/bin:/bin", commands.display());
+    let output = Command::new("bash")
+        .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../install.sh"))
+        .args(["blair", "--force"])
+        .env("PATH", &path)
+        .env("COCONUT_BUILD_DIR", &staged)
+        .env("COCONUT_TEST_SUDO_ARGS", &arguments)
+        .env_remove("COCONUT_INSTALL_CALLER_PATH")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let arguments = fs::read_to_string(arguments).unwrap();
+    assert!(arguments
+        .lines()
+        .any(|line| line == format!("COCONUT_BUILD_DIR={}", staged.display())));
+    assert!(arguments
+        .lines()
+        .any(|line| line == format!("COCONUT_INSTALL_CALLER_PATH={path}")));
+}
+
+#[test]
+fn user_installation_rejects_root_instead_of_writing_system_paths() {
+    let fixture = tempfile::tempdir().unwrap();
+    executable(&fixture.path().join("id"), "#!/bin/sh\nprintf '0\n'\n");
+    let output = Command::new("bash")
+        .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../install.sh"))
+        .arg("--user")
+        .env(
+            "PATH",
+            format!("{}:/usr/bin:/bin", fixture.path().display()),
+        )
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("run --user without sudo"));
 }

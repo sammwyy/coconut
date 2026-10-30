@@ -113,6 +113,7 @@ version for an ordinary Coconut app.
 | `creamui-fonts` | Font registration, resolution, and text metrics when needed |
 | `coconut-integration-cream` | Coconut's resolved system appearance and font preference |
 | `coconut-ui` | Coconut-specific shared application UI, including About metadata |
+| `coconut-file-menu` | Shared file/folder context menu composition and operations for apps and desktop |
 | `delib` | Existing desktop/configuration facilities where relevant |
 
 The root disables default features for `creamui-render`. Select the actual
@@ -161,7 +162,7 @@ interaction, provided theme, focus, keyboard, and pointer behavior remain correc
 | Evenly sized confirmation actions | `ModalActions` with themed `Button` children |
 | Ordinary actions and editable fields | `Button`, `TextInput`, `TextArea`, and their controllers |
 | Choice fields and small mutually exclusive options | `Select`, `ComboBox`, `SegmentedControl`, or an appropriate compact popup |
-| Transient popup surfaces | `Popover`, `MenuPopup`; preserve dismissal and pointer shielding |
+| Transient popup surfaces | `ContextMenuHost` for context menus; `Popover`, `MenuPopup` for composed surfaces; preserve dismissal and pointer shielding |
 | Scrolling and large collections | `ScrollView`, `ScrollController`, and virtual list/table components |
 | Tabs and navigation | `Tabs`, `Tab`, `Sidebar`, `TreeView`, or composed titlebar tabs |
 | Application identity | `coconut_ui::about!` when an About page is needed |

@@ -1,3 +1,4 @@
+mod menus;
 use crate::{
     config::ExplorerConfig,
     context::WindowContext,
@@ -25,6 +26,7 @@ use std::{
 
 #[derive(Clone)]
 pub(crate) struct BrowserState {
+    pub(crate) file_menu: coconut_file_menu::FileMenuController,
     pub(crate) context: WindowContext,
     pub(crate) tabs: Signal<Vec<Tab>>,
     pub(crate) active: Signal<usize>,
@@ -71,6 +73,7 @@ impl BrowserState {
             WindowMode::FileManager => String::new(),
         };
         Self {
+            file_menu: coconut_file_menu::FileMenuController::new(),
             context: WindowContext::new(request),
             tabs: Signal::new(vec![Tab::new(location, &explorer)]),
             active: Signal::new(0),
@@ -142,7 +145,10 @@ impl BrowserState {
         }
     }
     pub(crate) fn key(&self, event: KeyEvent, modifiers: Modifiers) -> bool {
-        if !event.pressed {
+        if self.file_menu.handle_key(&event.key, event.pressed) {
+            return true;
+        }
+        if self.file_menu.has_panel() || !event.pressed {
             return false;
         }
         let action = crate::shortcuts::Action::Search;
@@ -169,6 +175,7 @@ impl BrowserState {
         batch(|| self.tabs.update(|tabs| edit(&mut tabs[index])));
     }
     pub(crate) fn navigate(&self, location: Location) {
+        self.file_menu.close_menu();
         batch(|| {
             self.message.set(None);
             self.overwrite.set(None);
@@ -177,6 +184,7 @@ impl BrowserState {
         });
     }
     pub(crate) fn navigate_column(&self, path: PathBuf) {
+        self.file_menu.close_menu();
         batch(|| {
             self.message.set(None);
             self.overwrite.set(None);
@@ -185,6 +193,7 @@ impl BrowserState {
         });
     }
     pub(crate) fn travel(&self, forward: bool) {
+        self.file_menu.close_menu();
         batch(|| {
             self.message.set(None);
             self.overwrite.set(None);
@@ -193,6 +202,7 @@ impl BrowserState {
         });
     }
     pub(crate) fn switch(&self, index: usize) {
+        self.file_menu.close_menu();
         batch(|| {
             self.active.set(index);
             self.message.set(None);

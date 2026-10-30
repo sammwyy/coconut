@@ -86,3 +86,9 @@
   keep using `xdg-permission-store`.
 - `apps/screenshots` has no generic XDG Screenshot fallback for Wayland
   compositors without `wlr-screencopy` or KWin's `ScreenShot2` interface.
+- Extend `coconut-file-menu` clipboard interoperability to native file MIME
+  formats (`text/uri-list` and `x-special/gnome-copied-files`) and cut/move;
+  current Copy/Paste exchanges local file URIs through the text clipboard.
+- Investigate Blair's `wayland-backend` `InvalidId` panic observed when an
+  installed compositor lost a client with an active grabbed context popup;
+  normal popup dismissal before client shutdown completed successfully.

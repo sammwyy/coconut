@@ -819,9 +819,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "coconut-file-menu"
+version = "0.1.0"
+dependencies = [
+ "arboard",
+ "coconut-core",
+ "creamui-core",
+ "creamui-reactive",
+ "creamui-render",
+ "creamui-widgets",
+ "delib",
+ "libc",
+ "mime_guess",
+ "tempfile",
+ "url",
+]
+
+[[package]]
 name = "coconut-files"
 version = "0.1.0"
 dependencies = [
+ "coconut-file-menu",
  "coconut-integration-cream",
  "coconut-ui",
  "creamui-core",
@@ -1320,6 +1338,7 @@ dependencies = [
  "chrono",
  "coconut-api",
  "coconut-core",
+ "coconut-file-menu",
  "coconut-integration-appearance",
  "coconut-integration-cream",
  "coconut-integration-kwin",
@@ -1717,6 +1736,7 @@ dependencies = [
  "creamui-theme-loader",
  "creamui-theme-watch",
  "creamui-tray",
+ "creamui-widgets",
  "env_logger",
  "libc",
  "log",

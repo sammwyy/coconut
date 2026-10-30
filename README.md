@@ -28,6 +28,17 @@ stay calm, responsive, and consistent.
 
 ## Applications
 
+Run the desktop and its local portal services without installing:
+
+```bash
+./dev.sh --build  # Build into .build/ without UPX, then start Blair and Coconut.
+./dev.sh          # Use the existing staged binaries.
+```
+
+The development session uses its own D-Bus bus and XDG directories. See the
+[shell development guide](docs/dev/SHELL.md#build-and-run) for dependencies,
+Blair selection, logs and running additional apps in that session.
+
 | Command | Purpose |
 | --- | --- |
 | `coconut` | Start the shell. |

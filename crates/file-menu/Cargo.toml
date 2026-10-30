@@ -1,0 +1,31 @@
+[package]
+name = "coconut-file-menu"
+version.workspace = true
+edition.workspace = true
+description = "Shared file and directory context menus for Coconut"
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+coconut-core.workspace = true
+creamui-core.workspace = true
+creamui-reactive.workspace = true
+creamui-render = { workspace = true, features = ["context-menu"] }
+creamui-widgets.workspace = true
+delib.workspace = true
+mime_guess.workspace = true
+arboard = { workspace = true, features = ["wayland-data-control"] }
+url.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+libc.workspace = true
+
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+creamui-render = { workspace = true, features = ["platform-wayland"] }
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

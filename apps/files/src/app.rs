@@ -34,12 +34,22 @@ pub fn show_window(request: WindowRequest) -> Option<crate::portal::PortalSelect
             let ready_window = window.clone();
             let keys = browser.clone();
             let blur = browser.clone();
+            let pending = browser.file_menu.clone();
             app.append_window(
                 options,
                 Color::rgba(0, 0, 0, 0),
                 move |handle| {
+                    handle.on_pointer_button(move |button, pressed, _| {
+                        if pressed && button == creamui_render::platform::MouseButton::Left {
+                            pending.cancel_pending();
+                        }
+                        false
+                    });
                     handle.on_keyboard_input(move |event, modifiers| keys.key(event, modifiers));
-                    handle.on_focus_lost(move || blur.close_search_if_empty());
+                    handle.on_focus_lost(move || {
+                        blur.file_menu.parent_focus_lost();
+                        blur.close_search_if_empty();
+                    });
                     *ready_window.borrow_mut() = Some(handle);
                 },
                 move |size| crate::views::build(&browser, size),
