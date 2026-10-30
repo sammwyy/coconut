@@ -8,7 +8,9 @@ use creamui_core::{
     BoxedWidget, Size, StateStyle, Styled,
 };
 use creamui_reactive::{batch, Signal};
-use creamui_render::{AppBuilder, AppHandle, BlurRegion, WindowHandle, WindowOptions};
+use creamui_render::{
+    AppBuilder, AppHandle, BlurRegion, RenderBackend, WindowHandle, WindowOptions,
+};
 use creamui_router::{use_location, use_router, Router, RouterProvider};
 use creamui_theme::{use_theme, Color, Theme};
 use creamui_widgets::{
@@ -336,6 +338,7 @@ pub fn run() {
                 decorations: true,
                 blur: Some(BlurRegion::Window),
                 theme: load_theme(),
+                backend: RenderBackend::Cpu,
                 ..Default::default()
             },
             CLEAR,

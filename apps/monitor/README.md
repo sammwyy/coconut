@@ -21,6 +21,8 @@ The executable is `cmonitor`; the desktop name is **System Monitor**.
   are checked against PID reuse.
 - **Respects the desktop** — system theme, live CreamUI theme updates, and
   hybrid compositor decorations with fallbacks.
+- **CPU rendering** — windows rasterize through CreamUI's CPU backend;
+  `CUI_OVERRIDE_RENDER_BACKEND=gpu` opts into `wgpu` per launch.
 
 ## Build
 
