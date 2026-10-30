@@ -136,6 +136,12 @@ Run the standard and scientific calculator with:
 cargo run -p coconut-calculator -- --scientific
 ```
 
+Open an image in Image Viewer with:
+
+```bash
+cargo run -p coconut-image-viewer -- path/to/image.png
+```
+
 Preview the login screen in a normal, resizable window on any Wayland desktop:
 
 ```bash

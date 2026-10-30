@@ -74,6 +74,7 @@ dbus = "0.9"
 discord-rich-presence = "1.1.0"
 image = { version = "0.25.10", default-features = false }
 image-rs = { package = "image", version = "0.25.10" }
+kamadak-exif = "0.6.1"
 libc = "0.2"
 libloading = "=0.8.9"
 mime_guess = "2"

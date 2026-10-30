@@ -41,6 +41,7 @@ fn user_installer_installs_theme_integrations_and_preserves_existing_policy() {
         "cplayer",
         "cedit",
         "ccalc",
+        "cviewer",
     ] {
         executable(&staged.join(binary), "#!/bin/sh\nexit 0\n");
     }
@@ -91,6 +92,10 @@ fn user_installer_installs_theme_integrations_and_preserves_existing_policy() {
     assert!(install_root.join("bin/ccalc").exists());
     let calculator = fs::read_to_string(data.join("applications/ccalc.desktop")).unwrap();
     assert!(calculator.contains("Exec=ccalc"));
+    assert!(install_root.join("bin/cviewer").exists());
+    let viewer = fs::read_to_string(data.join("applications/cviewer.desktop")).unwrap();
+    assert!(viewer.contains("Exec=cviewer %F"));
+    assert!(viewer.contains("MimeType=image/png;image/jpeg;"));
     assert_eq!(fs::read_to_string(policy).unwrap(), "user preferences\n");
     assert!(config
         .join("xdg-desktop-portal/blair-portals.conf")

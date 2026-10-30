@@ -27,6 +27,7 @@ PACKAGES=(
     coconut-media-player:cplayer
     coconut-editor:cedit
     coconut-calculator:ccalc
+    coconut-image-viewer:cviewer
 )
 
 pkgs=()

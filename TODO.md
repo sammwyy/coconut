@@ -61,3 +61,7 @@
 - Extend CEdit with soft wrapping, multiple cursors and rectangular selections.
 - Extend CEdit's source-aligned Markdown renderer with table layout, reference
   links and multiline inline formatting.
+- Add animated GIF/WebP playback and multipage TIFF navigation to Image Viewer;
+  the current viewer displays the first frame/page only.
+- Add ICC color management to Image Viewer; embedded profiles are currently
+  listed as metadata while display uses decoded RGBA8 pixels.

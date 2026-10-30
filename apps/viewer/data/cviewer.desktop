@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=Image Viewer
+GenericName=Image Viewer
+Comment=View images, inspect metadata and apply temporary adjustments
+Exec=cviewer %F
+TryExec=cviewer
+Icon=image-x-generic
+Terminal=false
+Categories=Graphics;Viewer;
+MimeType=image/png;image/jpeg;image/webp;image/gif;image/bmp;image/x-ms-bmp;image/tiff;image/vnd.microsoft.icon;image/x-icon;
+Keywords=image;photo;picture;viewer;
+StartupNotify=true
