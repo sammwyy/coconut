@@ -1,21 +1,11 @@
-//! Persistent permission records. Subjects are absolute executable paths
-//! (or Flatpak app ids); permissions are namespaced capability names such as
-//! `screen-capture`. Only durable decisions are written — "allow once"
-//! verdicts live and die with the pending request.
-
 use delib::xdg::XdgPaths;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::{
+    io::{self, Write},
+    path::{Path, PathBuf},
+};
 
-/// Capabilities the service currently knows how to mediate.
 pub const SCREEN_CAPTURE: &str = "screen-capture";
-
-/// Subjects trusted without prompting. `coconut-screenshots` is the session's
-/// own capture tool: matching on the full executable path (not just the name)
-/// means a renamed binary at a foreign location still triggers the dialog —
-/// replacing the installed binary would require write access the attacker
-/// already needed to bypass everything else anyway.
-const PRESEEDED: &[(&str, &str)] = &[("coconut-screenshots", SCREEN_CAPTURE)];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -48,7 +38,6 @@ pub struct Entry {
     pub subject: String,
     pub permission: String,
     pub verdict: Verdict,
-    /// Unix seconds when the decision was recorded.
     pub granted_at: u64,
 }
 
@@ -60,28 +49,28 @@ struct Disk {
 pub struct Store {
     path: PathBuf,
     entries: Vec<Entry>,
+    trusted_capture: Option<PathBuf>,
 }
 
-fn store_path() -> PathBuf {
+pub fn store_path() -> PathBuf {
     XdgPaths::from_env()
         .data_home
         .join("coconut/permissions.json")
 }
 
-fn is_preseeded(subject: &str, permission: &str) -> bool {
-    PRESEEDED
-        .iter()
-        .any(|(name, pre)| *pre == permission && subject.rsplit('/').next() == Some(*name))
-}
-
 impl Store {
-    pub fn load(path: PathBuf) -> Self {
-        let entries = std::fs::read_to_string(&path)
-            .ok()
-            .and_then(|raw| serde_json::from_str::<Disk>(&raw).ok())
-            .map(|disk| disk.entries)
-            .unwrap_or_default();
-        Self { path, entries }
+    pub fn load(path: PathBuf) -> io::Result<Self> {
+        let entries = match std::fs::read(&path) {
+            Ok(raw) => serde_json::from_slice::<Disk>(&raw)?.entries,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Vec::new(),
+            Err(error) => return Err(error),
+        };
+        Ok(Self {
+            path,
+            entries,
+            trusted_capture: crate::identity::sibling("coconut-screenshots")
+                .and_then(|path| path.canonicalize().ok()),
+        })
     }
 
     pub fn lookup(&self, subject: &str, permission: &str) -> Option<Verdict> {
@@ -90,13 +79,17 @@ impl Store {
             .rev()
             .find(|entry| entry.subject == subject && entry.permission == permission)
             .map(|entry| entry.verdict)
-            .or(is_preseeded(subject, permission).then_some(Verdict::Allow))
+            .or_else(|| {
+                (permission == SCREEN_CAPTURE
+                    && self.trusted_capture.as_deref() == Some(Path::new(subject)))
+                .then_some(Verdict::Allow)
+            })
     }
 
-    pub fn set(&mut self, subject: &str, permission: &str, verdict: Verdict) {
-        self.entries
-            .retain(|entry| !(entry.subject == subject && entry.permission == permission));
-        self.entries.push(Entry {
+    pub fn set(&mut self, subject: &str, permission: &str, verdict: Verdict) -> io::Result<()> {
+        let mut entries = self.entries.clone();
+        entries.retain(|entry| !(entry.subject == subject && entry.permission == permission));
+        entries.push(Entry {
             subject: subject.into(),
             permission: permission.into(),
             verdict,
@@ -105,130 +98,145 @@ impl Store {
                 .map(|since| since.as_secs())
                 .unwrap_or_default(),
         });
-        self.save();
+        self.replace(entries)
     }
 
-    /// Removes one stored decision so the next access prompts again.
-    /// Returns false when nothing was stored.
-    pub fn revoke(&mut self, subject: &str, permission: &str) -> bool {
-        let before = self.entries.len();
-        self.entries
-            .retain(|entry| !(entry.subject == subject && entry.permission == permission));
-        let changed = before != self.entries.len();
+    pub fn revoke(&mut self, subject: &str, permission: &str) -> io::Result<bool> {
+        let mut entries = self.entries.clone();
+        entries.retain(|entry| !(entry.subject == subject && entry.permission == permission));
+        let changed = entries.len() != self.entries.len();
         if changed {
-            self.save();
+            self.replace(entries)?;
         }
-        changed
+        Ok(changed)
     }
 
-    /// Drops every record for a subject.
-    pub fn forget(&mut self, subject: &str) -> usize {
-        let before = self.entries.len();
-        self.entries.retain(|entry| entry.subject != subject);
-        let removed = before - self.entries.len();
+    pub fn forget(&mut self, subject: &str) -> io::Result<usize> {
+        let mut entries = self.entries.clone();
+        entries.retain(|entry| entry.subject != subject);
+        let removed = self.entries.len() - entries.len();
         if removed > 0 {
-            self.save();
+            self.replace(entries)?;
         }
-        removed
+        Ok(removed)
     }
 
     pub fn entries(&self) -> &[Entry] {
         &self.entries
     }
 
-    fn save(&self) {
-        if let Some(parent) = self.path.parent() {
-            let _ = std::fs::create_dir_all(parent);
-        }
-        let disk = Disk {
-            entries: self.entries.clone(),
-        };
-        if let Ok(raw) = serde_json::to_string_pretty(&disk) {
-            let _ = std::fs::write(&self.path, raw);
-        }
-    }
-}
-
-impl Default for Store {
-    fn default() -> Self {
-        Self::load(store_path())
+    fn replace(&mut self, entries: Vec<Entry>) -> io::Result<()> {
+        let parent = self
+            .path
+            .parent()
+            .ok_or_else(|| io::Error::other("Missing permissions directory"))?;
+        std::fs::create_dir_all(parent)?;
+        let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
+        serde_json::to_writer_pretty(
+            &mut temporary,
+            &Disk {
+                entries: entries.clone(),
+            },
+        )?;
+        temporary.flush()?;
+        temporary.as_file().sync_all()?;
+        temporary.persist(&self.path).map_err(|error| error.error)?;
+        self.entries = entries;
+        Ok(())
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::Path;
-
-    fn store() -> Store {
-        Store::load(Path::new("/nonexistent/permissions.json").to_path_buf())
-    }
 
     #[test]
-    fn preseeded_subjects_are_allowed() {
-        let store = store();
+    fn preseed_matches_only_the_installed_path_and_can_be_overridden() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut store = Store::load(dir.path().join("permissions.json")).unwrap();
+        store.trusted_capture = Some("/usr/bin/coconut-screenshots".into());
         assert_eq!(
             store.lookup("/usr/bin/coconut-screenshots", SCREEN_CAPTURE),
             Some(Verdict::Allow)
         );
         assert_eq!(
-            store.lookup("/home/u/.local/bin/coconut-screenshots", SCREEN_CAPTURE),
-            Some(Verdict::Allow)
-        );
-        assert_eq!(
-            store.lookup("/usr/bin/coconut-screenshots-evil", SCREEN_CAPTURE),
+            store.lookup("/tmp/coconut-screenshots", SCREEN_CAPTURE),
             None
         );
-        assert_eq!(store.lookup("/usr/bin/grim", SCREEN_CAPTURE), None);
-    }
-
-    #[test]
-    fn set_overrides_preseed_and_revoke_restores_it() {
-        let dir = tempfile::tempdir().unwrap();
-        let mut store = Store::load(dir.path().join("permissions.json"));
-        store.set(
-            "/usr/bin/coconut-screenshots",
-            SCREEN_CAPTURE,
-            Verdict::Deny,
+        assert_eq!(
+            store.lookup("flatpak:coconut-screenshots", SCREEN_CAPTURE),
+            None
         );
+        store
+            .set(
+                "/usr/bin/coconut-screenshots",
+                SCREEN_CAPTURE,
+                Verdict::Deny,
+            )
+            .unwrap();
         assert_eq!(
             store.lookup("/usr/bin/coconut-screenshots", SCREEN_CAPTURE),
             Some(Verdict::Deny)
         );
-        assert!(store.revoke("/usr/bin/coconut-screenshots", SCREEN_CAPTURE));
+        assert!(store
+            .revoke("/usr/bin/coconut-screenshots", SCREEN_CAPTURE)
+            .unwrap());
         assert_eq!(
             store.lookup("/usr/bin/coconut-screenshots", SCREEN_CAPTURE),
             Some(Verdict::Allow)
         );
-        assert!(!store.revoke("/usr/bin/coconut-screenshots", SCREEN_CAPTURE));
     }
 
     #[test]
-    fn entries_survive_a_reload() {
+    fn decisions_survive_reload_and_revoke_and_forget() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("permissions.json");
-        let mut store = Store::load(path.clone());
-        store.set("/usr/bin/foo", SCREEN_CAPTURE, Verdict::Allow);
-        drop(store);
-        let store = Store::load(path);
+        let mut store = Store::load(path.clone()).unwrap();
+        store
+            .set("/usr/bin/foo", SCREEN_CAPTURE, Verdict::Allow)
+            .unwrap();
+        store.set("/usr/bin/foo", "camera", Verdict::Deny).unwrap();
+        store
+            .set("/usr/bin/bar", SCREEN_CAPTURE, Verdict::Deny)
+            .unwrap();
+        let mut store = Store::load(path.clone()).unwrap();
         assert_eq!(
             store.lookup("/usr/bin/foo", SCREEN_CAPTURE),
             Some(Verdict::Allow)
         );
-    }
-
-    #[test]
-    fn forget_removes_every_entry_for_a_subject() {
-        let dir = tempfile::tempdir().unwrap();
-        let mut store = Store::load(dir.path().join("permissions.json"));
-        store.set("/usr/bin/foo", SCREEN_CAPTURE, Verdict::Allow);
-        store.set("/usr/bin/foo", "camera", Verdict::Deny);
-        store.set("/usr/bin/bar", SCREEN_CAPTURE, Verdict::Deny);
-        assert_eq!(store.forget("/usr/bin/foo"), 2);
-        assert_eq!(store.lookup("/usr/bin/foo", SCREEN_CAPTURE), None);
+        assert!(store.revoke("/usr/bin/foo", SCREEN_CAPTURE).unwrap());
+        assert!(!store.revoke("/usr/bin/foo", SCREEN_CAPTURE).unwrap());
+        assert_eq!(store.forget("/usr/bin/foo").unwrap(), 1);
+        let store = Store::load(path).unwrap();
+        assert_eq!(store.entries().len(), 1);
         assert_eq!(
             store.lookup("/usr/bin/bar", SCREEN_CAPTURE),
             Some(Verdict::Deny)
         );
+    }
+
+    #[test]
+    fn failed_writes_preserve_memory_and_previous_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("permissions.json");
+        let mut store = Store::load(path.clone()).unwrap();
+        store.set("foo", SCREEN_CAPTURE, Verdict::Deny).unwrap();
+        let original = std::fs::read(&path).unwrap();
+        store.path = path.join("impossible");
+        assert!(store.set("foo", SCREEN_CAPTURE, Verdict::Allow).is_err());
+        assert!(store.revoke("foo", SCREEN_CAPTURE).is_err());
+        assert!(store.forget("foo").is_err());
+        assert_eq!(store.lookup("foo", SCREEN_CAPTURE), Some(Verdict::Deny));
+        assert_eq!(std::fs::read(&path).unwrap(), original);
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn corrupt_or_unreadable_store_is_not_silently_reset() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("permissions.json");
+        std::fs::write(&path, "{broken").unwrap();
+        assert!(Store::load(path).is_err());
+        assert!(Store::load(dir.path().into()).is_err());
     }
 }

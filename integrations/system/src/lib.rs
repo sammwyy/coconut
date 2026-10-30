@@ -753,6 +753,7 @@ fn screen_capture_permissions() -> Result<Vec<Entry>, String> {
         .map_err(|e| e.to_string())?;
     Ok(entries
         .into_iter()
+        .filter(|(_, permission, _, _)| permission == "screen-capture")
         .map(|(subject, permission, verdict, _)| Entry {
             name: subject.rsplit('/').next().unwrap_or(&subject).to_owned(),
             description: format!("{permission} · {subject}"),

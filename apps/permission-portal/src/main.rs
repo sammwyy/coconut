@@ -21,18 +21,13 @@ fn main() {
             .and_then(|id| prompt::prompt(id)),
         Some("--list") => list(),
         Some("--set") => three(&arguments[1..]).and_then(|[subject, permission, verdict]| {
-            proxy_call(|proxy| {
-                proxy.set_decision(subject, permission, verdict).map_err(dbus_error)
-            })
-            .map(|_| ())
+            manage("set", subject, permission, verdict)
         }),
         Some("--revoke") => two(&arguments[1..]).and_then(|[subject, permission]| {
-            proxy_call(|proxy| proxy.revoke(subject, permission).map_err(dbus_error))
-                .map(|_| ())
+            manage("revoke", subject, permission, String::new())
         }),
         Some("--forget") => one(&arguments[1..]).and_then(|subject| {
-            proxy_call(|proxy| proxy.forget(subject).map_err(dbus_error))
-                .map(|_| ())
+            manage("forget", subject, String::new(), String::new())
         }),
         _ => Err(
             "usage: coconut-permission-portal --service | --prompt <id> | --list | --set <subject> <permission> <allow|deny> | --revoke <subject> <permission> | --forget <subject>"
@@ -51,7 +46,7 @@ fn service() -> Result<(), String> {
     runtime.block_on(daemon::serve())
 }
 
-fn dbus_error(error: zbus::Error) -> String {
+fn dbus_error(error: impl std::fmt::Display) -> String {
     format!("{error}")
 }
 
@@ -91,5 +86,23 @@ fn three(arguments: &[String]) -> Result<[String; 3], String> {
     match arguments {
         [a, b, c, ..] => Ok([a.clone(), b.clone(), c.clone()]),
         _ => Err("missing arguments".to_string()),
+    }
+}
+
+fn manage(
+    operation: &str,
+    subject: String,
+    permission: String,
+    verdict: String,
+) -> Result<(), String> {
+    let applied = proxy_call(|proxy| {
+        proxy
+            .manage(operation.into(), subject, permission, verdict)
+            .map_err(dbus_error)
+    })?;
+    if applied {
+        Ok(())
+    } else {
+        Err("Permission change cancelled".into())
     }
 }

@@ -1,14 +1,10 @@
-//! Session service owning the permission store and the consent flow.
-//!
-//! `Ask` either answers from the store or creates a pending request, spawns
-//! the prompt (`--prompt <id>`), and awaits the user's `Decide` call. The
-//! same machinery backs the standard `org.freedesktop.impl.portal.Access`
-//! interface, whose verdicts are reported through `Request.Response`
-//! signals instead of a method return.
-
-use crate::store::{Store, Verdict, SCREEN_CAPTURE};
+use crate::{
+    identity,
+    store::{store_path, Store, Verdict, SCREEN_CAPTURE},
+};
 use std::{
     collections::HashMap,
+    path::PathBuf,
     sync::{
         atomic::{AtomicU64, Ordering},
         Arc, Mutex,
@@ -17,21 +13,22 @@ use std::{
 };
 use tokio::sync::oneshot;
 use zbus::{
-    interface,
+    fdo, interface,
     message::Header,
     object_server::{ObjectServer, SignalEmitter},
-    zvariant::{ObjectPath, Value},
+    zvariant::{ObjectPath, OwnedValue, Value},
     Connection,
 };
 
 pub const SERVICE: &str = "org.coconut.Permissions";
 pub const PATH: &str = "/org/coconut/Permissions1";
-const ACCESS_PATH: &str = "/org/freedesktop/impl/portal/Access";
-const REQUEST_IFACE: &str = "org.freedesktop.impl.portal.Request";
+const ACCESS_PATH: &str = "/org/freedesktop/portal/desktop";
 const PROMPT_TIMEOUT: Duration = Duration::from_secs(180);
 
-/// What the prompt window shows. `subject` is the store key (executable
-/// path or Flatpak app id).
+pub type Choices = Vec<(String, String, Vec<(String, String)>, String)>;
+type RequestDescription = (String, String, String, String, String, bool, Choices);
+
+#[derive(Clone)]
 struct PromptSpec {
     subject: String,
     permission: String,
@@ -39,162 +36,177 @@ struct PromptSpec {
     body: String,
     deny_label: String,
     grant_label: String,
-    /// Whether the prompt offers a persistent "always allow" choice.
     offer_always: bool,
+    choices: Choices,
 }
 
-enum ResponseSink {
-    Ask(Vec<oneshot::Sender<Verdict>>),
-    Access {
-        handle: ObjectPath<'static>,
-        connection: Connection,
-    },
+#[derive(Clone)]
+struct Answer {
+    verdict: Verdict,
+    choices: Vec<(String, String)>,
+}
+
+impl Answer {
+    fn denied() -> Self {
+        Self {
+            verdict: Verdict::Deny,
+            choices: Vec::new(),
+        }
+    }
 }
 
 struct Pending {
     spec: PromptSpec,
-    sink: ResponseSink,
+    pair: Option<(String, String)>,
+    waiters: Vec<oneshot::Sender<Answer>>,
+    prompt_pid: Option<u32>,
+    stop: Option<oneshot::Sender<()>>,
 }
 
-#[derive(Default)]
 struct Daemon {
     store: Mutex<Store>,
-    by_pair: Mutex<HashMap<(String, String), String>>,
-    by_id: Mutex<HashMap<String, Pending>>,
+    pending: Mutex<HashMap<String, Pending>>,
     seq: AtomicU64,
+    prompt_executable: PathBuf,
+    settings: PathBuf,
+    prompt_timeout: Duration,
 }
 
-type RequestDescription = (String, String, String, String, String, bool);
-
-fn warn(message: impl std::fmt::Display) {
-    eprintln!("permission-portal: {message}");
+fn failure(error: impl std::fmt::Display) -> fdo::Error {
+    eprintln!("permission-portal: {error}");
+    fdo::Error::Failed(error.to_string())
 }
 
 impl Daemon {
-    fn next_id(&self) -> String {
-        format!("coconut-{}", self.seq.fetch_add(1, Ordering::Relaxed))
+    fn new(store: Store, prompt_executable: PathBuf) -> Self {
+        let directory = prompt_executable
+            .parent()
+            .expect("absolute executable path");
+        Self {
+            store: Mutex::new(store),
+            pending: Mutex::new(HashMap::new()),
+            seq: AtomicU64::new(0),
+            settings: directory.join("coconut-settings"),
+            prompt_timeout: PROMPT_TIMEOUT,
+            prompt_executable,
+        }
     }
 
     fn register(
         &self,
-        pair: Option<(String, String)>,
         spec: PromptSpec,
-        sink: ResponseSink,
-    ) -> String {
-        let id = self.next_id();
-        self.by_id
-            .lock()
-            .unwrap()
-            .insert(id.clone(), Pending { spec, sink });
-        if let Some(pair) = pair {
-            self.by_pair.lock().unwrap().insert(pair, id.clone());
-        }
-        id
-    }
-
-    /// Registers a new waiter on an already-visible prompt for the same
-    /// subject/permission pair.
-    fn coalesce(&self, pair: &(String, String)) -> Option<oneshot::Receiver<Verdict>> {
-        let id = self.by_pair.lock().unwrap().get(pair)?.clone();
-        let mut pending = self.by_id.lock().unwrap();
-        let ResponseSink::Ask(senders) = &mut pending.get_mut(&id)?.sink else {
-            return None;
-        };
+        pair: Option<(String, String)>,
+    ) -> (String, oneshot::Receiver<Answer>, bool) {
         let (tx, rx) = oneshot::channel();
-        senders.push(tx);
-        Some(rx)
+        let mut pending = self.pending.lock().unwrap();
+        if let Some(pair) = &pair {
+            if let Some((id, entry)) = pending
+                .iter_mut()
+                .find(|(_, entry)| entry.pair.as_ref() == Some(pair))
+            {
+                entry.waiters.push(tx);
+                return (id.clone(), rx, false);
+            }
+        }
+        let id = format!("coconut-{}", self.seq.fetch_add(1, Ordering::Relaxed));
+        pending.insert(
+            id.clone(),
+            Pending {
+                spec,
+                pair,
+                waiters: vec![tx],
+                prompt_pid: None,
+                stop: None,
+            },
+        );
+        (id, rx, true)
     }
 
-    /// Removes a pending request; the caller decides how to deliver the
-    /// verdict (method reply, portal `Response` signal, or silently when
-    /// the requester already cancelled).
-    fn take(&self, request_id: &str) -> Option<Pending> {
-        let pending = self.by_id.lock().unwrap().remove(request_id)?;
-        self.by_pair
-            .lock()
-            .unwrap()
-            .retain(|_, id| id != request_id);
-        Some(pending)
+    fn deliver(&self, id: &str, answer: Answer) {
+        if let Some(pending) = self.pending.lock().unwrap().remove(id) {
+            for waiter in pending.waiters {
+                let _ = waiter.send(answer.clone());
+            }
+        }
+    }
+
+    fn spawn_prompt(self: &Arc<Self>, id: String) -> fdo::Result<()> {
+        let (stop, stopped) = oneshot::channel();
+        let mut pending = self.pending.lock().unwrap();
+        let entry = pending
+            .get_mut(&id)
+            .ok_or_else(|| failure("Request disappeared"))?;
+        let mut child = tokio::process::Command::new(&self.prompt_executable)
+            .args(["--prompt", &id])
+            .kill_on_drop(true)
+            .spawn()
+            .map_err(failure)?;
+        entry.prompt_pid = child.id();
+        entry.stop = Some(stop);
+        drop(pending);
+        let daemon = self.clone();
+        let timeout = self.prompt_timeout;
+        tokio::spawn(async move {
+            tokio::select! {
+                status = child.wait() => {
+                    if let Err(error) = status { failure(error); }
+                }
+                result = stopped => {
+                    if result.is_err() || tokio::time::timeout(Duration::from_secs(5), child.wait()).await.is_err() {
+                        if let Err(error) = child.kill().await { failure(error); }
+                    }
+                }
+                _ = tokio::time::sleep(timeout) => {
+                    if let Err(error) = child.kill().await { failure(error); }
+                }
+            }
+            daemon.deliver(&id, Answer::denied());
+        });
+        Ok(())
+    }
+
+    fn start(
+        self: &Arc<Self>,
+        spec: PromptSpec,
+        pair: Option<(String, String)>,
+    ) -> (String, oneshot::Receiver<Answer>) {
+        let (id, rx, fresh) = self.register(spec, pair);
+        if fresh {
+            if let Err(error) = self.spawn_prompt(id.clone()) {
+                failure(error);
+                self.deliver(&id, Answer::denied());
+            }
+        }
+        (id, rx)
     }
 
     async fn emit_changed(connection: &Connection) {
-        let Ok(emitter) = SignalEmitter::new(connection, PATH) else {
-            return;
-        };
-        if let Err(error) = Permissions::changed(&emitter).await {
-            warn(format!("could not emit Permissions1.Changed: {error}"));
+        if let Err(error) =
+            Permissions::changed(&SignalEmitter::new(connection, PATH).expect("valid path")).await
+        {
+            failure(error);
         }
     }
-}
 
-/// Delivers the verdict to whoever is waiting on `request_id`: the blocked
-/// `Ask` callers or the portal `Request` object. Returns the pending spec
-/// so `Decide` can persist remembered verdicts.
-async fn deliver(daemon: &Daemon, request_id: &str, verdict: Verdict) -> Option<PromptSpec> {
-    let pending = daemon.take(request_id)?;
-    match pending.sink {
-        ResponseSink::Ask(senders) => {
-            for sender in senders {
-                let _ = sender.send(verdict);
-            }
-        }
-        ResponseSink::Access { handle, connection } => {
-            let code = if verdict.allowed() { 0u32 } else { 1u32 };
-            let results: HashMap<String, Value<'_>> = HashMap::new();
-            if let Err(error) = connection
-                .emit_signal(
-                    None::<String>,
-                    handle.as_str(),
-                    REQUEST_IFACE,
-                    "Response",
-                    &(code, results),
-                )
-                .await
-            {
-                warn(format!("could not emit Access response: {error}"));
-            }
-            let _ = connection
-                .object_server()
-                .remove::<Request, _>(handle.as_str())
-                .await;
+    async fn prompt_pid(
+        &self,
+        id: &str,
+        header: &Header<'_>,
+        connection: &Connection,
+    ) -> fdo::Result<u32> {
+        let pid = identity::caller_pid(header, connection).await?;
+        let pending = self.pending.lock().unwrap();
+        if pending
+            .get(id)
+            .is_some_and(|entry| entry.prompt_pid == Some(pid))
+        {
+            Ok(pid)
+        } else {
+            Err(fdo::Error::AccessDenied(
+                "Only this request's prompt may describe or decide it".into(),
+            ))
         }
     }
-    Some(pending.spec)
-}
-
-/// Spawns the prompt binary and watches it: a prompt that dies without
-/// calling `Decide` resolves the request as denied instead of leaving the
-/// caller parked until timeout. Reaping the child also avoids zombies.
-fn spawn_watched_prompt(daemon: Arc<Daemon>, id: String) {
-    let spawn = std::env::current_exe().and_then(|exe| {
-        tokio::process::Command::new(exe)
-            .arg("--prompt")
-            .arg(&id)
-            .spawn()
-    });
-    match spawn {
-        Ok(mut child) => {
-            tokio::spawn(async move {
-                let _ = child.wait().await;
-                deliver(&daemon, &id, Verdict::Deny).await;
-            });
-        }
-        Err(error) => {
-            warn(format!("could not spawn prompt: {error}"));
-            tokio::spawn(async move {
-                deliver(&daemon, &id, Verdict::Deny).await;
-            });
-        }
-    }
-}
-
-fn display_name(subject: &str) -> String {
-    subject
-        .rsplit('/')
-        .next()
-        .filter(|name| !name.is_empty())
-        .unwrap_or(subject)
-        .to_owned()
 }
 
 fn capture_spec(subject: &str) -> PromptSpec {
@@ -204,11 +216,12 @@ fn capture_spec(subject: &str) -> PromptSpec {
         title: "Screen capture".into(),
         body: format!(
             "{} wants to capture the contents of the screen.",
-            display_name(subject)
+            subject.rsplit('/').next().unwrap_or(subject)
         ),
         deny_label: "Deny".into(),
         grant_label: "Allow once".into(),
         offer_always: true,
+        choices: Vec::new(),
     }
 }
 
@@ -218,20 +231,31 @@ struct Permissions {
 
 #[interface(
     interface = "org.coconut.Permissions1",
-    spawn = false,
     proxy(
         async_name = "PermissionsProxy",
         gen_blocking = true,
         assume_defaults = false,
         default_service = "org.coconut.Permissions",
         default_path = "/org/coconut/Permissions1",
-        visibility = "pub",
+        visibility = "pub"
     )
 )]
 impl Permissions {
-    /// Blocks until the decision is known: instantly for stored verdicts,
-    /// after the prompt otherwise. Returns "allow" or "deny".
-    async fn ask(&self, subject: String, permission: String) -> String {
+    async fn ask(
+        &self,
+        subject: String,
+        permission: String,
+        #[zbus(header)] header: Header<'_>,
+        #[zbus(connection)] connection: &Connection,
+    ) -> fdo::Result<String> {
+        identity::require_owner("org.blair.Compositor", &header, connection).await?;
+        if permission != SCREEN_CAPTURE
+            || !(subject.starts_with('/') || subject.starts_with("flatpak:"))
+        {
+            return Err(fdo::Error::InvalidArgs(
+                "Unsupported permission or subject".into(),
+            ));
+        }
         if let Some(verdict) = self
             .daemon
             .store
@@ -239,67 +263,96 @@ impl Permissions {
             .unwrap()
             .lookup(&subject, &permission)
         {
-            return verdict.name().to_owned();
+            return Ok(verdict.name().into());
         }
-        let pair = (subject.clone(), permission.clone());
-        let rx = if let Some(rx) = self.daemon.coalesce(&pair) {
-            rx
-        } else {
-            let (tx, rx) = oneshot::channel();
-            let id = self.daemon.register(
-                Some(pair),
-                capture_spec(&subject),
-                ResponseSink::Ask(vec![tx]),
-            );
-            spawn_watched_prompt(self.daemon.clone(), id);
-            rx
-        };
-        match tokio::time::timeout(PROMPT_TIMEOUT, rx).await {
-            Ok(Ok(verdict)) => verdict.name().to_owned(),
-            _ => "deny".to_owned(),
-        }
+        let (_, rx) = self
+            .daemon
+            .start(capture_spec(&subject), Some((subject, permission)));
+        Ok(rx
+            .await
+            .unwrap_or_else(|_| Answer::denied())
+            .verdict
+            .name()
+            .into())
     }
 
-    /// Called by the prompt app once the user chooses. `remember` stores
-    /// the verdict persistently for future `Ask` calls.
     async fn decide(
         &self,
         request_id: String,
         verdict: String,
         remember: bool,
+        choices: Vec<(String, String)>,
+        #[zbus(header)] header: Header<'_>,
         #[zbus(connection)] connection: &Connection,
-    ) {
-        let Some(verdict) = Verdict::parse(&verdict) else {
-            return;
+    ) -> fdo::Result<()> {
+        let pid = self
+            .daemon
+            .prompt_pid(&request_id, &header, connection)
+            .await?;
+        let verdict = Verdict::parse(&verdict)
+            .ok_or_else(|| fdo::Error::InvalidArgs("Invalid verdict".into()))?;
+        let pending = {
+            let mut pending = self.daemon.pending.lock().unwrap();
+            let entry = pending
+                .get(&request_id)
+                .filter(|entry| entry.prompt_pid == Some(pid))
+                .ok_or_else(|| fdo::Error::AccessDenied("Request expired".into()))?;
+            if remember && !entry.spec.offer_always {
+                return Err(fdo::Error::InvalidArgs(
+                    "This decision cannot be remembered".into(),
+                ));
+            }
+            if verdict.allowed() && !valid_choices(&entry.spec.choices, &choices) {
+                return Err(fdo::Error::InvalidArgs("Invalid choices".into()));
+            }
+            if remember {
+                self.daemon
+                    .store
+                    .lock()
+                    .unwrap()
+                    .set(&entry.spec.subject, &entry.spec.permission, verdict)
+                    .map_err(failure)?;
+            }
+            pending.remove(&request_id).unwrap()
         };
-        let Some(spec) = deliver(&self.daemon, &request_id, verdict).await else {
-            return;
-        };
+        for waiter in pending.waiters {
+            let _ = waiter.send(Answer {
+                verdict,
+                choices: choices.clone(),
+            });
+        }
+        if let Some(stop) = pending.stop {
+            let _ = stop.send(());
+        }
         if remember {
-            self.daemon
-                .store
-                .lock()
-                .unwrap()
-                .set(&spec.subject, &spec.permission, verdict);
             Daemon::emit_changed(connection).await;
         }
+        Ok(())
     }
 
-    /// Everything the prompt window needs to render a request.
-    async fn describe_request(&self, request_id: String) -> RequestDescription {
-        let pending = self.daemon.by_id.lock().unwrap();
-        let Some(entry) = pending.get(&request_id) else {
-            return Default::default();
-        };
-        let spec = &entry.spec;
-        (
+    async fn describe_request(
+        &self,
+        request_id: String,
+        #[zbus(header)] header: Header<'_>,
+        #[zbus(connection)] connection: &Connection,
+    ) -> fdo::Result<RequestDescription> {
+        self.daemon
+            .prompt_pid(&request_id, &header, connection)
+            .await?;
+        let pending = self.daemon.pending.lock().unwrap();
+        let spec = &pending
+            .get(&request_id)
+            .ok_or_else(|| failure("Request expired"))?
+            .spec;
+        Ok((
             spec.subject.clone(),
             spec.title.clone(),
             spec.body.clone(),
             spec.deny_label.clone(),
             spec.grant_label.clone(),
             spec.offer_always,
-        )
+            spec.choices.clone(),
+        ))
     }
 
     async fn list(&self) -> Vec<(String, String, String, u64)> {
@@ -313,7 +366,7 @@ impl Permissions {
                 (
                     entry.subject.clone(),
                     entry.permission.clone(),
-                    entry.verdict.name().to_owned(),
+                    entry.verdict.name().into(),
                     entry.granted_at,
                 )
             })
@@ -324,18 +377,21 @@ impl Permissions {
         &self,
         subject: String,
         permission: String,
+        #[zbus(header)] header: Header<'_>,
         #[zbus(connection)] connection: &Connection,
-    ) -> bool {
+    ) -> fdo::Result<bool> {
+        identity::require_executable(&self.daemon.settings, &header, connection).await?;
         let removed = self
             .daemon
             .store
             .lock()
             .unwrap()
-            .revoke(&subject, &permission);
+            .revoke(&subject, &permission)
+            .map_err(failure)?;
         if removed {
             Daemon::emit_changed(connection).await;
         }
-        removed
+        Ok(removed)
     }
 
     async fn set_decision(
@@ -343,40 +399,121 @@ impl Permissions {
         subject: String,
         permission: String,
         verdict: String,
+        #[zbus(header)] header: Header<'_>,
         #[zbus(connection)] connection: &Connection,
-    ) -> bool {
-        let Some(verdict) = Verdict::parse(&verdict) else {
-            return false;
-        };
+    ) -> fdo::Result<bool> {
+        identity::require_executable(&self.daemon.settings, &header, connection).await?;
+        let verdict = Verdict::parse(&verdict)
+            .ok_or_else(|| fdo::Error::InvalidArgs("Invalid verdict".into()))?;
         self.daemon
             .store
             .lock()
             .unwrap()
-            .set(&subject, &permission, verdict);
+            .set(&subject, &permission, verdict)
+            .map_err(failure)?;
         Daemon::emit_changed(connection).await;
-        true
+        Ok(true)
     }
 
-    async fn forget(&self, subject: String, #[zbus(connection)] connection: &Connection) -> u32 {
-        let removed = self.daemon.store.lock().unwrap().forget(&subject) as u32;
+    async fn forget(
+        &self,
+        subject: String,
+        #[zbus(header)] header: Header<'_>,
+        #[zbus(connection)] connection: &Connection,
+    ) -> fdo::Result<u32> {
+        identity::require_executable(&self.daemon.settings, &header, connection).await?;
+        let removed = self
+            .daemon
+            .store
+            .lock()
+            .unwrap()
+            .forget(&subject)
+            .map_err(failure)? as u32;
         if removed > 0 {
             Daemon::emit_changed(connection).await;
         }
-        removed
+        Ok(removed)
+    }
+
+    async fn manage(
+        &self,
+        operation: String,
+        subject: String,
+        permission: String,
+        verdict: String,
+        #[zbus(connection)] connection: &Connection,
+    ) -> fdo::Result<bool> {
+        let parsed = Verdict::parse(&verdict);
+        let description = match operation.as_str() {
+            "set" if parsed.is_some() => {
+                format!("Set {permission} to {verdict} for this application?")
+            }
+            "revoke" => format!("Remove the saved {permission} decision for this application?"),
+            "forget" => "Remove all saved decisions for this application?".into(),
+            _ => return Err(fdo::Error::InvalidArgs("Invalid permission change".into())),
+        };
+        let spec = PromptSpec {
+            subject: subject.clone(),
+            permission: String::new(),
+            title: "Change application permissions".into(),
+            body: description,
+            deny_label: "Cancel".into(),
+            grant_label: "Confirm change".into(),
+            offer_always: false,
+            choices: Vec::new(),
+        };
+        let (_, rx) = self.daemon.start(spec, None);
+        if !rx
+            .await
+            .unwrap_or_else(|_| Answer::denied())
+            .verdict
+            .allowed()
+        {
+            return Ok(false);
+        }
+        {
+            let mut store = self.daemon.store.lock().unwrap();
+            match operation.as_str() {
+                "set" => store
+                    .set(&subject, &permission, parsed.unwrap())
+                    .map_err(failure)?,
+                "revoke" => {
+                    store.revoke(&subject, &permission).map_err(failure)?;
+                }
+                "forget" => {
+                    store.forget(&subject).map_err(failure)?;
+                }
+                _ => unreachable!(),
+            }
+        }
+        Daemon::emit_changed(connection).await;
+        Ok(true)
     }
 
     #[zbus(signal)]
     pub async fn changed(emitter: &SignalEmitter<'_>) -> zbus::Result<()>;
 }
 
-/// The standard generic consent dialog. Apps talking to a frontend portal
-/// implementation land here; Coconut answers with the same prompt used for
-/// compositor gates, so the UX stays unified.
+fn valid_choices(spec: &Choices, selected: &[(String, String)]) -> bool {
+    spec.len() == selected.len()
+        && spec.iter().all(|(id, _, options, _)| {
+            selected.iter().filter(|(key, _)| key == id).count() == 1
+                && selected.iter().any(|(key, value)| {
+                    key == id
+                        && if options.is_empty() {
+                            value == "true" || value == "false"
+                        } else {
+                            options.iter().any(|(option, _)| option == value)
+                        }
+                })
+        })
+}
+
 struct Access {
     daemon: Arc<Daemon>,
 }
 
-#[interface(interface = "org.freedesktop.impl.portal.Access", spawn = false)]
+#[interface(interface = "org.freedesktop.impl.portal.Access")]
 impl Access {
     #[allow(clippy::too_many_arguments)]
     async fn access_dialog(
@@ -391,54 +528,100 @@ impl Access {
         #[zbus(header)] header: Header<'_>,
         #[zbus(connection)] connection: &Connection,
         #[zbus(object_server)] server: &ObjectServer,
-    ) {
-        let subject = if app_id.is_empty() {
-            caller_subject(&header, connection).await
-        } else {
-            format!("flatpak:{app_id}")
+    ) -> fdo::Result<(u32, HashMap<String, OwnedValue>)> {
+        identity::require_owner("org.freedesktop.portal.Desktop", &header, connection).await?;
+        let choices = match options.get("choices") {
+            Some(value) => Choices::try_from(value.try_clone().map_err(failure)?)
+                .map_err(|error| fdo::Error::InvalidArgs(error.to_string()))?,
+            None => Vec::new(),
         };
+        let mut ids = std::collections::HashSet::new();
+        for (id, _, options, selected) in &choices {
+            let mut option_ids = std::collections::HashSet::new();
+            if id.is_empty()
+                || !ids.insert(id)
+                || options
+                    .iter()
+                    .any(|(id, _)| id.is_empty() || !option_ids.insert(id))
+                || (!selected.is_empty()
+                    && if options.is_empty() {
+                        selected != "true" && selected != "false"
+                    } else {
+                        !options.iter().any(|(id, _)| id == selected)
+                    })
+            {
+                return Err(fdo::Error::InvalidArgs("Invalid Access choices".into()));
+            }
+        }
         let spec = PromptSpec {
-            subject,
+            subject: app_id,
             permission: String::new(),
-            title: if subtitle.is_empty() { title } else { subtitle },
-            body,
+            title,
+            body: [subtitle, body]
+                .into_iter()
+                .filter(|part| !part.is_empty())
+                .collect::<Vec<_>>()
+                .join("\n"),
             deny_label: string_option(&options, "deny_label").unwrap_or_else(|| "Deny".into()),
             grant_label: string_option(&options, "grant_label").unwrap_or_else(|| "Allow".into()),
             offer_always: false,
+            choices,
         };
-        let handle: ObjectPath<'static> = handle.into_owned();
-        let id = self.daemon.register(
-            None,
-            spec,
-            ResponseSink::Access {
-                handle: handle.clone(),
-                connection: connection.clone(),
-            },
-        );
+        let (id, rx, _) = self.daemon.register(spec, None);
         let request = Request {
             daemon: self.daemon.clone(),
             id: id.clone(),
+            owner: header.sender().unwrap().to_string(),
         };
-        if let Err(error) = server.at(handle, request).await {
-            warn(format!("could not serve Access request: {error}"));
-            let _ = self.daemon.take(&id);
-            return;
+        let handle = handle.into_owned();
+        match server.at(handle.clone(), request).await {
+            Ok(true) => {}
+            result => {
+                self.daemon.deliver(&id, Answer::denied());
+                return Err(match result {
+                    Err(error) => failure(error),
+                    _ => fdo::Error::InvalidArgs("Request handle is already in use".into()),
+                });
+            }
         }
-        spawn_watched_prompt(self.daemon.clone(), id);
+        if let Err(error) = self.daemon.spawn_prompt(id.clone()) {
+            failure(error);
+            self.daemon.deliver(&id, Answer::denied());
+        }
+        let answer = rx.await.unwrap_or_else(|_| Answer::denied());
+        if let Err(error) = server.remove::<Request, _>(handle).await {
+            failure(error);
+        }
+        let mut results = HashMap::new();
+        if answer.verdict.allowed() {
+            results.insert(
+                "choices".into(),
+                OwnedValue::try_from(Value::from(answer.choices)).map_err(failure)?,
+            );
+        }
+        Ok((if answer.verdict.allowed() { 0 } else { 1 }, results))
     }
 }
 
 struct Request {
     daemon: Arc<Daemon>,
     id: String,
+    owner: String,
 }
 
-#[interface(interface = "org.freedesktop.impl.portal.Request", spawn = false)]
+#[interface(interface = "org.freedesktop.impl.portal.Request")]
 impl Request {
-    /// The calling app cancelled before the user decided: clear the pending
-    /// prompt without reporting a response.
-    async fn close(&self) {
-        let _ = self.daemon.take(&self.id);
+    async fn close(&self, #[zbus(header)] header: Header<'_>) -> fdo::Result<()> {
+        if !header
+            .sender()
+            .is_some_and(|sender| sender.as_str() == self.owner)
+        {
+            return Err(fdo::Error::AccessDenied(
+                "Only the request owner may cancel it".into(),
+            ));
+        }
+        self.daemon.deliver(&self.id, Answer::denied());
+        Ok(())
     }
 }
 
@@ -450,37 +633,7 @@ fn string_option<'a>(options: &'a HashMap<String, Value<'a>>, key: &str) -> Opti
         .map(str::to_owned)
 }
 
-/// Resolves the D-Bus caller's unique name to a PID and then to an
-/// executable path — the same identification the compositor performs
-/// through `SO_PEERCRED`.
-async fn caller_subject(header: &Header<'_>, connection: &Connection) -> String {
-    let Some(sender) = header.sender() else {
-        return "unknown".into();
-    };
-    let pid: u32 = match connection
-        .call_method(
-            Some("org.freedesktop.DBus"),
-            "/org/freedesktop/DBus",
-            Some("org.freedesktop.DBus"),
-            "GetConnectionUnixProcessID",
-            &sender.as_str(),
-        )
-        .await
-        .and_then(|reply| reply.body().deserialize())
-    {
-        Ok(pid) => pid,
-        Err(_) => return sender.to_string(),
-    };
-    std::fs::read_link(format!("/proc/{pid}/exe"))
-        .map(|path| path.to_string_lossy().into_owned())
-        .unwrap_or_else(|_| format!("pid:{pid}"))
-}
-
-pub async fn serve() -> Result<(), String> {
-    let daemon = Arc::new(Daemon::default());
-    let connection = Connection::session()
-        .await
-        .map_err(|error| format!("session bus connect failed: {error}"))?;
+async fn connect(daemon: Arc<Daemon>, connection: Connection) -> Result<Connection, String> {
     let server = connection.object_server();
     server
         .at(
@@ -490,20 +643,35 @@ pub async fn serve() -> Result<(), String> {
             },
         )
         .await
-        .map_err(|error| format!("could not serve {PATH}: {error}"))?;
+        .map_err(|error| error.to_string())?;
     server
-        .at(
-            ACCESS_PATH,
-            Access {
-                daemon: daemon.clone(),
-            },
-        )
+        .at(ACCESS_PATH, Access { daemon })
         .await
-        .map_err(|error| format!("could not serve {ACCESS_PATH}: {error}"))?;
+        .map_err(|error| error.to_string())?;
     connection
         .request_name(SERVICE)
         .await
-        .map_err(|error| format!("could not own {SERVICE}: {error}"))?;
+        .map_err(|error| error.to_string())?;
+    Ok(connection)
+}
+
+pub async fn serve() -> Result<(), String> {
+    let store = Store::load(store_path())
+        .map_err(|error| format!("Cannot load permission store: {error}"))?;
+    let connection = Connection::session()
+        .await
+        .map_err(|error| error.to_string())?;
+    let _connection = connect(
+        Arc::new(Daemon::new(
+            store,
+            std::env::current_exe().map_err(|error| error.to_string())?,
+        )),
+        connection,
+    )
+    .await?;
     std::future::pending::<()>().await;
     Ok(())
 }
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests;

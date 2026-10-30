@@ -23,6 +23,7 @@ creamui-widgets.workspace = true
 creamui-image = { workspace = true, features = ["svg"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
+tempfile.workspace = true
 zbus = { workspace = true, features = ["blocking-api"] }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "sync", "time", "process"] }
 
@@ -31,9 +32,6 @@ creamui-render = { workspace = true, features = ["platform-winit", "platform-way
 
 [target.'cfg(target_os = "windows")'.dependencies]
 creamui-render = { workspace = true, features = ["platform-windows"] }
-
-[dev-dependencies]
-tempfile.workspace = true
 
 [lints]
 workspace = true
