@@ -10,8 +10,9 @@ cedit --help
 ```
 
 The application follows Coconut's system appearance and live theme changes.
-`build.sh` stages the executable; `install.sh` installs it and its desktop entry.
-All application text is English.
+Windows render through CreamUI's CPU backend; `CUI_OVERRIDE_RENDER_BACKEND=gpu`
+opts into `wgpu` per launch. `build.sh` stages the executable; `install.sh`
+installs it and its desktop entry. All application text is English.
 
 ## Editing
 

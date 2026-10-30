@@ -1,5 +1,5 @@
 use coconut_editor::{app, appearance};
-use creamui_render::{AppBuilder, BlurRegion, WindowOptions};
+use creamui_render::{AppBuilder, BlurRegion, RenderBackend, WindowOptions};
 use creamui_theme_watch::ThemeListener;
 use std::{
     path::PathBuf,
@@ -39,6 +39,7 @@ fn main() -> Result<(), String> {
         decorations: true,
         blur: Some(BlurRegion::Window),
         theme: appearance::load_system_theme(),
+        backend: RenderBackend::Cpu,
         ..Default::default()
     };
     AppBuilder::new()
