@@ -769,6 +769,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "coconut-calculator"
+version = "0.1.0"
+dependencies = [
+ "arboard",
+ "coconut-integration-cream",
+ "creamui-core",
+ "creamui-fonts",
+ "creamui-reactive",
+ "creamui-render",
+ "creamui-router",
+ "creamui-theme",
+ "creamui-theme-watch",
+ "creamui-widgets",
+]
+
+[[package]]
 name = "coconut-core"
 version = "0.1.0"
 dependencies = [

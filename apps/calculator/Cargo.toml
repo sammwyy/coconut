@@ -1,0 +1,34 @@
+[package]
+name = "coconut-calculator"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Coconut's standard/scientific calculator and unit converter"
+
+[[bin]]
+name = "ccalc"
+path = "src/main.rs"
+
+[dependencies]
+coconut-integration-cream.workspace = true
+creamui-core.workspace = true
+creamui-reactive.workspace = true
+creamui-router.workspace = true
+creamui-theme.workspace = true
+creamui-theme-watch.workspace = true
+creamui-fonts.workspace = true
+creamui-widgets.workspace = true
+creamui-render = { workspace = true, features = ["system-theme"] }
+arboard.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+creamui-render = { workspace = true, features = ["platform-winit", "platform-wayland", "platform-x11", "platform-window-integration-blair", "platform-blur-blair", "platform-blur-kwin"] }
+arboard = { workspace = true, features = ["wayland-data-control"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+creamui-render = { workspace = true, features = ["platform-windows"] }
+
+[lints]
+workspace = true

@@ -130,6 +130,12 @@ And the editor with:
 cargo run -p coconut-editor
 ```
 
+Run the standard and scientific calculator with:
+
+```bash
+cargo run -p coconut-calculator -- --scientific
+```
+
 Preview the login screen in a normal, resizable window on any Wayland desktop:
 
 ```bash

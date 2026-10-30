@@ -37,6 +37,7 @@ stay calm, responsive, and consistent.
 | `coconut-bg` | Render the desktop background directly. |
 | `coconut terminal` | Start the terminal emulator. |
 | `cedit [FILE ...]` | Open CEdit, the text, code, Markdown and byte editor. |
+| `ccalc [--scientific]` | Open Calculator with standard/scientific modes and unit conversions. |
 | `cterm --settings` | Open Terminal Settings. |
 | `coconut files` | Start the file manager. |
 | `cfiles --settings` | Open File Explorer settings. |

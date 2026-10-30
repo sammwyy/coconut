@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Calculator
+Comment=Standard/scientific calculator and unit converter
+Exec=ccalc
+TryExec=ccalc
+Icon=accessories-calculator
+Terminal=false
+Categories=Utility;Calculator;
+Keywords=math;scientific;arithmetic;converter;units;
+StartupNotify=true

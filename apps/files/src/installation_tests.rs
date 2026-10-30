@@ -40,6 +40,7 @@ fn user_installer_installs_theme_integrations_and_preserves_existing_policy() {
         "cmonitor",
         "cplayer",
         "cedit",
+        "ccalc",
     ] {
         executable(&staged.join(binary), "#!/bin/sh\nexit 0\n");
     }
@@ -86,6 +87,10 @@ fn user_installer_installs_theme_integrations_and_preserves_existing_policy() {
         .exists());
     assert!(data.join("applications/cfiles.desktop").exists());
     assert!(data.join("applications/cedit.desktop").exists());
+    assert!(data.join("applications/ccalc.desktop").exists());
+    assert!(install_root.join("bin/ccalc").exists());
+    let calculator = fs::read_to_string(data.join("applications/ccalc.desktop")).unwrap();
+    assert!(calculator.contains("Exec=ccalc"));
     assert_eq!(fs::read_to_string(policy).unwrap(), "user preferences\n");
     assert!(config
         .join("xdg-desktop-portal/blair-portals.conf")

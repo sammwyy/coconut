@@ -18,7 +18,7 @@ BUILD_DIR="${COCONUT_BUILD_DIR:-$ROOT/.build}"
 # ---------------------------------------------------------------- binaries
 
 BINARIES=(coconut coconut-bg coconut-greeter coconut-settings coconut-appearance
-    cterm cfiles cmonitor cplayer cedit)
+    cterm cfiles cmonitor cplayer cedit ccalc)
 
 missing=()
 for bin in "${BINARIES[@]}"; do
@@ -104,6 +104,7 @@ cp "$ROOT/apps/files/data/cfiles.desktop" \
     "$ROOT/apps/monitor/data/cmonitor.desktop" \
     "$ROOT/apps/media-player/data/cplayer.desktop" \
     "$ROOT/apps/editor/data/cedit.desktop" \
+    "$ROOT/apps/calculator/data/ccalc.desktop" \
     "$DATA/applications/"
 
 for conf in blair-portals.conf coconut-portals.conf; do
