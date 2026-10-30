@@ -263,6 +263,7 @@ pub struct State {
     ctrl_held: Signal<bool>,
     window_focused: Signal<bool>,
     session_file: Rc<RefCell<Option<PathBuf>>>,
+    command_palette: creamui_widgets::CommandPaletteController,
 }
 impl State {
     pub fn new(cwd: PathBuf, command: Vec<String>, sender: SyncSender<Event>) -> Self {
@@ -288,6 +289,7 @@ impl State {
             ctrl_held: Signal::new(false),
             window_focused: Signal::new(true),
             session_file: Rc::new(RefCell::new(None)),
+            command_palette: creamui_widgets::CommandPaletteController::new(),
         }
     }
     pub fn add(&self) {
@@ -739,40 +741,29 @@ impl State {
                         self.confirm_paste();
                     }
                 }
-                Mode::Palette => match event.key {
-                    Key::Enter => {
-                        if let Some(action) = self.palette_actions().into_iter().next() {
-                            self.close_mode();
-                            self.dispatch(action);
-                        }
+                Mode::Palette => {
+                    let key = match event.key {
+                        Key::Enter => Some(creamui_core::Key::Enter),
+                        Key::Up => Some(creamui_core::Key::Up),
+                        Key::Down => Some(creamui_core::Key::Down),
+                        _ => search_key(&event.key),
+                    };
+                    if let Some(key) = key {
+                        self.command_palette.handle_key(
+                            creamui_core::KeyInput {
+                                key,
+                                modifiers: creamui_core::Modifiers {
+                                    ctrl: m.ctrl,
+                                    shift: m.shift,
+                                    alt: m.alt,
+                                    logo: m.logo,
+                                },
+                            },
+                            &self.command_items(),
+                            || self.close_mode(),
+                        );
                     }
-                    _ => {
-                        let action = self
-                            .bindings
-                            .borrow()
-                            .iter()
-                            .find(|(_, binding)| binding.matches(&event.key, m))
-                            .map(|(action, _)| *action);
-                        if action == Some(Action::Palette) {
-                            return true;
-                        }
-                        if let Some(key) = search_key(&event.key) {
-                            if let Some(editor) = self.palette_editor() {
-                                if let Some(handler) = editor.on_key() {
-                                    handler(creamui_core::KeyInput {
-                                        key,
-                                        modifiers: creamui_core::Modifiers {
-                                            ctrl: m.ctrl,
-                                            shift: m.shift,
-                                            alt: m.alt,
-                                            logo: m.logo,
-                                        },
-                                    });
-                                }
-                            }
-                        }
-                    }
-                },
+                }
                 Mode::RenameTab => match event.key {
                     Key::Enter => self.rename_tab(),
                     _ => {
@@ -1021,6 +1012,10 @@ impl State {
         }
     }
     fn activate_mode(&self, mode: Mode) {
+        if mode == Mode::Palette {
+            self.command_palette.reset();
+        }
+
         if !self.config.peek().island.enabled && mode == Mode::Search {
             return;
         }
@@ -1044,6 +1039,11 @@ impl State {
                 tab.island_scroll.set(0.0);
                 self.revision.update(|v| *v = v.wrapping_add(1));
             });
+            if mode == Mode::Palette {
+                if let Some(window) = self.window.borrow().as_ref() {
+                    window.focus_text_input();
+                }
+            }
         }
     }
     fn close_mode(&self) {
@@ -1207,21 +1207,24 @@ impl State {
                 .selection_background(theme.colors.accent.mix(theme.colors.surface, 0.5)),
         ))
     }
-    fn palette_input(&self) -> Option<crate::search::SearchInput> {
-        self.palette_input_with("Type an action…")
-    }
-    fn palette_actions(&self) -> Vec<Action> {
-        let query = self
-            .current()
-            .map(|tab| tab.session.borrow().palette.query.to_lowercase())
-            .unwrap_or_default();
+    fn command_items(&self) -> Vec<creamui_widgets::CommandPaletteItem> {
         Action::all()
             .into_iter()
             .filter(|action| *action != Action::Palette)
-            .filter(|action| {
-                query.is_empty()
-                    || action.label().to_lowercase().contains(&query)
-                    || action.id().contains(&query)
+            .map(|action| {
+                let invoke = self.clone();
+                let shortcut = self
+                    .bindings
+                    .borrow()
+                    .iter()
+                    .find(|(candidate, _)| *candidate == action)
+                    .map(|(_, binding)| binding.display())
+                    .unwrap_or_default();
+                creamui_widgets::CommandPaletteItem::new(action.id(), action.label(), move || {
+                    invoke.close_mode();
+                    invoke.dispatch(action);
+                })
+                .shortcut(shortcut)
             })
             .collect()
     }
@@ -1350,43 +1353,8 @@ impl State {
             preferred,
         ))
     }
-    fn palette_content(&self, orientation: Orientation) -> Option<(BoxedWidget, Size)> {
-        let input = self.palette_input()?;
-        let vertical = orientation == Orientation::Vertical;
-        let actions = self.palette_actions();
-        let preferred = Size {
-            width: 440.0,
-            height: if vertical { 360.0 } else { 282.0 },
-        };
-        let mut children: Vec<BoxedWidget> = vec![Box::new(input)];
-        if actions.is_empty() {
-            children.push(Box::new(
-                Text::secondary("No matching actions.").font_size(12.0),
-            ));
-        } else {
-            for action in actions.into_iter().take(8) {
-                let invoke = self.clone();
-                let shortcut = self
-                    .bindings
-                    .borrow()
-                    .iter()
-                    .find(|(candidate, _)| *candidate == action)
-                    .map(|(_, binding)| binding.display())
-                    .unwrap_or_else(|| "Unassigned".into());
-                children.push(button(
-                    &format!("{}  ·  {shortcut}", action.label()),
-                    424.0,
-                    move || {
-                        invoke.close_mode();
-                        invoke.dispatch(action);
-                    },
-                ));
-            }
-        }
-        Some((view(column(6.0), children), preferred))
-    }
     fn rename_tab_content(&self, orientation: Orientation) -> Option<(BoxedWidget, Size)> {
-        let input = self.palette_input()?;
+        let input = self.palette_input_with("Tab name…")?;
         let rename = self.clone();
         let clear = self.clone();
         let vertical = orientation == Orientation::Vertical;
@@ -1486,7 +1454,7 @@ impl State {
         let (content, preferred) = match mode {
             Mode::Search => self.search_content(config.orientation, area.width)?,
             Mode::PasteConfirm => self.paste_confirmation_content(config.orientation)?,
-            Mode::Palette => self.palette_content(config.orientation)?,
+            Mode::Palette => return None,
             Mode::RenameTab => self.rename_tab_content(config.orientation)?,
             Mode::SaveOutput => self.save_output_content(config.orientation)?,
         };
@@ -1725,6 +1693,20 @@ impl State {
             height: screen_height,
         }) {
             children.push(bar);
+        }
+        if self
+            .current()
+            .is_some_and(|tab| tab.session.borrow().control_mode == Some(Mode::Palette))
+        {
+            let close = self.clone();
+            children.push(Box::new(
+                creamui_widgets::CommandPalette::new(
+                    &self.command_palette,
+                    self.command_items(),
+                    move || close.close_mode(),
+                )
+                .viewport(size),
+            ));
         }
         Box::new(
             RawView::new(Style {
@@ -2579,8 +2561,10 @@ mod tests {
         );
         state.add();
         state.activate_mode(Mode::Palette);
-        state.edit_palette(|palette| palette.query = "new tab".into());
-        assert_eq!(state.palette_actions(), vec![Action::NewTab]);
+        state.command_palette.query().set_value("new tab");
+        let items = state.command_palette.matching(&state.command_items());
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].id, Action::NewTab.id());
         state.key(
             KeyEvent {
                 key: Key::Enter,
@@ -2592,6 +2576,90 @@ mod tests {
         assert_eq!(state.tabs.peek().len(), 2);
         assert_eq!(state.current().unwrap().session.borrow().control_mode, None);
         state.cleanup();
+    }
+
+    #[test]
+    fn command_palette_routes_text_arrows_and_enter_through_shared_controls() {
+        let (tx, _rx) = std::sync::mpsc::sync_channel(128);
+        let state = State::new(
+            crate::terminal::idle_cwd(),
+            crate::terminal::idle_command(),
+            tx,
+        );
+        state.add();
+        state.add();
+        state.active.set(0);
+        state.activate_mode(Mode::Palette);
+        for character in "switch to tab".chars() {
+            state.key(
+                KeyEvent {
+                    key: Key::Character(character.to_string()),
+                    pressed: true,
+                    synthetic: false,
+                },
+                Modifiers::default(),
+            );
+        }
+        assert_eq!(state.command_palette.query().peek(), "switch to tab");
+        state.key(
+            KeyEvent {
+                key: Key::Down,
+                pressed: true,
+                synthetic: false,
+            },
+            Modifiers::default(),
+        );
+        state.key(
+            KeyEvent {
+                key: Key::Enter,
+                pressed: true,
+                synthetic: false,
+            },
+            Modifiers::default(),
+        );
+        assert_eq!(state.active.peek(), 1);
+        assert_eq!(state.current().unwrap().session.borrow().control_mode, None);
+        state.cleanup();
+    }
+
+    #[test]
+    fn command_palette_uses_a_modal_shared_surface() {
+        creamui_reactive::with_context_scope(|| {
+            let theme = Theme::dark();
+            creamui_reactive::provide_context(ThemeProvider::new(theme));
+            creamui_reactive::provide_context(Signal::new(WindowDecorations::default()));
+            let (tx, _rx) = std::sync::mpsc::sync_channel(128);
+            let state = State::new(
+                crate::terminal::idle_cwd(),
+                crate::terminal::idle_command(),
+                tx,
+            );
+            state.add();
+            state.activate_mode(Mode::Palette);
+            state.command_palette.query().set_value("new tab");
+            let size = Size {
+                width: 640.0,
+                height: 420.0,
+            };
+            let mut recorder = SceneRecorder::new();
+            recorder.begin(640, 420, 1.0, CLEAR, theme.colors);
+            let scene = Renderer::new().render(state.build(size), size, &mut recorder);
+            assert!(scene.first_text_input().is_some());
+            if let Some(directory) = std::env::var_os("CTERM_SNAPSHOT_DIR") {
+                std::fs::create_dir_all(&directory).unwrap();
+                let mut raster = Rasterizer::new(640, 420);
+                raster.render(&recorder.finish(), &Damage::Full);
+                raster
+                    .pixmap()
+                    .save_png(PathBuf::from(directory).join("shared-command-palette.png"))
+                    .unwrap();
+            }
+            scene
+                .hit_test(Point { x: 5.0, y: 400.0 })
+                .expect("palette backdrop")();
+            assert_eq!(state.current().unwrap().session.borrow().control_mode, None);
+            state.cleanup();
+        });
     }
 
     #[test]

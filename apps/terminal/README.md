@@ -167,7 +167,10 @@ install -Dm644 data/cterm.desktop ~/.local/share/applications/cterm.desktop
 
 `src/island.rs` provides the shared surface and placement settings. Commands activate a per-session
 `Mode` through `State::activate_mode`; `Escape` and the close control dismiss it. Search, paste
-confirmation, the command palette, tab renaming, and output saving are island modes. New modes
+confirmation, tab renaming, and output saving are island modes. The command palette uses
+CreamUI's shared `CommandPalette` surface and controller, including filtering, scrollable results,
+shortcut labels, and arrow/Enter navigation. Its placement is independent of the control island.
+New island modes
 supply their content and preferred size through `State::control_island`, and implement their state
 updates in `Session::set_mode` / `refresh_mode` and keyboard handling in `State::key`. Keyboard
 callbacks must remain independent of theme/context hooks; styling belongs to the window build.
