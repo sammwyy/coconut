@@ -43,6 +43,11 @@ impl Session {
         self.history.truncate(100);
         self.context.answer = result;
     }
+    pub fn clear_registers(&mut self) {
+        self.memory = None;
+        self.context.memory = 0.0;
+        self.context.answer = 0.0;
+    }
     pub fn store(&mut self, expression: &str, operation: Memory) -> Result<(), String> {
         if operation == Memory::Clear {
             self.memory = None;

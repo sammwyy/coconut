@@ -121,6 +121,35 @@ fn keyboard_entry_works_without_a_focusable_input_before_and_after_pointer_actio
     });
 }
 #[test]
+fn clear_all_resets_entry_memory_and_answer_but_preserves_history() {
+    let state = State::default();
+    state.set_expression("6*7");
+    state.run(Action::Evaluate);
+    state.run(Action::Memory(Memory::Store));
+    assert_eq!(state.session.borrow().memory, Some(42.0));
+    assert_eq!(state.session.borrow().context.answer, 42.0);
+    state.set_expression("1+1");
+    state.run(Action::ClearAll);
+    assert_eq!(state.entry().text, "");
+    assert_eq!(state.session.borrow().memory, None);
+    assert_eq!(state.session.borrow().context.answer, 0.0);
+    assert_eq!(state.session.borrow().context.memory, 0.0);
+    assert_eq!(state.session.borrow().history.len(), 1);
+    state.run(Action::Memory(Memory::Store));
+    assert_eq!(state.session.borrow().memory, Some(0.0));
+    state.run(Action::Clear);
+    assert_eq!(state.session.borrow().memory, Some(0.0));
+    assert!(native(
+        &state,
+        Key::Delete,
+        Modifiers {
+            shift: true,
+            ..Default::default()
+        },
+    ));
+    assert_eq!(state.session.borrow().memory, None);
+}
+#[test]
 fn router_keeps_calculator_registers_and_each_converter_session() {
     let state = State::default();
     type_text(&state, "42");

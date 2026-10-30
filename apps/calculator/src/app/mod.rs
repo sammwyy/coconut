@@ -40,6 +40,7 @@ pub enum Action {
     Suffix(String),
     Evaluate,
     Clear,
+    ClearAll,
     Backspace,
     Sign,
     Recall,
@@ -284,6 +285,13 @@ impl State {
                         entry.clear();
                         Ok(())
                     })?,
+                    Action::ClearAll => {
+                        self.edit_entry(|entry| {
+                            entry.clear();
+                            Ok(())
+                        })?;
+                        self.session.borrow_mut().clear_registers();
+                    }
                     Action::Backspace => self.edit_entry(|entry| {
                         entry.backspace();
                         Ok(())

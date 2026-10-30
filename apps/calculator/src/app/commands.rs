@@ -30,6 +30,12 @@ impl State {
             ("paste", "Paste expression", "Ctrl+V", Action::Paste),
             ("clear", "Clear expression", "Escape", Action::Clear),
             (
+                "clear-all",
+                "Clear all (AC)",
+                "Shift+Delete",
+                Action::ClearAll,
+            ),
+            (
                 "store",
                 "Store in memory (MS)",
                 "Ctrl+M",
@@ -140,7 +146,13 @@ impl State {
             }
             Key::Enter => Action::Evaluate,
             Key::Backspace => Action::Backspace,
-            Key::Delete => Action::Clear,
+            Key::Delete => {
+                if modifiers.shift {
+                    Action::ClearAll
+                } else {
+                    Action::Clear
+                }
+            }
             Key::Character(text) if modifiers.alt && text == "1" => {
                 Action::Navigate(Mode::Standard)
             }

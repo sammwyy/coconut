@@ -157,6 +157,7 @@ impl State {
             view(
                 fixed_height(28.0, row(2.0)),
                 vec![
+                    self.key_button("AC", Action::ClearAll, KeyStyle::Quiet, 28.0, false),
                     self.key_button(
                         "MC",
                         Action::Memory(Memory::Clear),
@@ -602,6 +603,7 @@ impl State {
         Box::new(
             ScrollView::controlled(grow(column(0.0)), scroll)
                 .content_gap(gap)
+                .customize(|view| view.scrollbar = false)
                 .with_children(rows),
         )
     }

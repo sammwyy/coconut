@@ -53,14 +53,17 @@ and Space remain available for control navigation and activation; open unit
 popups and command search own their keyboard input.
 
 Enter or `=` evaluates, Backspace removes the previous Unicode character, and C,
-Delete or Escape clears the entry. Entering a number after evaluation starts a
-new calculation; an operator continues from the answer. Functions wrap the current
-expression, or start a function call when the entry is empty. `Ans` inserts the
-last successful calculation or conversion result. Empty input represents zero.
-Failed calculations preserve the entry, memory, answer and history.
+Delete or Escape clears the entry. AC or Shift+Delete additionally clears memory
+and the last answer, leaving history untouched. Entering a number after evaluation
+starts a new calculation; an operator continues from the answer. Functions wrap
+the current expression, or start a function call when the entry is empty. `Ans`
+inserts the last successful calculation or conversion result. Empty input
+represents zero. Failed calculations preserve the entry, memory, answer and
+history.
 
-The keypad and function panel scroll independently when the window is too short
-or text is enlarged. Display and common controls remain visible. Secondary actions
+The keypad and function panel scroll independently, without a visible scrollbar,
+when the window is too short or text is enlarged. Display and common controls
+remain visible. Secondary actions
 and less common functions are available through F1 / Ctrl+Shift+P, without a
 permanent command-menu button. Ctrl+V replaces the current entry with a validated
 clipboard expression. Ctrl+C copies the computed result at round-trip precision.
@@ -124,9 +127,10 @@ Unit selectors support Tab, Space and arrows as well as pointer selection.
 ## Memory, history and shortcuts
 
 MS stores the current entry's value, M+ adds it, M− subtracts it, MR inserts memory
-and MC clears it. In converter modes memory uses the source expression's value,
-without attaching a unit. Empty memory disables MR and MC; stored zero still
-counts as populated memory. Invalid memory operations preserve the register.
+and MC clears it. AC resets the entry, memory and last answer at once. In converter
+modes memory uses the source expression's value, without attaching a unit. Empty
+memory disables MR and MC; stored zero still counts as populated memory. Invalid
+memory operations preserve the register.
 
 History holds the last 100 successful calculations and conversions, newest first.
 Conversion records include the category and source/destination units. Click a
@@ -141,6 +145,7 @@ no files are written.
 | Enter or `=` | Evaluate / record conversion |
 | Backspace | Delete previous character |
 | Delete or Ctrl+L | Clear current entry |
+| Shift+Delete | Clear entry, memory and answer (AC) |
 | Escape | Dismiss the active transient/history, otherwise clear entry |
 | Alt+1 / Alt+2 | Standard / Scientific |
 | Ctrl+B | Toggle navigation overlay |
