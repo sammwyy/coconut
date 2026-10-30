@@ -22,6 +22,8 @@ The executable is `cterm`; the desktop name is **Terminal**.
 - Shells that emit OSC 133 markers support previous/next-command navigation and desktop
   notifications when a long-running command completes in an unfocused window.
 - System theme, live CreamUI theme updates, and hybrid compositor decorations.
+- Windows render through CreamUI's CPU backend; `CUI_OVERRIDE_RENDER_BACKEND=gpu`
+  opts into `wgpu` per launch.
 
 ## Build
 

@@ -14,7 +14,7 @@ mod terminal;
 mod terminal_graphics;
 mod ui;
 
-use creamui_render::{AppBuilder, BlurRegion, WindowOptions};
+use creamui_render::{AppBuilder, BlurRegion, RenderBackend, WindowOptions};
 use creamui_theme_watch::ThemeListener;
 use std::sync::{mpsc, Arc, Mutex};
 
@@ -50,6 +50,7 @@ fn options(title: &str, width: u32, height: u32) -> WindowOptions {
         decorations: true,
         blur: Some(BlurRegion::Window),
         theme: appearance::load_system_theme(),
+        backend: RenderBackend::Cpu,
         ..Default::default()
     }
 }
