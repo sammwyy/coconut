@@ -1,7 +1,9 @@
-# Developing Coconut
+# Developing the Coconut shell
 
 Coconut is a Rust workspace for a Wayland desktop shell. This guide covers the
-local toolchain, native libraries, and everyday development commands.
+local toolchain, native libraries, shell/session development, and everyday
+development commands. For application architecture and UI conventions, read
+[Developing Coconut apps](APPS.md). Commands below run from the Coconut checkout.
 
 ## Requirements
 
@@ -10,13 +12,16 @@ for your distribution. Coconut links to PipeWire and uses `bindgen` while
 building; therefore, the PipeWire headers, `pkg-config`, Clang, and libclang
 must be present.
 
-The repository currently uses local path dependencies for CreamUI and Blair.
-Keep all three repositories side by side:
+The workspace uses local path dependencies for CreamUI, Blair, Alphin, and delib.
+Keep these repositories side by side, following the paths in the root
+[Cargo.toml](../../Cargo.toml):
 
 ```text
 workspace/
+├── alphin/
 ├── blair/
 ├── creamui/
+├── delib/
 └── coconut/
 ```
 
@@ -76,7 +81,7 @@ install `cmake qt6-qtbase-devel qt6-qtbase-private-devel`; on Debian/Ubuntu use
 GTK runtime integration needs GLib/GSettings, dconf,
 `gsettings-desktop-schemas`, `xdg-desktop-portal`,
 `xdg-desktop-portal-gtk`, and `xsettingsd` for X11/XWayland clients.
-See [THEMES.md](THEMES.md) for adapter builds and isolated native tests.
+See [THEMES.md](../../THEMES.md) for adapter builds and isolated native tests.
 
 ## Build and run
 
@@ -94,7 +99,8 @@ Start the settings application independently with:
 cargo run -p coconut-settings
 ```
 
-And the terminal emulator with:
+The application design and implementation guide is [APPS.md](APPS.md).
+Run the terminal emulator with:
 
 ```bash
 cargo run -p coconut-terminal
@@ -116,6 +122,12 @@ And the media player with:
 
 ```bash
 cargo run -p coconut-media-player
+```
+
+And the editor with:
+
+```bash
+cargo run -p coconut-editor
 ```
 
 Preview the login screen in a normal, resizable window on any Wayland desktop:

@@ -105,9 +105,13 @@ from MET Norway. Disabling the widget prevents new weather requests.
 
 ## Development
 
-See [DEVELOPMENT.md](DEVELOPMENT.md) for the required checkout layout, Linux
-dependencies for Arch, Debian/Ubuntu, Fedora/RHEL, and openSUSE, build commands,
-and troubleshooting guidance.
+See the [development documentation](docs/README.md):
+
+- [Shell and session development](docs/dev/SHELL.md): checkout layout, native
+  dependencies, build commands, greeter previews, and troubleshooting.
+- [Application development](docs/dev/APPS.md): architecture, CreamUI components,
+  design, interaction patterns, performance, and validation.
+- [Code style](CODESTYLE.md): source quality and comment rules.
 
 For a local development session:
 
