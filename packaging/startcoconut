@@ -4,9 +4,10 @@
 # in below. Rerun ./install.sh (or edit WM) to switch compositors.
 WM="@COCONUT_WM@"
 SESSION="@INSTALL_BIN@/coconut-session"
+. "@INSTALL_DATA@/coconut/environment"
 
-export XDG_CURRENT_DESKTOP="${XDG_CURRENT_DESKTOP:-Coconut}"
-export XDG_SESSION_DESKTOP="${XDG_SESSION_DESKTOP:-Coconut}"
+export XDG_CURRENT_DESKTOP=Coconut
+export XDG_SESSION_DESKTOP=Coconut
 export XDG_SESSION_TYPE=wayland
 
 export RUST_LOG="${RUST_LOG:-warn}"
@@ -31,6 +32,14 @@ fi
 # one; bare TTY logins get wrapped.
 if [ -z "$DBUS_SESSION_BUS_ADDRESS" ] && command -v dbus-run-session >/dev/null 2>&1; then
     exec dbus-run-session -- "$0" "$@"
+fi
+
+# Export the initial native sources before applications inherit their paths.
+"@INSTALL_BIN@/coconut-appearance" --once >>"$LOGFILE" 2>&1 || true
+if command -v dbus-update-activation-environment >/dev/null 2>&1; then
+    dbus-update-activation-environment --systemd XDG_CURRENT_DESKTOP XDG_SESSION_DESKTOP XDG_SESSION_TYPE \
+        XDG_CONFIG_HOME XDG_DATA_HOME CREAMUI_APPEARANCE COCONUT_QT_APPEARANCE \
+        QT_QPA_PLATFORMTHEME QT_PLUGIN_PATH >>"$LOGFILE" 2>&1 || true
 fi
 
 # Wait until the compositor's Wayland socket exists. Prints the socket name.

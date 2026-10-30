@@ -20,6 +20,8 @@ perf-metrics = [
 ]
 
 [dependencies]
+coconut-theme.workspace = true
+coconut-integration-cream.workspace = true
 coconut-api = { workspace = true }
 coconut-core = { workspace = true, default-features = true }
 coconut-plugin-kit = { workspace = true }
@@ -54,6 +56,9 @@ zbus.workspace = true
 
 [target.'cfg(not(target_os = "windows"))'.dependencies]
 coconut-registry = { workspace = true, default-features = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+coconut-integration-appearance.workspace = true
 
 [target.'cfg(target_os = "windows")'.dependencies]
 coconut-registry = { workspace = true, default-features = false, features = ["windows"] }

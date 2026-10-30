@@ -1,0 +1,4 @@
+[portal]
+DBusName=org.freedesktop.impl.portal.desktop.coconut
+Interfaces=org.freedesktop.impl.portal.Settings
+UseIn=Coconut;

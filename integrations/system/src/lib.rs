@@ -1,5 +1,6 @@
 //! Linux service adapters. No settings are changed during discovery. Every
 //! write is an explicit UI action and failures (including polkit) are returned.
+mod appearance;
 mod applications;
 mod blair;
 mod hardware;
@@ -451,14 +452,13 @@ fn gnome_mapping(key: &str) -> Option<(&'static str, &'static str, bool)> {
     })
 }
 fn discover_preferences(snapshot: &mut Snapshot) {
+    appearance::discover(snapshot);
     if snapshot.session == "Blair" {
         blair::discover(snapshot);
     }
     let gnome = snapshot.session.to_lowercase().contains("gnome");
     for key in [
-        "contrast",
         "zoom",
-        "text-scale",
         "reduce-motion",
         "visual-alerts",
         "sticky-keys",
@@ -502,6 +502,9 @@ fn discover_preferences(snapshot: &mut Snapshot) {
 }
 
 fn set_preference(key: &str, value: Value) -> Result<(), String> {
+    if appearance::supports(key) {
+        return appearance::set(key, value);
+    }
     if blair::supports(key) && blair_available() {
         return blair::set(key, value);
     }

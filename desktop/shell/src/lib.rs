@@ -51,6 +51,9 @@ use std::{
 };
 
 pub fn run() {
+    #[cfg(target_os = "linux")]
+    coconut_integration_appearance::start();
+
     #[cfg(feature = "perf-metrics")]
     creamui_devtools::init_with(creamui_devtools::DevtoolsOptions {
         initially_visible: true,
@@ -452,8 +455,9 @@ fn append_bars(
                 decorations: false,
                 resizable: false,
                 transparent: true,
-                blur: (dock.show_background || dock.show_island_background)
-                    .then_some(BlurRegion::Content),
+                blur: ((dock.show_background || dock.show_island_background)
+                    && coconut_plugin_kit::design::shell_blur_enabled())
+                .then_some(BlurRegion::Content),
                 role,
                 theme: system_theme(),
                 backend: render_backend,
@@ -530,6 +534,12 @@ fn schedule_runtime_events(
                         popups.set_theme(theme);
                         for window in themed_windows.borrow().iter() {
                             window.set_theme(theme);
+                        }
+                        for window in dock_windows.borrow().iter() {
+                            window.set_blur_region(
+                                coconut_plugin_kit::design::shell_blur_enabled()
+                                    .then_some(BlurRegion::Content),
+                            );
                         }
                     }
                     RuntimeEvent::ShellConfig(updated) => {
@@ -1059,8 +1069,11 @@ fn reload_system_theme() -> Theme {
 }
 
 fn load_system_theme() -> Theme {
+    if let Ok(resolved) = coconut_theme::Store::default().load() {
+        coconut_plugin_kit::design::use_shell_tokens(&resolved.shell);
+    }
     coconut_plugin_kit::design::load_fonts();
-    let base = match creamui_theme_loader::SystemThemeLoader::new().load() {
+    let base = match coconut_integration_cream::load_system_appearance() {
         Ok(appearance) => {
             if let Some(font_family) = &appearance.font_family {
                 creamui_fonts::use_system_font(font_family);

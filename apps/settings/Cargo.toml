@@ -12,6 +12,9 @@ name = "coconut-settings"
 path = "src/main.rs"
 
 [dependencies]
+coconut-integration-appearance.workspace = true
+coconut-theme.workspace = true
+coconut-integration-cream.workspace = true
 coconut-core = { workspace = true, default-features = true }
 coconut-api = { workspace = true }
 coconut-registry = { workspace = true, default-features = true }

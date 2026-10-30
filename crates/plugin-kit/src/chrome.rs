@@ -133,7 +133,7 @@ pub fn island_style(width: f32, height: f32, scale: f32) -> Style {
         })
         .background(shell_island())
         .border(shell_island_border(), 1.0)
-        .corner_radius(design::PILL_RADIUS * scale)
+        .corner_radius(design::island_radius(use_theme()) * scale)
         .hover(StateStyle::new().background(shell_island().mix(shell_control(), 0.18)))
         .pressed(StateStyle::new().background(shell_selected()));
     if island_chrome().background {
@@ -190,7 +190,7 @@ pub fn compact_switch(checked: bool, on_toggle: Rc<dyn Fn()>) -> BoxedWidget {
 /// dedicated panels (network, bluetooth, energy) for their single toggle.
 pub fn toggle_row(label: &str, checked: bool, on_toggle: Rc<dyn Fn()>) -> BoxedWidget {
     Box::new(jsx! {
-        <Flex direction={FlexDirection::Row} padding={14.0} gap={8.0} align={Align::Center} background={shell_panel()} border={(shell_border(), 1.0)} corner_radius={ISLAND_RADIUS}>
+        <Flex direction={FlexDirection::Row} padding={14.0} gap={8.0} align={Align::Center} background={shell_panel()} border={(shell_border(), 1.0)} corner_radius={design::island_radius(use_theme())}>
             <RawText color={shell_text()} font_size={13.0} align={TextAlign::Start}>{label.to_owned()}</RawText>
             <Flex grow={1.0} />
             {compact_switch(checked, on_toggle)}
@@ -208,7 +208,7 @@ pub fn hero_card(icon: &str, title: String, caption: String) -> BoxedWidget {
         .justify(Justify::Center)
         .property(StyleProp::Background(shell_panel().into()))
         .property(StyleProp::Border(creamui_core::Border::new(shell_border(), 1.0)))
-        .property(StyleProp::CornerRadius(ISLAND_RADIUS))
+        .property(StyleProp::CornerRadius(design::island_radius(use_theme())))
         .box_shadow(design::card_shadow())
         .child(icon_badge(icon, 48.0))
         .child(Box::new(RawText::new(title, shell_text(), 22.0).bold(true)))
@@ -228,7 +228,7 @@ pub fn compact_hero_card(icon: &str, value: String, caption: String) -> BoxedWid
         .padding(12.0)
         .property(StyleProp::Background(shell_panel().into()))
         .property(StyleProp::Border(creamui_core::Border::new(shell_border(), 1.0)))
-        .property(StyleProp::CornerRadius(ISLAND_RADIUS))
+        .property(StyleProp::CornerRadius(design::island_radius(use_theme())))
         .child(Box::new(jsx! {
             <Flex direction={FlexDirection::Row} align={Align::Center} gap={8.0}>
                 {icon_badge(icon, 32.0)}
@@ -263,7 +263,7 @@ pub fn connection_card(
             .property(StyleProp::Width(CONNECTION_CARD_WIDTH.into()))
             .property(StyleProp::Background((if active { shell_selected() } else { shell_panel() }).into()))
             .property(StyleProp::Border(creamui_core::Border::new(shell_border(), 1.0)))
-            .property(StyleProp::CornerRadius(ISLAND_RADIUS))
+            .property(StyleProp::CornerRadius(design::island_radius(use_theme())))
             .child(Box::new(jsx! {
                 <Flex direction={FlexDirection::Row} align={Align::Center} gap={6.0}>
                     {icon_badge(icon, 24.0)}
@@ -276,8 +276,11 @@ pub fn connection_card(
     );
     match on_click {
         Some(handler) => Box::new(
-            RawButton::new(Style::new().corner_radius(ISLAND_RADIUS), move || handler())
-                .child(card),
+            RawButton::new(
+                Style::new().corner_radius(design::island_radius(use_theme())),
+                move || handler(),
+            )
+            .child(card),
         ),
         None => card,
     }
@@ -498,7 +501,7 @@ pub fn list_row(
             Box::new(RawButton::new(list_row_style(active), move || handler()).child(content))
         }
         None => Box::new(jsx! {
-            <Flex background={if active { shell_selected() } else { shell_panel() }} border={(shell_border(), 1.0)} corner_radius={ISLAND_RADIUS}>
+            <Flex background={if active { shell_selected() } else { shell_panel() }} border={(shell_border(), 1.0)} corner_radius={design::island_radius(use_theme())}>
                 {content}
             </Flex>
         }),
@@ -519,7 +522,7 @@ fn list_row_style(active: bool) -> Style {
     design::control_style(full_width(LayoutStyle::default()))
         .background(idle)
         .border(shell_border(), 1.0)
-        .corner_radius(ISLAND_RADIUS)
+        .corner_radius(design::island_radius(use_theme()))
         .hover(StateStyle::new().background(hover))
         .pressed(StateStyle::new().background(shell_selected()))
 }
@@ -541,7 +544,7 @@ pub fn detail_row_with_action(label: &str, value: String, action: BoxedWidget) -
 fn detail_row_inner(label: &str, value: String, action: Option<BoxedWidget>) -> BoxedWidget {
     let action = action.unwrap_or_else(|| Box::new(jsx! { <Flex/> }));
     Box::new(jsx! {
-        <Flex direction={FlexDirection::Row} padding={10.0} gap={8.0} align={Align::Center} background={shell_panel()} border={(shell_border(), 1.0)} corner_radius={ISLAND_RADIUS}>
+        <Flex direction={FlexDirection::Row} padding={10.0} gap={8.0} align={Align::Center} background={shell_panel()} border={(shell_border(), 1.0)} corner_radius={design::island_radius(use_theme())}>
             <RawText color={shell_muted()} font_size={12.0} align={TextAlign::Start}>{label.to_owned()}</RawText>
             <Flex grow={1.0} />
             <RawText color={shell_text()} font_size={12.0} align={TextAlign::End}>{value}</RawText>

@@ -1,0 +1,4 @@
+[D-BUS Service]
+Name=org.freedesktop.impl.portal.desktop.coconut
+Exec="/usr/bin/coconut-appearance"
+SystemdService=coconut-appearance.service

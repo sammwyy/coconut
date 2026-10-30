@@ -1,0 +1,7 @@
+dock_background = "${tokens.colors.surface}"
+island_background = "${tokens.colors.surface}"
+dock_opacity = 0.90
+island_opacity = 0.84
+dock_radius = "${tokens.geometry.card_radius}"
+island_radius = "${tokens.geometry.card_radius}"
+blur = true

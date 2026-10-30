@@ -1,0 +1,19 @@
+[package]
+name = "coconut-integration-cream"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+coconut-theme.workspace = true
+creamui-theme.workspace = true
+creamui-theme-loader.workspace = true
+toml.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

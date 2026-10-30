@@ -9,6 +9,7 @@ repository.workspace = true
 build = "build.rs"
 
 [dependencies]
+coconut-theme.workspace = true
 coconut-core = { workspace = true, default-features = true }
 delib = { workspace = true }
 creamui-core = { workspace = true }

@@ -1,0 +1,10 @@
+[Unit]
+Description=Coconut appearance and GTK integration
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=dbus
+BusName=org.freedesktop.impl.portal.desktop.coconut
+ExecStart="/usr/bin/coconut-appearance"
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=%t/bus

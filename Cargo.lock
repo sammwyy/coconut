@@ -785,6 +785,7 @@ dependencies = [
 name = "coconut-files"
 version = "0.1.0"
 dependencies = [
+ "coconut-integration-cream",
  "coconut-ui",
  "creamui-core",
  "creamui-fonts",
@@ -822,6 +823,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "coconut-integration-appearance"
+version = "0.1.0"
+dependencies = [
+ "coconut-integration-cream",
+ "coconut-integration-gtk",
+ "coconut-integration-qt",
+ "coconut-theme",
+ "creamui-theme",
+ "creamui-theme-watch",
+ "dbus",
+ "tempfile",
+ "toml 0.9.12+spec-1.1.0",
+]
+
+[[package]]
 name = "coconut-integration-blair"
 version = "0.1.0"
 dependencies = [
@@ -845,6 +861,27 @@ version = "0.1.0"
 dependencies = [
  "coconut-api",
  "libc",
+]
+
+[[package]]
+name = "coconut-integration-cream"
+version = "0.1.0"
+dependencies = [
+ "coconut-theme",
+ "creamui-theme",
+ "creamui-theme-loader",
+ "tempfile",
+ "toml 0.9.12+spec-1.1.0",
+]
+
+[[package]]
+name = "coconut-integration-gtk"
+version = "0.1.0"
+dependencies = [
+ "coconut-theme",
+ "delib",
+ "libc",
+ "tempfile",
 ]
 
 [[package]]
@@ -899,13 +936,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "coconut-integration-qt"
+version = "0.1.0"
+dependencies = [
+ "coconut-theme",
+ "serde",
+ "serde_json",
+ "toml 0.9.12+spec-1.1.0",
+]
+
+[[package]]
 name = "coconut-integration-system"
 version = "0.1.0"
 dependencies = [
  "coconut-api",
  "coconut-core",
- "creamui-theme-loader",
- "creamui-theme-watch",
+ "coconut-theme",
  "dbus",
  "delib",
  "libc",
@@ -934,6 +980,7 @@ dependencies = [
 name = "coconut-media-player"
 version = "0.1.0"
 dependencies = [
+ "coconut-integration-cream",
  "coconut-ui",
  "creamui-core",
  "creamui-fonts",
@@ -962,6 +1009,7 @@ dependencies = [
 name = "coconut-monitor"
 version = "0.1.0"
 dependencies = [
+ "coconut-integration-cream",
  "creamui-core",
  "creamui-fonts",
  "creamui-reactive",
@@ -1040,6 +1088,7 @@ name = "coconut-plugin-kit"
 version = "0.1.0"
 dependencies = [
  "coconut-core",
+ "coconut-theme",
  "creamui-core",
  "creamui-fonts",
  "creamui-image",
@@ -1126,11 +1175,14 @@ dependencies = [
  "blair-protocol",
  "coconut-api",
  "coconut-core",
+ "coconut-integration-appearance",
+ "coconut-integration-cream",
  "coconut-plugin-app-launcher",
  "coconut-plugin-clock",
  "coconut-plugin-kit",
  "coconut-plugin-tray",
  "coconut-registry",
+ "coconut-theme",
  "creamui-core",
  "creamui-fonts",
  "creamui-image",
@@ -1161,6 +1213,8 @@ dependencies = [
  "chrono",
  "coconut-api",
  "coconut-core",
+ "coconut-integration-appearance",
+ "coconut-integration-cream",
  "coconut-integration-kwin",
  "coconut-plugin-app-drawer",
  "coconut-plugin-app-launcher",
@@ -1171,6 +1225,7 @@ dependencies = [
  "coconut-plugin-weather",
  "coconut-plugin-workspaces",
  "coconut-registry",
+ "coconut-theme",
  "creamui-core",
  "creamui-devtools",
  "creamui-fonts",
@@ -1196,6 +1251,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "arboard",
+ "coconut-integration-cream",
  "coconut-ui",
  "creamui-core",
  "creamui-fonts",
@@ -1213,6 +1269,17 @@ dependencies = [
  "swash",
  "toml 0.9.12+spec-1.1.0",
  "vt100",
+]
+
+[[package]]
+name = "coconut-theme"
+version = "0.1.0"
+dependencies = [
+ "delib",
+ "serde",
+ "tempfile",
+ "toml 0.9.12+spec-1.1.0",
+ "url",
 ]
 
 [[package]]

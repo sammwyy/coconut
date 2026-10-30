@@ -4,7 +4,7 @@
 use creamui_core::{BoxShadow, BoxedWidget, LinearGradient, StateStyle, Style, Styled};
 use creamui_theme::{use_theme, Color, Theme};
 use creamui_widgets::{Icon, IconSource, RawView};
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 
 pub const FONT_FAMILY: &str = "Plus Jakarta Sans, system-ui";
 pub const CARD_RADIUS: f32 = 16.0;
@@ -23,23 +23,42 @@ pub fn coconut_theme(mut theme: Theme) -> Theme {
     theme
 }
 
-/// Explicit user selections take precedence over the default visual tokens.
+/// Resolved Coconut appearances already include geometry and typography.
 pub fn coconut_appearance(appearance: &creamui_theme::ResolvedAppearance) -> Theme {
-    let mut theme = coconut_theme(appearance.theme);
     if let Some(family) = appearance.font_family.as_deref() {
-        use std::sync::{Mutex, OnceLock};
-        static FAMILIES: OnceLock<Mutex<std::collections::BTreeMap<String, &'static str>>> =
-            OnceLock::new();
-        let mut families = FAMILIES
-            .get_or_init(Default::default)
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
-        theme.font_family = *families
-            .entry(family.to_owned())
-            .or_insert_with(|| Box::leak(family.to_owned().into_boxed_str()));
         creamui_fonts::use_system_font(family);
     }
-    theme
+    appearance.theme
+}
+
+thread_local! {
+    static SHELL_TOKENS: RefCell<Option<coconut_theme::ShellTokens>> = const { RefCell::new(None) };
+}
+
+pub fn use_shell_tokens(tokens: &coconut_theme::ShellTokens) {
+    SHELL_TOKENS.with(|current| *current.borrow_mut() = Some(tokens.clone()));
+}
+
+pub fn island_radius(theme: Theme) -> f32 {
+    SHELL_TOKENS.with(|tokens| {
+        tokens
+            .borrow()
+            .as_ref()
+            .map_or(theme.card_radius, |t| t.island_radius)
+    })
+}
+
+pub fn dock_radius(theme: Theme) -> f32 {
+    SHELL_TOKENS.with(|tokens| {
+        tokens
+            .borrow()
+            .as_ref()
+            .map_or(theme.card_radius, |t| t.dock_radius)
+    })
+}
+
+pub fn shell_blur_enabled() -> bool {
+    SHELL_TOKENS.with(|tokens| tokens.borrow().as_ref().is_none_or(|t| t.blur))
 }
 
 /// Fonts are registered per render thread, just like CreamUI's registry.
@@ -65,12 +84,24 @@ pub fn load_fonts() {
             }
         }
         loaded.set(true);
+        creamui_fonts::set_preferred_family(Some(FONT_FAMILY.to_owned()));
     });
-    // Raw text and custom-painted clocks use the same family as themed text.
-    creamui_fonts::set_preferred_family(Some(FONT_FAMILY.to_owned()));
 }
 
 pub fn island_surface(theme: Theme) -> Color {
+    if let Some(color) = SHELL_TOKENS.with(|tokens| {
+        tokens.borrow().as_ref().map(|t| {
+            let c = t.island_background;
+            Color::rgba(
+                c.r,
+                c.g,
+                c.b,
+                (f32::from(c.a) * t.island_opacity).round() as u8,
+            )
+        })
+    }) {
+        return color;
+    }
     let color = theme.colors.surface;
     if theme.high_contrast {
         return color;
@@ -90,6 +121,19 @@ pub fn island_surface(theme: Theme) -> Color {
 }
 
 pub fn dock_surface(theme: Theme) -> Color {
+    if let Some(color) = SHELL_TOKENS.with(|tokens| {
+        tokens.borrow().as_ref().map(|t| {
+            let c = t.dock_background;
+            Color::rgba(
+                c.r,
+                c.g,
+                c.b,
+                (f32::from(c.a) * t.dock_opacity).round() as u8,
+            )
+        })
+    }) {
+        return color;
+    }
     let color = theme.colors.surface;
     if theme.high_contrast {
         return color;

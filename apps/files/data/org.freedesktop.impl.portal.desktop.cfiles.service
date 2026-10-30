@@ -1,4 +1,4 @@
 [D-BUS Service]
 Name=org.freedesktop.impl.portal.desktop.cfiles
-Exec=/usr/bin/cfiles --portal
+Exec="/usr/bin/cfiles" --portal
 SystemdService=cfiles-portal.service

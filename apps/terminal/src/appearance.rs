@@ -8,7 +8,7 @@ use std::{
 };
 
 pub fn load_system_theme() -> Theme {
-    match creamui_theme_loader::SystemThemeLoader::new().load() {
+    match coconut_integration_cream::load_system_appearance() {
         Ok(appearance) => {
             if let Some(font_family) = &appearance.font_family {
                 creamui_fonts::use_system_font(font_family);

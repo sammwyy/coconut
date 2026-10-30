@@ -390,8 +390,7 @@ fn schedule_refresh(app: AppHandle, state: State) {
     );
 }
 fn load_theme() -> Theme {
-    creamui_theme_loader::SystemThemeLoader::new()
-        .load()
+    coconut_integration_cream::load_system_appearance()
         .map(|a| {
             if let Some(family) = &a.font_family {
                 creamui_fonts::use_system_font(family);

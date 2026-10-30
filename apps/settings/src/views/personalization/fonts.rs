@@ -37,7 +37,8 @@ pub(crate) fn route_view() -> BoxedWidget {
                                 creamui_theme::AppearanceSelection {
                                     theme: Some(current.theme_id),
                                     variant: Some(current.variant_id),
-                                    accent: Some(current.accent),
+                                    accent: crate::views::personalization::appearance::selected_overrides().accent
+                                        .map(|c| creamui_theme::Color::rgba(c.r, c.g, c.b, c.a)),
                                     font_family: Some(format!("{}, system-ui", font.name)),
                                     corners: Some(current.corners),
                                 },

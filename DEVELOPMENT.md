@@ -69,6 +69,15 @@ For another distribution, install the equivalent C compiler toolchain,
 `pkg-config`, PipeWire development package, Clang/libclang development package,
 Wayland and xkbcommon development packages, and D-Bus development package.
 
+The release builder also compiles Coconut's Qt platform-theme plugin with
+CMake and Qt 6 Core/Gui/Widgets/DBus development and private headers. On Fedora
+install `cmake qt6-qtbase-devel qt6-qtbase-private-devel`; on Debian/Ubuntu use
+`cmake qt6-base-dev qt6-base-private-dev`; on Arch use `cmake qt6-base`.
+GTK runtime integration needs GLib/GSettings, dconf,
+`gsettings-desktop-schemas`, `xdg-desktop-portal`,
+`xdg-desktop-portal-gtk`, and `xsettingsd` for X11/XWayland clients.
+See [THEMES.md](THEMES.md) for adapter builds and isolated native tests.
+
 ## Build and run
 
 From the Coconut checkout:

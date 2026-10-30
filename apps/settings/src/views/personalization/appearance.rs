@@ -29,16 +29,17 @@ pub fn overview(
     custom: &Signal<bool>,
 ) -> OverviewControls {
     let current = appearance.get();
+    let customizable = coconut_integration_cream::supports_custom_accent(&current.theme_id);
     let ui = creamui_theme::use_theme();
-    let themes = creamui_theme_loader::list_themes().unwrap_or_else(|error| {
+    let themes = coconut_integration_cream::list_themes().unwrap_or_else(|error| {
         eprintln!("settings: failed to list CreamUI themes: {error}");
-        vec![creamui_theme_loader::builtin_theme()]
+        vec![coconut_integration_cream::builtin_theme()]
     });
     let selected_theme = themes
         .iter()
         .find(|theme| theme.id == current.theme_id)
         .cloned()
-        .unwrap_or_else(creamui_theme_loader::builtin_theme);
+        .unwrap_or_else(coconut_integration_cream::builtin_theme);
 
     let theme_cards = themes
         .into_iter()
@@ -115,7 +116,11 @@ pub fn overview(
         accent: compact_row(
             "Accent color",
             r#"<path d="M12 2s-7 8-7 13a7 7 0 0 0 14 0c0-5-7-13-7-13Z"/>"#,
-            selection_control(accent_dots),
+            if customizable {
+                selection_control(accent_dots)
+            } else {
+                Box::new(Text::new("Defined by theme"))
+            },
         ),
         corners: compact_row(
             "Corners",
@@ -157,8 +162,10 @@ fn corners_control(
     let selection = AppearanceSelection {
         theme: Some(current.theme_id.clone()),
         variant: Some(current.variant_id.clone()),
-        accent: Some(current.accent),
-        font_family: current.font_family.clone(),
+        accent: selected_overrides()
+            .accent
+            .map(|c| Color::rgba(c.r, c.g, c.b, c.a)),
+        font_family: selected_overrides().font_family,
         corners: None,
     };
     let control = SegmentedControl::new(selected, move |index| {
@@ -198,7 +205,7 @@ fn theme_card(
     let set_custom = custom.clone();
     let id = theme.id.clone();
     let variant = theme.default_variant.clone();
-    let font_family = current.font_family.clone();
+    let font_family = selected_overrides().font_family;
     let corners = Some(current.corners);
     Box::new(jsx! {
         <RawButton
@@ -237,8 +244,10 @@ fn variant_card(
     let set_window = window.clone();
     let theme_id = current.theme_id.clone();
     let variant_id = id.to_owned();
-    let accent = current.accent;
-    let font_family = current.font_family.clone();
+    let accent = selected_overrides()
+        .accent
+        .map(|c| Color::rgba(c.r, c.g, c.b, c.a));
+    let font_family = selected_overrides().font_family;
     let corners = Some(current.corners);
     let label = title_case(id);
     Box::new(jsx! {
@@ -247,7 +256,7 @@ fn variant_card(
             background={creamui_theme::use_theme().colors.surface_elevated}
             border={(if active { selected_border } else { creamui_theme::use_theme().colors.border }, if active { 2.0 } else { 1.0 })}
             corner_radius={12.0}
-            on_click={move || apply(AppearanceSelection { theme: Some(theme_id.clone()), variant: Some(variant_id.clone()), accent: Some(accent), font_family: font_family.clone(), corners }, &set_appearance, &set_window)}
+            on_click={move || apply(AppearanceSelection { theme: Some(theme_id.clone()), variant: Some(variant_id.clone()), accent, font_family: font_family.clone(), corners }, &set_appearance, &set_window)}
         >
             <Flex direction={FlexDirection::Column} size={VARIANT_CARD} padding={4.0} gap={3.0}>
                 <Flex direction={FlexDirection::Row} grow={1.0} padding={4.0} gap={4.0} background={variant.colors.surface} corner_radius={7.0}>
@@ -276,7 +285,7 @@ fn accent_dot(
     let set_custom = custom.clone();
     let theme_id = current.theme_id.clone();
     let variant_id = current.variant_id.clone();
-    let font_family = current.font_family.clone();
+    let font_family = selected_overrides().font_family;
     let corners = Some(current.corners);
     Box::new(jsx! {
         <RawButton
@@ -333,7 +342,7 @@ fn custom_accent_picker(
     let set_window = window.clone();
     let theme_id = current.theme_id.clone();
     let variant_id = current.variant_id.clone();
-    let font_family = current.font_family.clone();
+    let font_family = selected_overrides().font_family;
     let corners = Some(current.corners);
     Box::new(ColorPicker::controlled(
         current.accent,
@@ -354,16 +363,23 @@ fn custom_accent_picker(
     ))
 }
 
+pub(super) fn selected_overrides() -> coconut_theme::Overrides {
+    coconut_theme::Store::default()
+        .selection()
+        .map(|s| s.overrides)
+        .unwrap_or_default()
+}
+
 pub(crate) fn apply(
     selection: AppearanceSelection,
     appearance: &Signal<ResolvedAppearance>,
     window: &Rc<RefCell<Option<WindowHandle>>>,
 ) {
-    if let Err(error) = creamui_theme_loader::write_system_appearance(&selection) {
-        eprintln!("settings: failed to save CreamUI appearance: {error}");
+    if let Err(error) = coconut_integration_appearance::apply_selection(&selection) {
+        eprintln!("settings: failed to save Coconut appearance: {error}");
         return;
     }
-    match creamui_theme_loader::SystemThemeLoader::new().load() {
+    match coconut_integration_cream::load_system_appearance() {
         Ok(next) => {
             if let Some(font_family) = &next.font_family {
                 creamui_fonts::use_system_font(font_family);
@@ -376,7 +392,7 @@ pub(crate) fn apply(
                 eprintln!("settings: failed to publish theme reload: {error}");
             }
         }
-        Err(error) => eprintln!("settings: failed to load CreamUI appearance: {error}"),
+        Err(error) => eprintln!("settings: failed to load Coconut appearance: {error}"),
     }
 }
 
@@ -402,7 +418,7 @@ mod tests {
             let theme = crate::components::settings_theme(Theme::light());
             creamui_reactive::provide_context(ThemeProvider::new(theme));
             let appearance = Signal::new(ResolvedAppearance {
-                theme_id: "default".into(),
+                theme_id: "coconut".into(),
                 variant_id: "light".into(),
                 theme,
                 accent: theme.colors.accent,
@@ -412,7 +428,7 @@ mod tests {
             let window = Rc::new(RefCell::new(None));
             let picker = ColorPickerController::new();
             let custom = Signal::new(false);
-            let preset = creamui_theme_loader::builtin_theme().accent_presets[0].color;
+            let preset = coconut_integration_cream::builtin_theme().accent_presets[0].color;
             let dot = accent_dot(
                 preset,
                 String::new(),
@@ -446,7 +462,7 @@ mod tests {
             let list = recorder.finish();
             let mut raster = Rasterizer::new(688, 300);
             raster.render(&list, &Damage::Full);
-            for preset in creamui_theme_loader::builtin_theme().accent_presets {
+            for preset in coconut_integration_cream::builtin_theme().accent_presets {
                 assert!(
                     raster
                         .pixmap()

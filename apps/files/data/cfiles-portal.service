@@ -6,5 +6,5 @@ After=graphical-session.target
 [Service]
 Type=dbus
 BusName=org.freedesktop.impl.portal.desktop.cfiles
-ExecStart=/usr/bin/cfiles --portal
+ExecStart="/usr/bin/cfiles" --portal
 Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=%t/bus

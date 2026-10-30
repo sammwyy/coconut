@@ -237,8 +237,7 @@ impl State {
             move || {
                 let result = backend.apply(action);
                 let appearance = (reload_appearance && result.is_ok()).then(|| {
-                    creamui_theme_loader::SystemThemeLoader::new()
-                        .load()
+                    coconut_integration_cream::load_system_appearance()
                         .map_err(|error| error.to_string())
                 });
                 let snapshot = if displays_only {

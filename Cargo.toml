@@ -41,7 +41,12 @@ coconut-core = { path = "crates/core", default-features = false }
 coconut-plugin-kit = { path = "crates/plugin-kit" }
 coconut-registry = { path = "crates/registry", default-features = false }
 coconut-ui = { path = "crates/ui" }
+coconut-theme = { path = "crates/theme" }
 coconut-integration-blair = { path = "integrations/blair" }
+coconut-integration-appearance = { path = "integrations/appearance" }
+coconut-integration-cream = { path = "integrations/cream" }
+coconut-integration-gtk = { path = "integrations/gtk" }
+coconut-integration-qt = { path = "integrations/qt" }
 coconut-integration-bluez = { path = "integrations/bluez" }
 coconut-integration-brightnessctl = { path = "integrations/brightnessctl" }
 coconut-integration-kwin = { path = "integrations/kwin" }

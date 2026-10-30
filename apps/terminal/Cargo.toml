@@ -12,6 +12,7 @@ name = "cterm"
 path = "src/main.rs"
 
 [dependencies]
+coconut-integration-cream.workspace = true
 anyhow.workspace = true
 serde.workspace = true
 toml.workspace = true

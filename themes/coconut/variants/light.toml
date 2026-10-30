@@ -1,0 +1,17 @@
+[colors]
+surface = "#f4f8fbdc"
+surface_elevated = "#ffffffb8"
+surface_hover = "#192d4109"
+text_primary = "#1a212c"
+text_secondary = "#687281"
+text_disabled = "#96a1b0"
+selection_background = "#0099d31e"
+border = "#1b273717"
+border_strong = "#1b273720"
+danger = "#d13a3a"
+warning = "#b87d0a"
+success = "#22a055"
+
+[shell]
+dock_opacity = 0.84
+island_opacity = 0.64

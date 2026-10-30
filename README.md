@@ -85,6 +85,11 @@ notifications stay visible until dismissed unless the application sets a timeout
 
 ## Platform notes
 
+Coconut desktop themes share resolved colors, typography and geometry across
+the shell, CreamUI, GTK and Qt. Packages can use automatic adapters or native
+overrides/templates. See [THEMES.md](THEMES.md) for package authoring, dynamic
+variants/accents, session integration and compatibility details.
+
 On Linux, Coconut integrates with Blair through its
 `org.blair.Compositor1` D-Bus API for window management and layer-shell
 surfaces. KDE Wayland services are supported where available.

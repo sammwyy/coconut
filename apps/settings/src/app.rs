@@ -184,7 +184,7 @@ fn watch_connectivity(
 }
 
 fn load_system_appearance() -> creamui_theme::ResolvedAppearance {
-    match creamui_theme_loader::SystemThemeLoader::new().load() {
+    match coconut_integration_cream::load_system_appearance() {
         Ok(appearance) => {
             if let Some(font_family) = &appearance.font_family {
                 creamui_fonts::use_system_font(font_family);
@@ -193,7 +193,7 @@ fn load_system_appearance() -> creamui_theme::ResolvedAppearance {
         }
         Err(error) => {
             eprintln!("settings: failed to load CreamUI system appearance: {error}");
-            let theme = creamui_theme_loader::builtin_theme();
+            let theme = coconut_integration_cream::builtin_theme();
             let variant_id = theme.default_variant.clone();
             let resolved = theme.default_theme();
             creamui_theme::ResolvedAppearance {

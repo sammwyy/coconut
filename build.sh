@@ -20,6 +20,7 @@ PACKAGES=(
     coconut-background:coconut-bg
     coconut-greeter:coconut-greeter
     coconut-settings:coconut-settings
+    coconut-integration-appearance:coconut-appearance
     coconut-terminal:cterm
     coconut-files:cfiles
     coconut-monitor:cmonitor
@@ -32,6 +33,7 @@ for entry in "${PACKAGES[@]}"; do
 done
 
 cargo build --release --manifest-path "$ROOT/Cargo.toml" "${pkgs[@]}"
+bash "$ROOT/integrations/qt/build.sh" "$BUILD_DIR/qt"
 
 # ----------------------------------------------------------------- staging
 

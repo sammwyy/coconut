@@ -1,0 +1,7 @@
+[colors]
+surface = "#060606f8"
+surface_elevated = "#0e0e0ef8"
+
+[shell]
+dock_opacity = 0.96
+island_opacity = 0.92

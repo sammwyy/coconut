@@ -12,6 +12,7 @@ name = "cmonitor"
 path = "src/main.rs"
 
 [dependencies]
+coconut-integration-cream.workspace = true
 libc.workspace = true
 delib = { workspace = true }
 creamui-core = { workspace = true }

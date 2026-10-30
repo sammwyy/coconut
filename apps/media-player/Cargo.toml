@@ -12,6 +12,7 @@ name = "cplayer"
 path = "src/main.rs"
 
 [dependencies]
+coconut-integration-cream.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 rodio.workspace = true

@@ -1,0 +1,22 @@
+schema = 1
+id = "coconut"
+name = "Coconut"
+default_variant = "dark"
+tokens = "tokens.toml"
+shell = "shell.toml"
+
+[variants.light]
+appearance = "light"
+file = "variants/light.toml"
+
+[variants.dark]
+appearance = "dark"
+file = "variants/dark.toml"
+
+[variants.midnight]
+appearance = "dark"
+file = "variants/midnight.toml"
+
+[accent]
+customizable = true
+presets = ["#0099d3", "#e35656", "#25a652", "#8271e9", "#cb7d00", "#d45591"]

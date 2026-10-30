@@ -1,0 +1,8 @@
+# Sourced by the session before starting the compositor or any applications.
+# These stable pointers select integrations; live changes update their files.
+export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+export XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
+export CREAMUI_APPEARANCE="${CREAMUI_APPEARANCE:-$XDG_DATA_HOME/coconut/appearance/cream.toml}"
+export COCONUT_QT_APPEARANCE="${COCONUT_QT_APPEARANCE:-$XDG_DATA_HOME/coconut/appearance/qt.json}"
+export QT_QPA_PLATFORMTHEME="${QT_QPA_PLATFORMTHEME:-xdgdesktopportal:coconut}"
+export QT_PLUGIN_PATH="@INSTALL_DATA@/coconut/qt/plugins${QT_PLUGIN_PATH:+:$QT_PLUGIN_PATH}"

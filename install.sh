@@ -17,7 +17,7 @@ BUILD_DIR="${COCONUT_BUILD_DIR:-$ROOT/.build}"
 
 # ---------------------------------------------------------------- binaries
 
-BINARIES=(coconut coconut-bg coconut-greeter coconut-settings
+BINARIES=(coconut coconut-bg coconut-greeter coconut-settings coconut-appearance
     cterm cfiles cmonitor cplayer)
 
 missing=()
@@ -27,6 +27,11 @@ done
 if [ "${#missing[@]}" -ne 0 ]; then
     echo "install.sh: staged binaries missing: ${missing[*]}" >&2
     echo "Run ./build.sh first (as a regular user), then re-run this script." >&2
+    exit 1
+fi
+qt_plugins=("$BUILD_DIR"/qt/plugins/platformthemes/libcoconut-qt*.so)
+if [ ! -f "${qt_plugins[0]}" ]; then
+    echo "install.sh: Qt theme plugin missing; run ./build.sh first" >&2
     exit 1
 fi
 
@@ -56,6 +61,18 @@ for bin in "${BINARIES[@]}"; do
     install -m 755 "$BUILD_DIR/$bin" "$INSTALL_BIN/$bin"
 done
 
+mkdir -p "$DATA/coconut/themes" "$DATA/coconut/qt/plugins/platformthemes"
+cp -a "$ROOT/themes/." "$DATA/coconut/themes/"
+mkdir -p "$DATA/fonts/coconut"
+install -m 644 "$ROOT/assets/fonts/plus-jakarta-sans/Regular.ttf" \
+    "$ROOT/assets/fonts/plus-jakarta-sans/SemiBold.ttf" "$DATA/fonts/coconut/"
+command -v fc-cache >/dev/null && fc-cache "$DATA/fonts/coconut" || true
+for plugin in "${qt_plugins[@]}"; do
+    install -m 755 "$plugin" "$DATA/coconut/qt/plugins/platformthemes/"
+done
+data_sed="$(printf '%s' "$DATA" | sed 's/[&|\\]/\\&/g')"
+sed "s|@INSTALL_DATA@|$data_sed|g" "$ROOT/packaging/coconut-environment" > "$DATA/coconut/environment"
+
 # sed replacement treats &, | and \ specially; escape them so install
 # roots like "cargo & apps" survive the substitution.
 bin_sed="$(printf '%s' "$INSTALL_BIN" | sed 's/[&|\\]/\\&/g')"
@@ -74,6 +91,14 @@ sed "s|/usr/bin|$bin_sed|g" \
 
 cp "$ROOT/apps/files/data/cfiles.portal" \
     "$DATA/xdg-desktop-portal/portals/"
+
+sed "s|/usr/bin|$bin_sed|g" \
+    "$ROOT/integrations/appearance/data/org.freedesktop.impl.portal.desktop.coconut.service" \
+    > "$DATA/dbus-1/services/org.freedesktop.impl.portal.desktop.coconut.service"
+sed "s|/usr/bin|$bin_sed|g" \
+    "$ROOT/integrations/appearance/data/coconut-appearance.service" \
+    > "$USER_UNITS/coconut-appearance.service"
+cp "$ROOT/integrations/appearance/data/coconut.portal" "$DATA/xdg-desktop-portal/portals/"
 cp "$ROOT/apps/files/data/cfiles.desktop" \
     "$ROOT/apps/terminal/data/cterm.desktop" \
     "$ROOT/apps/monitor/data/cmonitor.desktop" \
@@ -81,11 +106,10 @@ cp "$ROOT/apps/files/data/cfiles.desktop" \
     "$DATA/applications/"
 
 for conf in blair-portals.conf coconut-portals.conf; do
-    if [ ! -f "$CONF_DIR/$conf" ]; then
-        cat > "$CONF_DIR/$conf" <<EOF
-[preferred]
-org.freedesktop.impl.portal.FileChooser=cfiles
-EOF
+    # Upgrade the old generated policy; preserve custom user selections.
+    old_policy=$(printf '[preferred]\norg.freedesktop.impl.portal.FileChooser=cfiles')
+    if [ ! -f "$CONF_DIR/$conf" ] || [ "$(cat "$CONF_DIR/$conf")" = "$old_policy" ]; then
+        cp "$ROOT/integrations/appearance/data/coconut-portals.conf" "$CONF_DIR/$conf"
     fi
 done
 
@@ -142,6 +166,7 @@ else
 
     sed -e "s|@COCONUT_WM@|$wm_sed|g" \
         -e "s|@INSTALL_BIN@|$bin_sed|g" \
+        -e "s|@INSTALL_DATA@|$data_sed|g" \
         "$ROOT/packaging/startcoconut" > "$INSTALL_BIN/startcoconut"
     chmod +x "$INSTALL_BIN/startcoconut"
 

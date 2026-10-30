@@ -2,7 +2,6 @@ use coconut_core::{
     ordered_islands, BackgroundSource, DesktopColor, DockAlign, DockConfig, DockPosition,
     IslandEntry, SectionConfig,
 };
-use coconut_plugin_kit::chrome::ISLAND_RADIUS;
 use coconut_plugin_kit::{
     apply_opacity, parse_gap, with_island_chrome, ConfigValue, Gap, Island, IslandChrome,
     IslandConfig, IslandRenderContext, PluginRegistry, SharedState,
@@ -392,7 +391,7 @@ fn section_chrome(
     if show_border {
         container = container.border(dock_border(), 1.0);
     }
-    container.corner_radius(ISLAND_RADIUS * scale)
+    container.corner_radius(coconut_plugin_kit::design::island_radius(use_theme()) * scale)
 }
 
 /// The first section hugs the dock's leading edge, the last hugs its
@@ -447,7 +446,7 @@ fn dock_chrome(mut widget: Flex, dock: &DockConfig) -> Flex {
             Color::rgba(24, 37, 55, 36),
         ));
     }
-    widget.corner_radius(16.0 * island_scale(dock))
+    widget.corner_radius(coconut_plugin_kit::design::dock_radius(use_theme()) * island_scale(dock))
 }
 
 fn apply_gap(container: Flex, gap: Gap, length: f32) -> Flex {

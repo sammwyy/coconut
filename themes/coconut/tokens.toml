@@ -1,0 +1,39 @@
+[colors]
+surface = "#141414f0"
+surface_elevated = "#1e1e1ef0"
+surface_hover = "#ffffff0c"
+text_primary = "#eeeeee"
+text_secondary = "#a8a8a8"
+text_disabled = "#787878"
+accent = "#0099d3"
+accent_hover = "#00aae2"
+accent_pressed = "#0084be"
+on_accent = "#000000"
+selection_background = "#0099d330"
+selection_text = "#ffffff"
+border = "#ffffff12"
+border_strong = "#ffffff20"
+danger = "#e54b4b"
+warning = "#e0a52e"
+success = "#3dc96f"
+
+[typography]
+family = "Plus Jakarta Sans, system-ui"
+caption_size = 11
+body_size = 13
+section_size = 15
+title_size = 26
+
+[geometry]
+radius_small = 8
+radius_medium = 12
+radius_large = 20
+control_radius = 10
+input_radius = 12
+card_radius = 16
+menu_radius = 16
+menu_item_radius = 10
+spacing_small = 4
+spacing_medium = 8
+spacing_large = 28
+border_width = 1
