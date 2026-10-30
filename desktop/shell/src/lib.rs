@@ -749,6 +749,19 @@ fn schedule_shortcuts(
                     brightness.set_level(next);
                     brightness_level.set(next);
                 }
+                ShortcutAction::TakeScreenshot
+                | ShortcutAction::CaptureScreen
+                | ShortcutAction::CaptureAndSave => {
+                    let arguments: &[&str] = match action {
+                        ShortcutAction::CaptureScreen => &["--screen"],
+                        ShortcutAction::CaptureAndSave => &["--screen", "--save-as"],
+                        _ => &[],
+                    };
+                    if let Err(error) = Command::new("coconut-screenshots").args(arguments).spawn()
+                    {
+                        eprintln!("shortcuts: could not launch coconut-screenshots: {error}");
+                    }
+                }
             }
             schedule_shortcuts(
                 next_app,

@@ -28,6 +28,7 @@ PACKAGES=(
     coconut-editor:cedit
     coconut-calculator:ccalc
     coconut-image-viewer:cviewer
+    coconut-screenshots:coconut-screenshots
 )
 
 pkgs=()

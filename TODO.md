@@ -65,3 +65,15 @@
   the current viewer displays the first frame/page only.
 - Add ICC color management to Image Viewer; embedded profiles are currently
   listed as metadata while display uses decoded RGBA8 pixels.
+- `apps/screenshots` lays multi-output captures out with `xdg-output`
+  logical geometry; compositors that withhold it stack every output at the
+  origin, so only single-monitor captures stay correct there. The X11
+  backend reads the whole root window, so per-output scaling differences
+  are not resolved either.
+- `apps/screenshots` presents the editor as a maximized undecorated window
+  rather than a layer-shell overlay: panels and the dock stay above its
+  edges and the captured surface cannot include them. A compositor-owned
+  overlay surface would cover the full framebuffer.
+- `apps/screenshots --save-as` (and `Ctrl+Shift+S`) need a running
+  `xdg-desktop-portal` FileChooser backend; without one the dialog never
+  opens and the capture is simply not written.

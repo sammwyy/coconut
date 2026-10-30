@@ -39,6 +39,7 @@ stay calm, responsive, and consistent.
 | `cedit [FILE ...]` | Open CEdit, the text, code, Markdown and byte editor. |
 | `ccalc [--scientific]` | Open Calculator with standard/scientific modes and unit conversions. |
 | `cviewer [IMAGE ...]` | Open Image Viewer with zoom, pan, rotation, temporary color adjustments and metadata. |
+| `coconut-screenshots` | Take a screenshot and annotate it: drag to select, draw, blur, erase, then copy or save. `--screen` captures headlessly, `--save-as` asks where to save. |
 | `cterm --settings` | Open Terminal Settings. |
 | `coconut files` | Start the file manager. |
 | `cfiles --settings` | Open File Explorer settings. |

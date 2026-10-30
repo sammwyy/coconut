@@ -1225,6 +1225,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "coconut-screenshots"
+version = "0.1.0"
+dependencies = [
+ "arboard",
+ "chrono",
+ "coconut-integration-cream",
+ "creamui-core",
+ "creamui-fonts",
+ "creamui-image",
+ "creamui-reactive",
+ "creamui-render",
+ "creamui-theme",
+ "creamui-theme-watch",
+ "creamui-widgets",
+ "dbus",
+ "delib",
+ "image",
+ "libc",
+ "rfd",
+ "smithay-client-toolkit",
+ "tempfile",
+ "wayland-client",
+ "wayland-protocols",
+ "wayland-protocols-wlr",
+ "x11rb",
+]
+
+[[package]]
 name = "coconut-settings"
 version = "0.1.0"
 dependencies = [

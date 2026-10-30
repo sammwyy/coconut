@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=Coconut Screenshots
+GenericName=Screenshot Tool
+Comment=Take and annotate screenshots
+Exec=coconut-screenshots
+TryExec=coconut-screenshots
+Icon=applets-screenshooter
+Terminal=false
+Categories=Utility;Graphics;
+Keywords=screenshot;screen;capture;snip;
+StartupNotify=true
+X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2

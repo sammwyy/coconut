@@ -12,10 +12,13 @@ pub enum ShortcutAction {
     VolumeDown,
     BrightnessUp,
     BrightnessDown,
+    TakeScreenshot,
+    CaptureScreen,
+    CaptureAndSave,
 }
 
 impl ShortcutAction {
-    pub const ALL: [Self; 9] = [
+    pub const ALL: [Self; 12] = [
         Self::OpenLauncher,
         Self::MinimizeFocused,
         Self::NextWindow,
@@ -25,6 +28,9 @@ impl ShortcutAction {
         Self::VolumeDown,
         Self::BrightnessUp,
         Self::BrightnessDown,
+        Self::TakeScreenshot,
+        Self::CaptureScreen,
+        Self::CaptureAndSave,
     ];
 
     pub const fn label(self) -> &'static str {
@@ -38,6 +44,9 @@ impl ShortcutAction {
             Self::VolumeDown => "Decrease volume",
             Self::BrightnessUp => "Increase brightness",
             Self::BrightnessDown => "Decrease brightness",
+            Self::TakeScreenshot => "Take screenshot",
+            Self::CaptureScreen => "Capture screen",
+            Self::CaptureAndSave => "Capture and save as",
         }
     }
 }
@@ -122,7 +131,7 @@ impl ShortcutConfig {
 
     pub fn load() -> Self {
         let path = path();
-        match std::fs::read_to_string(&path) {
+        let mut config = match std::fs::read_to_string(&path) {
             Ok(contents) => toml::from_str(&contents).unwrap_or_else(|error| {
                 eprintln!("shortcuts: failed to parse {}: {error}", path.display());
                 Self::default()
@@ -130,13 +139,30 @@ impl ShortcutConfig {
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
                 let config = Self::default();
                 let _ = config.save();
-                config
+                return config;
             }
             Err(error) => {
                 eprintln!("shortcuts: failed to read {}: {error}", path.display());
                 Self::default()
             }
+        };
+        for default in ShellShortcut::defaults() {
+            let introduced = matches!(
+                default.action,
+                ShortcutAction::TakeScreenshot
+                    | ShortcutAction::CaptureScreen
+                    | ShortcutAction::CaptureAndSave
+            );
+            if introduced
+                && !config
+                    .shortcuts
+                    .iter()
+                    .any(|binding| binding.action == default.action)
+            {
+                config.shortcuts.push(default);
+            }
         }
+        config
     }
 
     pub fn save(&self) -> std::io::Result<()> {
@@ -171,6 +197,9 @@ impl ShellShortcut {
             ("XF86AudioLowerVolume", VolumeDown),
             ("XF86MonBrightnessUp", BrightnessUp),
             ("XF86MonBrightnessDown", BrightnessDown),
+            ("Print", TakeScreenshot),
+            ("Ctrl+Print", CaptureScreen),
+            ("Ctrl+Shift+Print", CaptureAndSave),
         ]
         .into_iter()
         .map(|(accelerator, action)| Self {

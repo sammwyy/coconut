@@ -1679,6 +1679,15 @@ fn shortcut_icon(action: ShortcutAction) -> IconSource {
         BrightnessUp | BrightnessDown => {
             r#"<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/>"#
         }
+        TakeScreenshot => {
+            r#"<path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>"#
+        }
+        CaptureScreen => {
+            r#"<rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8m-4-4v4"/><circle cx="12" cy="10" r="2.5"/>"#
+        }
+        CaptureAndSave => {
+            r#"<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8M7 3v5h8"/>"#
+        }
     };
     crate::icons::outline(paths)
 }

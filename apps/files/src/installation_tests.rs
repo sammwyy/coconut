@@ -42,6 +42,7 @@ fn user_installer_installs_theme_integrations_and_preserves_existing_policy() {
         "cedit",
         "ccalc",
         "cviewer",
+        "coconut-screenshots",
     ] {
         executable(&staged.join(binary), "#!/bin/sh\nexit 0\n");
     }
@@ -96,6 +97,9 @@ fn user_installer_installs_theme_integrations_and_preserves_existing_policy() {
     let viewer = fs::read_to_string(data.join("applications/cviewer.desktop")).unwrap();
     assert!(viewer.contains("Exec=cviewer %F"));
     assert!(viewer.contains("MimeType=image/png;image/jpeg;"));
+    assert!(install_root.join("bin/coconut-screenshots").exists());
+    let screenshots = fs::read_to_string(data.join("applications/coconut-screenshots.desktop")).unwrap();
+    assert!(screenshots.contains("Exec=coconut-screenshots"));
     assert_eq!(fs::read_to_string(policy).unwrap(), "user preferences\n");
     assert!(config
         .join("xdg-desktop-portal/blair-portals.conf")
