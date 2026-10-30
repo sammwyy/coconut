@@ -1498,6 +1498,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "creamui-appearance"
+version = "0.2.0"
+dependencies = [
+ "creamui-theme",
+ "dbus",
+ "serde",
+ "toml 0.9.12+spec-1.1.0",
+ "windows 0.52.0",
+]
+
+[[package]]
 name = "creamui-core"
 version = "0.2.0"
 dependencies = [
@@ -1590,12 +1601,14 @@ name = "creamui-render"
 version = "0.2.0"
 dependencies = [
  "bytemuck",
+ "creamui-appearance",
  "creamui-core",
  "creamui-fonts",
  "creamui-platform",
  "creamui-reactive",
  "creamui-theme",
  "creamui-theme-loader",
+ "creamui-theme-watch",
  "creamui-tray",
  "env_logger",
  "libc",
@@ -1644,6 +1657,7 @@ dependencies = [
 name = "creamui-theme-loader"
 version = "0.2.0"
 dependencies = [
+ "creamui-appearance",
  "creamui-theme",
  "delib",
  "serde",
@@ -1654,6 +1668,8 @@ dependencies = [
 name = "creamui-theme-watch"
 version = "0.2.0"
 dependencies = [
+ "creamui-appearance",
+ "creamui-theme-loader",
  "dbus",
  "log",
 ]

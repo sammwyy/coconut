@@ -100,6 +100,7 @@ def main():
                     "org.freedesktop.portal.Desktop"], env=env, text=True, timeout=3)
             wait_for(broker_ready, "portal broker name")
             wait_for(lambda: "uint32 2" in call(public=True), "public Settings portal")
+            assert "light" in call("org.creamui.appearance", "variant", public=True)
 
             monitor = start(["gdbus", "monitor", "--session", "--dest", "org.freedesktop.portal.Desktop",
                              "--object-path", "/org/freedesktop/portal/desktop"])
@@ -167,6 +168,7 @@ Gtk.main()
 
             select("midnight", "#ff00ff", "Serif")
             wait_for(lambda: "uint32 1" in call(public=True), "public dark preference")
+            wait_for(lambda: "midnight" in call("org.creamui.appearance", "variant", public=True), "public named variant")
             changed = wait_for(lambda: qt_state("#ff00ff"), "live Qt accent")
             assert changed["window"] != initial["window"]
             assert changed["font"] == "Serif", changed
@@ -176,6 +178,7 @@ Gtk.main()
             assert second_gtk["accent"] == "#ff00ff", second_gtk
             wait_for(lambda: any("SettingChanged" in line and "color-scheme" in line for line in signals), "public change signal")
             wait_for(lambda: any("SettingChanged" in line and "accent-color" in line for line in signals), "public accent signal")
+            wait_for(lambda: any("SettingChanged" in line and "org.creamui.appearance" in line and "midnight" in line for line in signals), "public named variant signal")
 
             # An accent-only edit must also reload GTK and Qt.
             select("midnight", "#00ff00", "Serif")

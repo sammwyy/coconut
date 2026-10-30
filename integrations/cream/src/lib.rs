@@ -97,8 +97,13 @@ pub fn load_system_appearance() -> Result<ResolvedAppearance, String> {
 }
 
 pub fn publish_native(store: &Store, resolved: &ResolvedTheme) -> Result<bool, String> {
-    let native = creamui_theme_loader::appearance_snapshot(&appearance(resolved))
-        .map_err(|e| e.to_string())?;
+    let scheme = match resolved.scheme {
+        coconut_theme::Scheme::Light => creamui_theme::SystemColorScheme::Light,
+        coconut_theme::Scheme::Dark => creamui_theme::SystemColorScheme::Dark,
+    };
+    let native =
+        creamui_theme_loader::appearance_snapshot_with_scheme(&appearance(resolved), scheme)
+            .map_err(|e| e.to_string())?;
     coconut_theme::atomic_write(&store.generated_dir().join("cream.toml"), &native)
 }
 
@@ -210,6 +215,12 @@ mod tests {
         )
         .unwrap();
         assert_eq!(native, appearance(&resolved));
+        let source = fs::read_to_string(store.generated_dir().join("cream.toml")).unwrap();
+        let metadata: toml::Value = toml::from_str(&source).unwrap();
+        assert_eq!(
+            metadata["color_scheme"].as_str(),
+            Some(resolved.scheme.as_str())
+        );
         assert_eq!(native.theme.sidebar_radius, 0.);
         assert_eq!(native.theme.button_radius, 0.);
         assert_eq!(native.theme.typography.body, 19.5);

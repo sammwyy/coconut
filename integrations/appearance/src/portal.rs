@@ -43,6 +43,15 @@ pub(crate) fn settings(a: &ResolvedTheme, theme_name: &str) -> Settings {
     let c = a.tokens.colors.accent;
     BTreeMap::from([
         (
+            // Extension for toolkits that understand named variants. Standard
+            // consumers continue using org.freedesktop.appearance.color-scheme.
+            "org.creamui.appearance".into(),
+            BTreeMap::from([
+                ("variant".into(), Value::Text(a.variant_id.clone())),
+                ("theme-id".into(), Value::Text(a.theme_id.clone())),
+            ]),
+        ),
+        (
             APPEARANCE.into(),
             BTreeMap::from([
                 (
@@ -286,6 +295,10 @@ mod tests {
         for (variant, expected) in [("light", 2), ("dark", 1), ("midnight", 1)] {
             let values = settings(&appearance(variant), "Coconut");
             assert_eq!(values[APPEARANCE]["color-scheme"], Value::Uint(expected));
+            assert_eq!(
+                values["org.creamui.appearance"]["variant"],
+                Value::Text(variant.into())
+            );
             let mut call = Message::new_method_call(crate::SERVICE, PATH, INTERFACE, "Read")
                 .unwrap()
                 .append2(APPEARANCE, "color-scheme");
