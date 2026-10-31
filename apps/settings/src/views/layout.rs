@@ -325,7 +325,7 @@ pub(crate) fn build(context: &crate::views::context::ViewContext) -> BoxedWidget
         window_surface,
         window_surface.mix(theme.colors.accent, 0.055),
     );
-    Box::new(jsx! {
+    let mut shell = jsx! {
         <Flex direction={FlexDirection::Row} size={(size.width, size.height)} background={window_surface}>
             <RawView style={sidebar_shell_style} background={sidebar_surface}>
                 {sidebar_header}
@@ -339,5 +339,9 @@ pub(crate) fn build(context: &crate::views::context::ViewContext) -> BoxedWidget
             {sidebar_drag_area}
             {controls}
         </Flex>
-    })
+    };
+    for overlay in context.bar_content.overlays(size) {
+        shell = shell.child(overlay);
+    }
+    Box::new(shell)
 }

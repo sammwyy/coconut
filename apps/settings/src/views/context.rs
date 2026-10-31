@@ -29,6 +29,7 @@ pub(crate) struct ViewContext {
     pub content_scroll: ScrollController,
     pub sidebar_scroll: ScrollController,
     pub dock_scroll: ScrollController,
+    pub bar_content: crate::views::desktop::bar_content::State,
     pub island_settings: crate::views::desktop::island_settings::State,
     pub settings_search: TextController,
     pub connectivity: crate::views::connectivity::State,

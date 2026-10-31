@@ -18,7 +18,7 @@ creamui-image = { workspace = true, features = ["webp", "jpeg", "svg"] }
 creamui-jsx = { workspace = true }
 creamui-macros = { workspace = true }
 creamui-reactive = { workspace = true }
-creamui-render = { workspace = true, default-features = true }
+creamui-render = { workspace = true, default-features = true, features = ["context-menu"] }
 creamui-theme = { workspace = true }
 creamui-widgets = { workspace = true }
 serde.workspace = true

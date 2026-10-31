@@ -313,3 +313,18 @@ The compositor places and constrains menus, and owns grabs and dismissal. Native
 menus stay open when focus moves into a child popup; call `parent_focus_lost`
 instead of closing them unconditionally. Other backends use an in-window overlay.
 File creation and rename use the same themed input dialogs on both surfaces.
+
+## Bar content editing
+
+The Statusbar and Dockbar Contents pages provide group selection, a searchable
+item catalog, ordering, visibility, spacing, placement-specific removal and Undo.
+Drag handles in Settings to arrange items, move them between groups, or reorder
+groups. Right-click the running bar for a short menu with settings and removal;
+layout controls and the item catalog stay in Settings. Content edits apply live and Settings
+follows changes made from the shell. See [Settings](../../apps/settings/README.md)
+for routes, persistence behavior and scene tests.
+
+Keep bar operations independent of widgets in `coconut-core::BarEdit`. Shared
+catalog metadata, menu composition and background persistence live in
+`coconut-plugin-kit::bar_editor`; shell hit routing and Settings presentation
+remain in their respective consumers.

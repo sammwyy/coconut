@@ -81,6 +81,7 @@ pub fn run() {
         content_scroll,
         sidebar_scroll,
         dock_scroll,
+        bar_content: crate::views::desktop::bar_content::State::default(),
         island_settings,
         settings_search,
         connectivity,
@@ -99,6 +100,14 @@ pub fn run() {
                 appearance.set(next);
             });
             state.native.start(app.clone(), state.users.clone());
+            watch_shell_config(
+                app.clone(),
+                state.config.clone(),
+                state.bar_content.clone(),
+                std::sync::Arc::new(std::sync::Mutex::new(
+                    coconut_core::ipc::listen_for_runtime_events(),
+                )),
+            );
             state.window_settings.start(app.clone());
             state.shortcut_settings.start(app.clone());
             watch_connectivity(app.clone(), network_changes, connectivity_revision.clone());
@@ -126,8 +135,21 @@ pub fn run() {
                 {
                     let window = state.window.clone();
                     let shortcuts = state.shortcut_settings.clone();
+                    let bar_content = state.bar_content.clone();
                     move |handle| {
                         shortcuts.attach_window(handle.clone());
+                        let keys = bar_content.clone();
+                        let shortcuts_keys = shortcuts.clone();
+                        handle.on_keyboard_input(move |event, modifiers| {
+                            coconut_plugin_kit::bar_editor::key_input(&event.key, modifiers)
+                                .is_some_and(|input| keys.handle_key(input, event.pressed))
+                                || shortcuts_keys.record_native(event, modifiers)
+                        });
+                        let blur = bar_content.clone();
+                        handle.on_focus_lost(move || {
+                            blur.focus_lost();
+                            shortcuts.cancel_capture();
+                        });
                         handle
                             .set_compositor_integration(Some(CompositorIntegrationRequest::Hybrid));
                         *window.borrow_mut() = Some(handle);
@@ -138,6 +160,7 @@ pub fn run() {
                         connectivity_revision.get();
                         let location = state.view.url();
                         if *last_location.borrow() != location {
+                            state.bar_content.dismiss();
                             state.shortcut_settings.cancel_capture();
                             state.content_scroll.set(0.0);
                             state.dock_scroll.set(0.0);
@@ -206,4 +229,43 @@ fn load_system_appearance() -> creamui_theme::ResolvedAppearance {
             }
         }
     }
+}
+
+fn watch_shell_config(
+    app: creamui_render::AppHandle,
+    config: Signal<ShellConfig>,
+    editor: crate::views::desktop::bar_content::State,
+    events: std::sync::Arc<
+        std::sync::Mutex<std::sync::mpsc::Receiver<coconut_core::ipc::RuntimeEvent>>,
+    >,
+) {
+    let next_app = app.clone();
+    let next_events = events.clone();
+    app.spawn_background(
+        move || match events.lock() {
+            Ok(events) => match events.recv() {
+                Ok(event) => Some(event),
+                Err(error) => {
+                    eprintln!("settings: shell configuration listener stopped: {error}");
+                    None
+                }
+            },
+            Err(error) => {
+                eprintln!("settings: shell configuration listener lock failed: {error}");
+                None
+            }
+        },
+        move |event| {
+            let Some(event) = event else {
+                return;
+            };
+            if let coconut_core::ipc::RuntimeEvent::ShellConfig(next) = event {
+                if *next != config.peek() {
+                    editor.dismiss();
+                    config.set(*next);
+                }
+            }
+            watch_shell_config(next_app, config, editor, next_events);
+        },
+    );
 }

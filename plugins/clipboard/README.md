@@ -1,11 +1,14 @@
 # Clipboard history widget
 
 The `coconut-plugin-clipboard` shell plugin registers the optional `clipboard`
-island and popup. Enable **Clipboard history** for the statusbar, dockbar or both
-in **Settings → Desktop → Islands**, then restart the shell to apply its layout.
-It is absent from the default layout. In `shell.toml`, add it to the desired
+island and popup. It is absent from the default layout. In `shell.toml`, add it to the desired
 existing section as `[[statusbar.section.island]]` (or
 `[[dockbar.section.island]]`) with `id = "clipboard"`.
+
+Add it visually from Settings → Desktop → Statusbar or Dockbar → Contents:
+select a group, choose Add item, then Clipboard history. Right-clicking a running
+bar opens its settings. Drag the handle to arrange a placement or move it to
+another group; its compact menu offers removal and clipboard settings.
 
 Click its clipboard icon to view the current copied text and history, newest
 first. Select an entry to restore its full text and close the popup. Remove and

@@ -5,6 +5,8 @@ use creamui_reactive::Signal;
 use creamui_widgets::{Select, Slider, Switch};
 
 use crate::{components::system_settings::*, routes::detail::Page, services::settings::State};
+pub mod bar_content;
+pub(crate) mod bar_drag;
 pub mod bars;
 pub mod icons;
 pub mod island_settings;

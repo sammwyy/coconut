@@ -76,13 +76,15 @@ impl BluetoothIntegration for Bluetooth {
     }
 }
 
-#[test]
-fn connectivity_layout_matches_reference() {
-    use creamui_core::{Point, Renderer};
-    use creamui_render::{Damage, Rasterizer, SceneRecorder};
-    use creamui_theme::{Color, Theme, ThemeProvider};
+struct Preview {
+    context: crate::views::context::ViewContext,
+    decorations: Signal<creamui_render::WindowDecorations>,
+    moves: Rc<Cell<i32>>,
+}
 
-    creamui_reactive::with_context_scope(|| {
+impl Preview {
+    fn new() -> Self {
+        use creamui_theme::{Theme, ThemeProvider};
         components::load_settings_fonts();
         let theme = components::settings_theme(Theme::light());
         creamui_reactive::provide_context(ThemeProvider::new(theme));
@@ -143,47 +145,81 @@ fn connectivity_layout_matches_reference() {
         let gallery = crate::views::personalization::wallpaper::GalleryState::new();
         let dock_scroll = ScrollController::new(0.0);
         let island_settings = crate::views::desktop::island_settings::State::default();
+        let bar_content = crate::views::desktop::bar_content::State::default();
         let search = TextController::new("");
         let maximized = Signal::new(false);
         let native = crate::services::settings::State::new(integrations.settings.clone());
 
+        let context = crate::views::context::ViewContext {
+            size: Size {
+                width: 1120.0,
+                height: 760.0,
+            },
+            config: config.clone(),
+            background: background.clone(),
+            integrations: integrations.clone(),
+            appearance: appearance.clone(),
+            view: view.clone(),
+            window: window.clone(),
+            wallpaper_pickers: crate::views::personalization::wallpaper::WallpaperPickers::new(),
+            desktop_icons_color_picker: picker.clone(),
+            appearance_accent_picker: picker.clone(),
+            appearance_custom_accent: custom_accent.clone(),
+            users: users.clone(),
+            profile: profile.clone(),
+            icons: icons.clone(),
+            wallpaper_gallery: gallery.clone(),
+            window_settings: window_state.clone(),
+            shortcut_settings: shortcuts.clone(),
+            content_scroll: content_scroll.clone(),
+            sidebar_scroll: sidebar_scroll.clone(),
+            dock_scroll: dock_scroll.clone(),
+            bar_content: bar_content.clone(),
+            island_settings: island_settings.clone(),
+            settings_search: search.clone(),
+            connectivity: connectivity.clone(),
+            maximized: maximized.clone(),
+            native: native.clone(),
+        };
+        Self {
+            context,
+            decorations,
+            moves,
+        }
+    }
+
+    fn render(&self, size: Size) -> creamui_core::BoxedWidget {
+        RouterProvider::new(self.context.view.clone()).render(|| {
+            let mut context = self.context.clone();
+            context.size = size;
+            build(&context)
+        })
+    }
+}
+
+#[test]
+fn connectivity_layout_matches_reference() {
+    use creamui_core::{Point, Renderer};
+    use creamui_render::{Damage, Rasterizer, SceneRecorder};
+    use creamui_theme::{Color, Theme, ThemeProvider};
+
+    creamui_reactive::with_context_scope(|| {
+        let preview = Preview::new();
+        let context = &preview.context;
+        let theme = components::settings_theme(Theme::light());
+        let decorations = &preview.decorations;
+        let moves = &preview.moves;
+        let appearance = &context.appearance;
+        let content_scroll = &context.content_scroll;
+        let sidebar_scroll = &context.sidebar_scroll;
+        let native = &context.native;
+        let connectivity = &context.connectivity;
+        let view = &context.view;
         let size = Size {
             width: 1120.0,
             height: 760.0,
         };
-        let root = |size| {
-            RouterProvider::new(view.clone()).render(|| {
-                let context = crate::views::context::ViewContext {
-                    size,
-                    config: config.clone(),
-                    background: background.clone(),
-                    integrations: integrations.clone(),
-                    appearance: appearance.clone(),
-                    view: view.clone(),
-                    window: window.clone(),
-                    wallpaper_pickers:
-                        crate::views::personalization::wallpaper::WallpaperPickers::new(),
-                    desktop_icons_color_picker: picker.clone(),
-                    appearance_accent_picker: picker.clone(),
-                    appearance_custom_accent: custom_accent.clone(),
-                    users: users.clone(),
-                    profile: profile.clone(),
-                    icons: icons.clone(),
-                    wallpaper_gallery: gallery.clone(),
-                    window_settings: window_state.clone(),
-                    shortcut_settings: shortcuts.clone(),
-                    content_scroll: content_scroll.clone(),
-                    sidebar_scroll: sidebar_scroll.clone(),
-                    dock_scroll: dock_scroll.clone(),
-                    island_settings: island_settings.clone(),
-                    settings_search: search.clone(),
-                    connectivity: connectivity.clone(),
-                    maximized: maximized.clone(),
-                    native: native.clone(),
-                };
-                build(&context)
-            })
-        };
+        let root = |size| preview.render(size);
         let mut recorder = SceneRecorder::new();
         recorder.begin(1120, 760, 1.0, Color::rgba(0, 0, 0, 0), theme.colors);
         let scene = Renderer::new().render(root(size), size, &mut recorder);
@@ -447,7 +483,7 @@ fn connectivity_layout_matches_reference() {
             },
         );
         native.snapshot.set(fixture);
-        routes::open(&view, "/connectivity/network");
+        routes::open(view, "/connectivity/network");
         content_scroll.set(0.0);
         recorder.begin(1120, 760, 1.0, Color::rgba(0, 0, 0, 0), theme.colors);
         let network_scene = Renderer::new().render(root(size), size, &mut recorder);
@@ -567,7 +603,7 @@ fn connectivity_layout_matches_reference() {
                     Section::Profile,
                 ])
             {
-                routes::navigate(&view, &section);
+                routes::navigate(view, &section);
                 content_scroll.set(0.0);
                 recorder.begin(1120, 760, 1.0, Color::rgba(0, 0, 0, 0), theme.colors);
                 let scene = Renderer::new().render(root(size), size, &mut recorder);
@@ -590,7 +626,7 @@ fn connectivity_layout_matches_reference() {
                         .hit_test(Point { x: 306.0, y: 28.0 })
                         .expect("compact back button")();
                     assert!(
-                        routes::current(&view) == routes::destination::parent(&section),
+                        routes::current(view) == routes::destination::parent(&section),
                         "incorrect parent for {title}"
                     );
                 }
@@ -605,5 +641,443 @@ fn connectivity_layout_matches_reference() {
                 }
             }
         }
+    });
+}
+
+#[test]
+fn bar_editor_scenes_and_transients() {
+    use creamui_core::{Point, Renderer};
+    use creamui_render::{Damage, Rasterizer, SceneRecorder};
+    use creamui_theme::{Theme, ThemeProvider};
+    creamui_reactive::with_context_scope(|| {
+        let preview = Preview::new();
+        let context = &preview.context;
+        let config = &context.config;
+        let bar_content = &context.bar_content;
+        let dock_scroll = &context.dock_scroll;
+        let view = &context.view;
+        let root = |size| preview.render(size);
+        let default_config = config.peek();
+        for (variant, base) in [("light", Theme::light()), ("dark", Theme::dark())] {
+            let theme = components::settings_theme(base);
+            creamui_reactive::provide_context(ThemeProvider::new(theme));
+            for (width, height) in [(1100, 760), (640, 480)] {
+                let size = Size {
+                    width: width as f32,
+                    height: height as f32,
+                };
+                for state in [
+                    "contents",
+                    "long-name",
+                    "empty",
+                    "hidden",
+                    "catalog",
+                    "menu",
+                    "filtered",
+                    "no-results",
+                    "error",
+                    "position",
+                    "appearance",
+                ] {
+                    config.set(default_config.clone());
+                    bar_content.dismiss();
+                    bar_content.editor.status.set(String::new());
+                    dock_scroll.set(0.0);
+                    routes::open(
+                        view,
+                        &format!(
+                            "/desktop/statusbar?tab={}",
+                            if matches!(state, "position" | "appearance") {
+                                state
+                            } else {
+                                "contents"
+                            }
+                        ),
+                    );
+                    match state {
+                        "long-name" => config.update(|config| config.statusbar.sections[0].islands.push(coconut_core::IslandEntry::with_id("An unavailable custom widget with a very long name that still needs to be editable"))),
+                        "empty" => config.update(|config| config.statusbar.sections.clear()),
+                        "hidden" => {
+                            config.update(|config| config.statusbar.sections[0].enabled = false)
+                        }
+                        "catalog" | "filtered" | "no-results" => {
+                            bar_content.preview_catalog();
+                            let query = if state == "filtered" {
+                                "clipboard"
+                            } else if state == "no-results" {
+                                "no widget matches this"
+                            } else {
+                                ""
+                            };
+                            for ch in query.chars() {
+                                bar_content.handle_key(
+                                    creamui_core::KeyInput {
+                                        key: creamui_core::Key::Char(ch),
+                                        modifiers: Default::default(),
+                                    },
+                                    true,
+                                );
+                            }
+                        }
+                        "menu" => {
+                            let controller = bar_content.editor.menu.controller();
+                            controller.open(Point { x: 320.0, y: 150.0 }, coconut_plugin_kit::bar_editor::content_menu(
+                                coconut_core::BarKind::Statusbar, &config.peek().statusbar,
+                                coconut_plugin_kit::bar_editor::Target::Group(0),
+                                Rc::new(|_| {}), Rc::new(|_| {}),
+                            ));
+
+                        }
+                        "error" => bar_content.editor.report_error(
+                            "The configuration folder is read-only. Your bar has not changed."
+                                .into(),
+                        ),
+                        _ => {}
+                    }
+                    let mut recorder = SceneRecorder::new();
+                    recorder.begin(width, height, 1.0, theme.colors.surface, theme.colors);
+                    let scene = Renderer::new().render(root(size), size, &mut recorder);
+                    let list = recorder.finish();
+                    assert!(list.items.len() > 50, "empty bar editor: {state}");
+                    let mut raster = Rasterizer::new(width, height);
+                    raster.render(&list, &Damage::Full);
+                    if let Ok(directory) = std::env::var("COCONUT_BAR_SNAPSHOTS") {
+                        raster
+                            .pixmap()
+                            .save_png(
+                                std::path::Path::new(&directory)
+                                    .join(format!("{variant}-{width}-{state}.png")),
+                            )
+                            .unwrap();
+                    }
+                    if matches!(
+                        state,
+                        "catalog" | "filtered" | "no-results" | "error" | "menu"
+                    ) {
+                        assert!(
+                            scene.window_drag_at(Point { x: 600.0, y: 28.0 }).is_none(),
+                            "modal must shield titlebar"
+                        );
+                        bar_content.handle_key(
+                            creamui_core::KeyInput {
+                                key: creamui_core::Key::Escape,
+                                modifiers: Default::default(),
+                            },
+                            true,
+                        );
+                        assert!(
+                            bar_content.overlays(size).is_empty(),
+                            "Escape dismisses {state}"
+                        );
+                    }
+                }
+            }
+        }
+        config.set(default_config);
+    });
+}
+
+fn editor_scene(preview: &Preview, size: Size, snapshot: &str) -> creamui_core::Scene {
+    use creamui_render::{Damage, Rasterizer, SceneRecorder};
+    let theme = creamui_theme::use_theme();
+    let mut recorder = SceneRecorder::new();
+    recorder.begin(
+        size.width as u32,
+        size.height as u32,
+        1.0,
+        theme.colors.surface,
+        theme.colors,
+    );
+    let scene = creamui_core::Renderer::new().render(preview.render(size), size, &mut recorder);
+    let list = recorder.finish();
+    if let Ok(directory) = std::env::var("COCONUT_BAR_SNAPSHOTS") {
+        let mut raster = Rasterizer::new(size.width as u32, size.height as u32);
+        raster.render(&list, &Damage::Full);
+        raster
+            .pixmap()
+            .save_png(std::path::Path::new(&directory).join(format!("{snapshot}.png")))
+            .unwrap();
+    }
+    scene
+}
+
+fn begin_editor_drag(scene: &creamui_core::Scene, point: creamui_core::Point) -> usize {
+    let (rect, start) = scene
+        .drag_start_at(point)
+        .unwrap_or_else(|| panic!("no draggable handle at {point:?}"));
+    start(
+        creamui_core::Point {
+            x: point.x - rect.x,
+            y: point.y - rect.y,
+        },
+        rect,
+    );
+    scene.drag_hit_test(point).expect("drag hit region")
+}
+
+fn move_editor_drag(scene: &creamui_core::Scene, index: usize, point: creamui_core::Point) {
+    let (rect, update) = scene.draggable_at(index).unwrap();
+    update(
+        creamui_core::Point {
+            x: point.x - rect.x,
+            y: point.y - rect.y,
+        },
+        rect,
+    );
+}
+
+#[test]
+fn bar_editor_drag_reorders_items_groups_and_moves_to_another_group() {
+    use crate::views::desktop::bar_drag::Region;
+    use creamui_core::Point;
+    use creamui_theme::{Theme, ThemeProvider};
+    for (variant, base) in [("light", Theme::light()), ("dark", Theme::dark())] {
+        for (width, height) in [(1100, 760), (640, 480)] {
+            creamui_reactive::with_context_scope(|| {
+                let preview = Preview::new();
+                creamui_reactive::provide_context(ThemeProvider::new(components::settings_theme(
+                    base,
+                )));
+                let context = &preview.context;
+                routes::open(&context.view, "/desktop/statusbar?tab=contents");
+                context
+                    .bar_content
+                    .preview_edits(context.config.clone(), coconut_core::BarKind::Statusbar);
+                let size = Size {
+                    width: width as f32,
+                    height: height as f32,
+                };
+                editor_scene(&preview, size, "initial-drag-fixture");
+                if width == 640 {
+                    context.dock_scroll.set(130.0);
+                }
+                let scene = editor_scene(&preview, size, "scrolled-drag-fixture");
+                let first = context
+                    .bar_content
+                    .preview_rect(Region::Item { group: 0, item: 0 });
+                let second = context
+                    .bar_content
+                    .preview_rect(Region::Item { group: 0, item: 1 });
+                let source = Point {
+                    x: second.x + 24.0,
+                    y: second.y + second.height / 2.0,
+                };
+                let target = Point {
+                    x: first.x + 100.0,
+                    y: first.y + 4.0,
+                };
+                let before = context.config.peek();
+                let index = begin_editor_drag(&scene, source);
+                move_editor_drag(&scene, index, target);
+                assert_eq!(context.config.peek(), before, "drag preview must not save");
+                let during =
+                    editor_scene(&preview, size, &format!("{variant}-{width}-drag-reorder"));
+                during.drag_end_at(index).unwrap()();
+                assert_eq!(
+                    context.config.peek().statusbar.sections[0].islands[0].id,
+                    "open_windows"
+                );
+                context.dock_scroll.set(0.0);
+                let scene = editor_scene(&preview, size, "before-group-drop");
+                let row = context
+                    .bar_content
+                    .preview_rect(Region::Item { group: 0, item: 0 });
+                let group = context.bar_content.preview_rect(Region::Group(2));
+                let index = begin_editor_drag(
+                    &scene,
+                    Point {
+                        x: row.x + 24.0,
+                        y: row.y + row.height / 2.0,
+                    },
+                );
+                move_editor_drag(
+                    &scene,
+                    index,
+                    Point {
+                        x: group.x + group.width / 2.0,
+                        y: group.y + group.height / 2.0,
+                    },
+                );
+                let during =
+                    editor_scene(&preview, size, &format!("{variant}-{width}-drag-transfer"));
+                during.drag_end_at(index).unwrap()();
+                assert_eq!(
+                    context.config.peek().statusbar.sections[2]
+                        .islands
+                        .last()
+                        .unwrap()
+                        .id,
+                    "open_windows"
+                );
+                assert_eq!(context.config.peek().statusbar.sections[0].islands.len(), 1);
+                let scene = editor_scene(&preview, size, "before-group-reorder");
+                let source = context.bar_content.preview_rect(Region::Group(2));
+                let target = context.bar_content.preview_rect(Region::Group(0));
+                let index = begin_editor_drag(
+                    &scene,
+                    Point {
+                        x: source.x + source.width / 2.0,
+                        y: source.y + 20.0,
+                    },
+                );
+                move_editor_drag(
+                    &scene,
+                    index,
+                    Point {
+                        x: target.x + 2.0,
+                        y: target.y + 20.0,
+                    },
+                );
+                let during =
+                    editor_scene(&preview, size, &format!("{variant}-{width}-drag-groups"));
+                during.drag_end_at(index).unwrap()();
+                assert_eq!(
+                    context.config.peek().statusbar.sections[0].islands[0].id,
+                    "control_center"
+                );
+            });
+        }
+    }
+}
+
+#[test]
+fn bar_editor_drag_cancels_and_keyboard_moves_the_same_placements() {
+    use crate::views::desktop::bar_drag::Region;
+    use creamui_core::{Key, KeyInput, Point};
+    creamui_reactive::with_context_scope(|| {
+        let preview = Preview::new();
+        let context = &preview.context;
+        routes::open(&context.view, "/desktop/statusbar?tab=contents");
+        context
+            .bar_content
+            .preview_edits(context.config.clone(), coconut_core::BarKind::Statusbar);
+        let size = Size {
+            width: 1100.0,
+            height: 760.0,
+        };
+        for cancel in ["click", "escape", "outside", "focus"] {
+            let scene = editor_scene(&preview, size, "cancellation-fixture");
+            let row = context
+                .bar_content
+                .preview_rect(Region::Item { group: 0, item: 0 });
+            let point = Point {
+                x: row.x + 24.0,
+                y: row.y + 20.0,
+            };
+            let before = context.config.peek();
+            let index = begin_editor_drag(&scene, point);
+            if cancel != "click" {
+                move_editor_drag(
+                    &scene,
+                    index,
+                    Point {
+                        x: point.x + 20.0,
+                        y: point.y + 100.0,
+                    },
+                );
+            }
+            match cancel {
+                "escape" => {
+                    context.bar_content.handle_key(
+                        KeyInput {
+                            key: Key::Escape,
+                            modifiers: Default::default(),
+                        },
+                        true,
+                    );
+                }
+                "outside" => move_editor_drag(&scene, index, Point { x: 10.0, y: 10.0 }),
+                "focus" => context.bar_content.focus_lost(),
+                _ => {}
+            }
+            scene.drag_end_at(index).unwrap()();
+            assert_eq!(
+                context.config.peek(),
+                before,
+                "canceled drag changed content: {cancel}"
+            );
+        }
+        let scene = editor_scene(&preview, size, "keyboard-fixture");
+        let row = context
+            .bar_content
+            .preview_rect(Region::Item { group: 0, item: 0 });
+        let focused = scene
+            .focus_hit_test(Point {
+                x: row.x + 24.0,
+                y: row.y + 20.0,
+            })
+            .unwrap();
+        scene.on_key_at(focused).unwrap()(KeyInput {
+            key: Key::Down,
+            modifiers: creamui_core::Modifiers {
+                alt: true,
+                ..Default::default()
+            },
+        });
+        assert_eq!(
+            context.config.peek().statusbar.sections[0].islands[0].id,
+            "open_windows"
+        );
+    });
+}
+
+#[test]
+fn bar_editor_keyboard_focus_follows_the_reordered_item() {
+    use crate::views::desktop::bar_drag::Region;
+    use creamui_core::{Key, KeyInput, Point, Renderer};
+    use creamui_render::SceneRecorder;
+    creamui_reactive::with_context_scope(|| {
+        let preview = Preview::new();
+        let context = &preview.context;
+        routes::open(&context.view, "/desktop/statusbar?tab=contents");
+        context.config.update(|config| {
+            config.statusbar.sections[0]
+                .islands
+                .push(coconut_core::IslandEntry::with_id("clock"))
+        });
+        context
+            .bar_content
+            .preview_edits(context.config.clone(), coconut_core::BarKind::Statusbar);
+        let size = Size {
+            width: 1100.0,
+            height: 760.0,
+        };
+        let mut renderer = Renderer::new();
+        let mut recorder = SceneRecorder::new();
+        let theme = creamui_theme::use_theme();
+        let mut render = || {
+            recorder.begin(1100, 760, 1.0, theme.colors.surface, theme.colors);
+            renderer.render(preview.render(size), size, &mut recorder)
+        };
+        let scene = render();
+        let rect = context
+            .bar_content
+            .preview_rect(Region::Item { group: 0, item: 0 });
+        let focus = scene
+            .focus_hit_test(Point {
+                x: rect.x + 24.0,
+                y: rect.y + 20.0,
+            })
+            .unwrap();
+        let id = scene.focus_id_at(focus).unwrap();
+        let down = KeyInput {
+            key: Key::Down,
+            modifiers: creamui_core::Modifiers {
+                alt: true,
+                ..Default::default()
+            },
+        };
+        scene.on_key_at(focus).unwrap()(down);
+        let scene = render();
+        let next_focus = scene.focus_index(id).expect("moved item keeps focus");
+        scene.on_key_at(next_focus).unwrap()(down);
+        assert_eq!(
+            context.config.peek().statusbar.sections[0]
+                .islands
+                .iter()
+                .map(|entry| entry.id.as_str())
+                .collect::<Vec<_>>(),
+            ["open_windows", "clock", "workspaces"]
+        );
     });
 }

@@ -183,6 +183,7 @@ pub fn fixed_body(
     toolbar: BoxedWidget,
     body: BoxedWidget,
     scroll: ScrollController,
+    host_scroll: impl FnOnce(BoxedWidget) -> BoxedWidget,
 ) -> BoxedWidget {
     let toolbar: BoxedWidget = Box::new(
         RawView::new(creamui_core::layout::Style {
@@ -236,7 +237,7 @@ pub fn fixed_body(
     Box::new(jsx! {
         <Flex direction={FlexDirection::Column} grow={1.0} gap={0.0}>
             {toolbar}
-            {scroll}
+            {host_scroll(scroll)}
         </Flex>
     })
 }

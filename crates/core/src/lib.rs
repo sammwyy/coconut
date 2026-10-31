@@ -1,5 +1,6 @@
 mod appearance;
 mod background;
+mod bar_edit;
 mod desktop;
 mod dock;
 pub mod geo;
@@ -15,6 +16,7 @@ pub use background::{
     BackgroundConfig, BackgroundMode, BuiltinShader, GradientConfig, ShaderConfig, WallpaperSource,
     MAX_SHADER_COLORS,
 };
+pub use bar_edit::{BarEdit, BarKind};
 pub use desktop::{ClickAction, DesktopColor, DesktopConfig, DesktopIconsConfig, IconShape};
 pub use dock::{
     ordered_islands, BackgroundSource, DockAlign, DockConfig, DockDirection, DockPosition,
@@ -307,6 +309,15 @@ impl ShellConfig {
         [self.statusbar.clone(), self.dockbar.clone()]
     }
 
+    pub fn read_existing() -> std::io::Result<Self> {
+        match std::fs::read_to_string(config_file_path()) {
+            Ok(contents) => toml::from_str(&contents)
+                .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error)),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Self::default()),
+            Err(error) => Err(error),
+        }
+    }
+
     /// Reads an existing configuration without creating a file during passive
     /// service discovery.
     pub fn load_existing() -> Self {
@@ -380,7 +391,7 @@ impl ShellConfig {
         }
         let contents = toml::to_string_pretty(self)
             .map_err(|error| std::io::Error::other(error.to_string()))?;
-        std::fs::write(path, contents)
+        atomic_write_config(&path, contents.as_bytes())
     }
 
     /// Reset only Coconut's shell configuration, preserving an exact backup.
@@ -431,6 +442,31 @@ impl ShellConfig {
     }
 }
 
+fn atomic_write_config(path: &std::path::Path, contents: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let temporary = path.with_extension(format!("{}-{stamp}.tmp", std::process::id()));
+    let mut file = std::fs::OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .open(&temporary)?;
+    let result = (|| {
+        if let Ok(metadata) = std::fs::metadata(path) {
+            file.set_permissions(metadata.permissions())?;
+        }
+        file.write_all(contents)?;
+        file.sync_all()?;
+        std::fs::rename(&temporary, path)
+    })();
+    if result.is_err() {
+        let _ = std::fs::remove_file(temporary);
+    }
+    result
+}
+
 fn legacy_dock_config(contents: &str) -> bool {
     let Ok(toml::Value::Table(table)) = toml::from_str(contents) else {
         return false;
@@ -477,6 +513,33 @@ fn config_dir() -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn atomic_config_replacement_preserves_contents_on_failure_and_cleans_up() {
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let directory =
+            std::env::temp_dir().join(format!("coconut-config-{}-{stamp}", std::process::id()));
+        std::fs::create_dir(&directory).unwrap();
+        let path = directory.join("shell.toml");
+        std::fs::write(&path, b"old contents").unwrap();
+        let permissions = std::fs::metadata(&path).unwrap().permissions();
+        atomic_write_config(&path, b"complete new contents").unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), b"complete new contents");
+        assert_eq!(std::fs::metadata(&path).unwrap().permissions(), permissions);
+        let blocked = directory.join("blocked.toml");
+        std::fs::create_dir(&blocked).unwrap();
+        std::fs::write(blocked.join("existing"), b"keep this").unwrap();
+        assert!(atomic_write_config(&blocked, b"replacement").is_err());
+        assert_eq!(
+            std::fs::read(blocked.join("existing")).unwrap(),
+            b"keep this"
+        );
+        assert_eq!(std::fs::read_dir(&directory).unwrap().count(), 2);
+        std::fs::remove_dir_all(directory).unwrap();
+    }
 
     #[test]
     fn shipped_template_matches_in_memory_defaults() {

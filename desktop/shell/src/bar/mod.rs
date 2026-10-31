@@ -1,3 +1,5 @@
+pub mod editing;
+
 use coconut_core::{
     ordered_islands, BackgroundSource, DesktopColor, DockAlign, DockConfig, DockPosition,
     IslandEntry, SectionConfig,
@@ -106,7 +108,12 @@ fn build_horizontal_dock(
     shared: &SharedState,
     open_panel: &Rc<dyn Fn(&'static str, Point)>,
 ) -> BoxedWidget {
-    let sections: Vec<&SectionConfig> = dock.sections.iter().filter(|s| s.enabled).collect();
+    let sections: Vec<(usize, &SectionConfig)> = dock
+        .sections
+        .iter()
+        .enumerate()
+        .filter(|(_, s)| s.enabled)
+        .collect();
     let section_count = sections.len().max(1);
     let slot_count = if dock.fill_available_space {
         section_count
@@ -129,24 +136,28 @@ fn build_horizontal_dock(
     if dock.fill_available_space {
         row = row.width(viewport.width);
     }
-    for (index, section) in sections.iter().enumerate() {
-        row = row.child(build_row_section(
-            section,
-            dock.fill_available_space.then_some(section_width),
-            index == 0,
-            index + 1 == sections.len(),
-            dock.edge_gap.max(0.0),
-            thickness,
-            scale,
-            dock.position,
-            dock.show_island_background,
-            dock.show_island_border,
-            dock.unify_island_background,
-            island_color,
-            dock.island_background_opacity,
-            lookup,
-            shared,
-            open_panel,
+    for (index, (group_index, section)) in sections.iter().enumerate() {
+        row = row.child(editing::wrap(
+            build_row_section(
+                *group_index,
+                section,
+                dock.fill_available_space.then_some(section_width),
+                index == 0,
+                index + 1 == sections.len(),
+                dock.edge_gap.max(0.0),
+                thickness,
+                scale,
+                dock.position,
+                dock.show_island_background,
+                dock.show_island_border,
+                dock.unify_island_background,
+                island_color,
+                dock.island_background_opacity,
+                lookup,
+                shared,
+                open_panel,
+            ),
+            coconut_plugin_kit::bar_editor::Target::Group(*group_index),
         ));
     }
 
@@ -167,7 +178,12 @@ fn build_vertical_dock(
     shared: &SharedState,
     open_panel: &Rc<dyn Fn(&'static str, Point)>,
 ) -> BoxedWidget {
-    let sections: Vec<&SectionConfig> = dock.sections.iter().filter(|s| s.enabled).collect();
+    let sections: Vec<(usize, &SectionConfig)> = dock
+        .sections
+        .iter()
+        .enumerate()
+        .filter(|(_, s)| s.enabled)
+        .collect();
     let section_count = sections.len().max(1);
     let slot_count = if dock.fill_available_space {
         section_count
@@ -190,24 +206,28 @@ fn build_vertical_dock(
     if dock.fill_available_space {
         column = column.height(viewport.height);
     }
-    for (index, section) in sections.iter().enumerate() {
-        column = column.child(build_column_section(
-            section,
-            dock.fill_available_space.then_some(section_height),
-            index == 0,
-            index + 1 == sections.len(),
-            dock.edge_gap.max(0.0),
-            thickness,
-            scale,
-            dock.position,
-            dock.show_island_background,
-            dock.show_island_border,
-            dock.unify_island_background,
-            island_color,
-            dock.island_background_opacity,
-            lookup,
-            shared,
-            open_panel,
+    for (index, (group_index, section)) in sections.iter().enumerate() {
+        column = column.child(editing::wrap(
+            build_column_section(
+                *group_index,
+                section,
+                dock.fill_available_space.then_some(section_height),
+                index == 0,
+                index + 1 == sections.len(),
+                dock.edge_gap.max(0.0),
+                thickness,
+                scale,
+                dock.position,
+                dock.show_island_background,
+                dock.show_island_border,
+                dock.unify_island_background,
+                island_color,
+                dock.island_background_opacity,
+                lookup,
+                shared,
+                open_panel,
+            ),
+            coconut_plugin_kit::bar_editor::Target::Group(*group_index),
         ));
     }
     Box::new(
@@ -225,6 +245,7 @@ fn build_vertical_dock(
 /// position among its siblings.
 #[allow(clippy::too_many_arguments)]
 fn build_row_section(
+    group_index: usize,
     section: &SectionConfig,
     width: Option<f32>,
     is_first: bool,
@@ -256,6 +277,7 @@ fn build_row_section(
     }
 
     let islands = build_islands(
+        group_index,
         section,
         position,
         scale,
@@ -301,6 +323,7 @@ fn build_row_section(
 /// One vertical-dock section: a column of islands, `height` tall.
 #[allow(clippy::too_many_arguments)]
 fn build_column_section(
+    group_index: usize,
     section: &SectionConfig,
     height: Option<f32>,
     is_first: bool,
@@ -333,6 +356,7 @@ fn build_column_section(
     }
 
     let islands = build_islands(
+        group_index,
         section,
         position,
         scale,
@@ -472,6 +496,7 @@ fn apply_gap(container: Flex, gap: Gap, length: f32) -> Flex {
 /// can be unit-tested without a live `PluginInitContext`/`AppHandle`.
 #[allow(clippy::too_many_arguments)]
 fn build_islands(
+    group_index: usize,
     section: &SectionConfig,
     position: DockPosition,
     scale: f32,
@@ -487,7 +512,7 @@ fn build_islands(
         revision.0.get();
     }
     let mut widgets = Vec::new();
-    for entry in ordered_islands(&section.islands) {
+    for (item, entry) in ordered_islands(&section.islands).into_iter().enumerate() {
         let Some(island) = lookup(&entry.id) else {
             continue;
         };
@@ -502,14 +527,20 @@ fn build_islands(
         if !island.is_visible(&ctx) {
             continue;
         }
-        widgets.push(with_island_chrome(
-            IslandChrome {
-                background: island_background,
-                border: island_border,
-                background_color: island_background_color,
-                background_opacity: island_background_opacity,
+        widgets.push(editing::wrap(
+            with_island_chrome(
+                IslandChrome {
+                    background: island_background,
+                    border: island_border,
+                    background_color: island_background_color,
+                    background_opacity: island_background_opacity,
+                },
+                || island.build(&ctx),
+            ),
+            coconut_plugin_kit::bar_editor::Target::Item {
+                group: group_index,
+                item,
             },
-            || island.build(&ctx),
         ));
     }
     widgets
@@ -582,6 +613,7 @@ mod tests {
             ..Default::default()
         };
         let widgets = build_islands(
+            0,
             &section,
             DockPosition::Bottom,
             1.0,

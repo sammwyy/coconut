@@ -26,11 +26,15 @@ pub struct SettingsIcons {
     pub minimize: IconSource,
     pub maximize: IconSource,
     pub close: IconSource,
+    pub drag: IconSource,
 }
 
 impl SettingsIcons {
     pub fn load() -> Self {
         Self {
+            drag: decode(include_bytes!(
+                "../../../assets/glyphs/actions/drag-handle.svg"
+            )),
             paintbrush: decode(include_bytes!(
                 "../../../assets/glyphs/settings/paintbrush.svg"
             )),
@@ -140,6 +144,7 @@ mod tests {
             &icons.minimize,
             &icons.maximize,
             &icons.close,
+            &icons.drag,
         ] {
             assert!(
                 matches!(icon, IconSource::Image(_)),

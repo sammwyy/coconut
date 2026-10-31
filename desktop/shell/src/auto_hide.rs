@@ -37,6 +37,7 @@ pub struct AutoHide {
     position: DockPosition,
     app: AppHandle,
     panels: Rc<PanelHost>,
+    menu: creamui_render::ContextMenuHost,
     pending: Cell<bool>,
 }
 
@@ -47,6 +48,7 @@ impl AutoHide {
         position: DockPosition,
         app: AppHandle,
         panels: Rc<PanelHost>,
+        menu: creamui_render::ContextMenuHost,
     ) -> Rc<Self> {
         Rc::new(Self {
             expanded: Signal::new(!enabled),
@@ -58,6 +60,7 @@ impl AutoHide {
             position,
             app,
             panels,
+            menu,
             pending: Cell::new(false),
         })
     }
@@ -100,7 +103,7 @@ impl AutoHide {
     }
 
     fn refresh(self: &Rc<Self>) {
-        let panel_open = self.panels.has_open_panel();
+        let panel_open = self.panels.has_open_panel() || self.menu.is_open();
         if self.timer.borrow().inside || panel_open {
             self.timer.borrow_mut().cancel();
             self.pending.set(false);
@@ -126,7 +129,7 @@ impl AutoHide {
                 if state
                     .timer
                     .borrow()
-                    .can_hide(token, state.panels.has_open_panel())
+                    .can_hide(token, state.panels.has_open_panel() || state.menu.is_open())
                 {
                     state.pending.set(false);
                     if let Some(window) = state

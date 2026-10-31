@@ -1,11 +1,11 @@
 use crate::components::{fixed_body, group, row, section, tab_colors, update_config};
-use coconut_core::{DockConfig, DockPosition, SectionConfig, ShellConfig};
-use creamui_core::{BoxedWidget, Size};
+use coconut_core::{DockAlign, DockConfig, DockPosition, ShellConfig};
+use creamui_core::{BoxedWidget, Size, Styled};
 use creamui_reactive::Signal;
-use creamui_widgets::layout::{Align, Flex};
+use creamui_widgets::layout::Flex;
 use creamui_widgets::{
-    tab_styles, Button, ButtonSize, ButtonState, ButtonVariant, ScrollController, SegmentedControl,
-    Switch, Tab, TabSizing, Tabs,
+    tab_styles, ScrollController, SegmentedControl, Select, Switch, Tab, TabSizing, Tabs, Text,
+    TextSize,
 };
 
 const POSITIONS: [DockPosition; 4] = [
@@ -15,32 +15,7 @@ const POSITIONS: [DockPosition; 4] = [
     DockPosition::Right,
 ];
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum BarKind {
-    Statusbar,
-    Dockbar,
-}
-
-impl BarKind {
-    pub fn title(self) -> &'static str {
-        match self {
-            Self::Statusbar => "Statusbar",
-            Self::Dockbar => "Dockbar",
-        }
-    }
-    fn get(self, config: &ShellConfig) -> &DockConfig {
-        match self {
-            Self::Statusbar => &config.statusbar,
-            Self::Dockbar => &config.dockbar,
-        }
-    }
-    fn get_mut(self, config: &mut ShellConfig) -> &mut DockConfig {
-        match self {
-            Self::Statusbar => &mut config.statusbar,
-            Self::Dockbar => &mut config.dockbar,
-        }
-    }
-}
+pub use coconut_core::BarKind;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum DockTab {
@@ -50,7 +25,7 @@ pub enum DockTab {
 }
 
 pub fn build_bar_page(
-    _: Size,
+    size: Size,
     config: &Signal<ShellConfig>,
     scroll: &ScrollController,
     kind: BarKind,
@@ -58,24 +33,47 @@ pub fn build_bar_page(
     let router = creamui_router::use_router();
     let tab = match router.location().query("tab").as_deref() {
         Some("appearance") => DockTab::Appearance,
-        Some("contents") => DockTab::Content,
-        _ => DockTab::Display,
+        Some("position") => DockTab::Display,
+        _ => DockTab::Content,
     };
     let bar = kind.get(&config.get()).clone();
     let body = match tab {
-        DockTab::Display => display_card(config, kind, &bar),
+        DockTab::Display => display_card(config, kind, &bar, size.width < 880.0),
         DockTab::Appearance => appearance_card(config, kind, &bar),
-        DockTab::Content => content_card(config, kind, &bar),
+        DockTab::Content => {
+            let context = creamui_reactive::use_context::<crate::views::context::ViewContext>();
+            super::bar_content::build(&context, kind, &bar)
+        }
     };
-    fixed_body(tabs(&router, tab), body, scroll.clone())
+    let context = creamui_reactive::use_context::<crate::views::context::ViewContext>();
+    fixed_body(
+        tabs(&router, tab, size.width < 880.0),
+        body,
+        scroll.clone(),
+        move |scroll| {
+            let style = scroll.style();
+            super::bar_drag::measured(
+                &context.bar_content.drag,
+                super::bar_drag::Region::Viewport,
+                style,
+                scroll,
+                "bar-scroll".into(),
+            )
+        },
+    )
 }
 
-fn tabs(router: &creamui_router::Router, active: DockTab) -> BoxedWidget {
-    let labels = ["Position", "Appearance", "Contents"];
-    let styles = tab_styles(&labels, TabSizing::Fill, 38.0, 12.0);
+fn tabs(router: &creamui_router::Router, active: DockTab, compact: bool) -> BoxedWidget {
+    let labels = ["Contents", "Layout", "Style"];
+    let styles = tab_styles(
+        &labels,
+        TabSizing::Fill,
+        38.0,
+        if compact { 4.0 } else { 12.0 },
+    );
     let mut tabs = Tabs::new(tab_colors(), Default::default()).gap(8.0);
     for (index, label) in labels.into_iter().enumerate() {
-        let target = [DockTab::Display, DockTab::Appearance, DockTab::Content][index];
+        let target = [DockTab::Content, DockTab::Display, DockTab::Appearance][index];
         let router = router.clone();
         tabs = tabs.child(Box::new(Tab::new(
             tab_colors(),
@@ -86,7 +84,7 @@ fn tabs(router: &creamui_router::Router, active: DockTab) -> BoxedWidget {
                 crate::routes::set_query(
                     &router,
                     "tab",
-                    ["position", "appearance", "contents"][index],
+                    ["contents", "position", "appearance"][index],
                 )
             },
         )));
@@ -94,7 +92,12 @@ fn tabs(router: &creamui_router::Router, active: DockTab) -> BoxedWidget {
     Box::new(tabs)
 }
 
-fn display_card(config: &Signal<ShellConfig>, kind: BarKind, bar: &DockConfig) -> BoxedWidget {
+fn display_card(
+    config: &Signal<ShellConfig>,
+    kind: BarKind,
+    bar: &DockConfig,
+    compact: bool,
+) -> BoxedWidget {
     let enabled: BoxedWidget = Box::new(Switch::new(bar.enabled, {
         let config = config.clone();
         move || {
@@ -108,39 +111,174 @@ fn display_card(config: &Signal<ShellConfig>, kind: BarKind, bar: &DockConfig) -
         .iter()
         .position(|position| *position == bar.position)
         .unwrap_or(0);
-    let placement: BoxedWidget = Box::new(
-        SegmentedControl::new(selected, {
-            let config = config.clone();
-            move |index| update_config(&config, |c| kind.get_mut(c).position = POSITIONS[index])
+    let apply = config.clone();
+    let change = move |index| {
+        update_config(&apply, |config| {
+            kind.get_mut(config).position = POSITIONS[index]
         })
-        .option("Top")
-        .option("Bottom")
-        .option("Left")
-        .option("Right"),
+    };
+    let placement: BoxedWidget = if compact {
+        let context = creamui_reactive::use_context::<crate::views::context::ViewContext>();
+        Box::new(
+            Select::controlled(
+                &["Top", "Bottom", "Left", "Right"],
+                context
+                    .native
+                    .select(&format!("{}-edge", kind.title()), selected),
+            )
+            .width(160.0)
+            .on_select(change),
+        )
+    } else {
+        Box::new(
+            SegmentedControl::new(selected, change)
+                .option("Top")
+                .option("Bottom")
+                .option("Left")
+                .option("Right"),
+        )
+    };
+    let thickness = number_choice(
+        config,
+        kind,
+        "Thickness",
+        bar.thickness,
+        &[28.0, 36.0, 44.0, 56.0, 64.0, 76.0, 88.0, 100.0],
+        |bar, value| bar.thickness = value,
     );
-    let thickness: BoxedWidget = Box::new(
+    let auto_hide: BoxedWidget = Box::new(Switch::new(bar.auto_hide, {
+        let config = config.clone();
+        move || {
+            update_config(&config, |config| {
+                let bar = kind.get_mut(config);
+                bar.auto_hide = !bar.auto_hide;
+            })
+        }
+    }));
+    let fill: BoxedWidget = Box::new(Switch::new(bar.fill_available_space, {
+        let config = config.clone();
+        move || {
+            update_config(&config, |config| {
+                let bar = kind.get_mut(config);
+                bar.fill_available_space = !bar.fill_available_space;
+            })
+        }
+    }));
+    let alignment: BoxedWidget = Box::new(
         SegmentedControl::new(
-            if bar.thickness >= 52.0 {
-                2
-            } else if bar.thickness >= 44.0 {
-                1
-            } else {
-                0
+            match bar.align {
+                DockAlign::Start => 0,
+                DockAlign::Center => 1,
+                DockAlign::End => 2,
             },
             {
                 let config = config.clone();
                 move |index| {
-                    update_config(&config, |c| {
-                        kind.get_mut(c).thickness = [36.0, 44.0, 56.0][index]
+                    update_config(&config, |config| {
+                        kind.get_mut(config).align =
+                            [DockAlign::Start, DockAlign::Center, DockAlign::End][index]
                     })
                 }
             },
         )
-        .option("Compact")
-        .option("Normal")
-        .option("Large"),
+        .option("Start")
+        .option("Center")
+        .option("End"),
     );
-    section(kind.title(), "This is one of Coconut's two fixed bars. You can move or hide it, but cannot create additional panels.", vec![group(vec![row("Enabled", enabled), row("Screen edge", placement), row("Thickness", thickness)])])
+    let margin = number_choice(
+        config,
+        kind,
+        "Screen inset",
+        bar.margin,
+        &[0.0, 4.0, 8.0, 12.0, 20.0, 32.0, 48.0],
+        |bar, value| bar.margin = value,
+    );
+    let edge_gap = number_choice(
+        config,
+        kind,
+        "End padding",
+        bar.edge_gap,
+        &[0.0, 4.0, 8.0, 12.0, 16.0, 20.0, 32.0],
+        |bar, value| bar.edge_gap = value,
+    );
+    let section_gap = number_choice(
+        config,
+        kind,
+        "Group spacing",
+        bar.section_gap,
+        &[0.0, 4.0, 8.0, 12.0, 16.0, 24.0, 32.0],
+        |bar, value| bar.section_gap = value,
+    );
+    let setting = |label: &str, control| {
+        if compact {
+            Box::new(
+                Flex::column()
+                    .gap(8.0)
+                    .padding(16.0)
+                    .child(Box::new(Text::new(label).size(TextSize::Sm)))
+                    .child(control),
+            ) as BoxedWidget
+        } else {
+            row(label, control)
+        }
+    };
+    section(
+        "",
+        "Place the bar where it feels natural, then adjust how much space it uses.",
+        vec![
+            group(vec![
+                row("Show bar", enabled),
+                row("Auto-hide", auto_hide),
+                setting("Screen edge", placement),
+            ]),
+            group(vec![
+                setting("Thickness", thickness),
+                row("Fill available space", fill),
+                setting("Alignment", alignment),
+                setting("Screen inset", margin),
+                setting("End padding", edge_gap),
+                setting("Group spacing", section_gap),
+            ]),
+        ],
+    )
+}
+
+fn number_choice(
+    config: &Signal<ShellConfig>,
+    kind: BarKind,
+    label: &str,
+    value: f32,
+    choices: &[f32],
+    set: fn(&mut DockConfig, f32),
+) -> BoxedWidget {
+    let context = creamui_reactive::use_context::<crate::views::context::ViewContext>();
+    let mut choices = choices.to_vec();
+    if !choices.contains(&value) {
+        choices.push(value);
+        choices.sort_by(f32::total_cmp);
+    }
+    let selected = choices
+        .iter()
+        .position(|choice| *choice == value)
+        .unwrap_or(0);
+    let labels = choices
+        .iter()
+        .map(|value| format!("{value} px"))
+        .collect::<Vec<_>>();
+    let labels = labels.iter().map(String::as_str).collect::<Vec<_>>();
+    let config = config.clone();
+    Box::new(
+        Select::controlled(
+            &labels,
+            context
+                .native
+                .select(&format!("bar-{}-{label}", kind.title()), selected),
+        )
+        .width(138.0)
+        .on_select(move |index| {
+            update_config(&config, |config| set(kind.get_mut(config), choices[index]));
+        }),
+    )
 }
 
 fn appearance_card(config: &Signal<ShellConfig>, kind: BarKind, bar: &DockConfig) -> BoxedWidget {
@@ -176,111 +314,6 @@ fn appearance_card(config: &Signal<ShellConfig>, kind: BarKind, bar: &DockConfig
             ),
         ])],
     )
-}
-
-fn content_card(config: &Signal<ShellConfig>, kind: BarKind, bar: &DockConfig) -> BoxedWidget {
-    let mut groups = Vec::new();
-    for (section_index, section_config) in bar.sections.iter().enumerate() {
-        let mut rows = Vec::new();
-        for (island_index, island) in section_config.islands.iter().enumerate() {
-            let label = island.id.clone();
-            let mut controls = Flex::row().gap(6.0).align(Align::Center);
-            if section_index > 0 {
-                let apply = config.clone();
-                controls = controls.child(Box::new(Button::styled(
-                    ButtonVariant::Secondary,
-                    ButtonSize::Sm,
-                    "Previous group",
-                    ButtonState::Normal,
-                    move || {
-                        update_config(&apply, |c| {
-                            let sections = &mut kind.get_mut(c).sections;
-                            if section_index > 0
-                                && section_index < sections.len()
-                                && island_index < sections[section_index].islands.len()
-                            {
-                                let island = sections[section_index].islands.remove(island_index);
-                                sections[section_index - 1].islands.push(island);
-                            }
-                        })
-                    },
-                )));
-            }
-            if section_index + 1 < bar.sections.len() {
-                let apply = config.clone();
-                controls = controls.child(Box::new(Button::styled(
-                    ButtonVariant::Secondary,
-                    ButtonSize::Sm,
-                    "Next group",
-                    ButtonState::Normal,
-                    move || {
-                        update_config(&apply, |c| {
-                            let sections = &mut kind.get_mut(c).sections;
-                            if section_index + 1 < sections.len()
-                                && island_index < sections[section_index].islands.len()
-                            {
-                                let island = sections[section_index].islands.remove(island_index);
-                                sections[section_index + 1].islands.insert(0, island);
-                            }
-                        })
-                    },
-                )));
-            }
-            let apply = config.clone();
-            controls = controls.child(Box::new(Button::styled(
-                ButtonVariant::Destructive,
-                ButtonSize::Sm,
-                "Remove",
-                ButtonState::Normal,
-                move || {
-                    update_config(&apply, |c| {
-                        let sections = &mut kind.get_mut(c).sections;
-                        if let Some(section) = sections.get_mut(section_index) {
-                            if island_index < section.islands.len() {
-                                section.islands.remove(island_index);
-                            }
-                        }
-                    })
-                },
-            )));
-            rows.push(row(&label, Box::new(controls)));
-        }
-        let apply = config.clone();
-        rows.push(row(
-            "Group",
-            Box::new(Button::styled(
-                ButtonVariant::Destructive,
-                ButtonSize::Sm,
-                "Remove group",
-                ButtonState::Normal,
-                move || {
-                    update_config(&apply, |c| {
-                        let sections = &mut kind.get_mut(c).sections;
-                        if section_index < sections.len() {
-                            sections.remove(section_index);
-                        }
-                    })
-                },
-            )),
-        ));
-        groups.push(group(rows));
-    }
-    let apply = config.clone();
-    groups.push(group(vec![row(
-        "Island group",
-        Box::new(Button::styled(
-            ButtonVariant::Secondary,
-            ButtonSize::Sm,
-            "Add group",
-            ButtonState::Normal,
-            move || {
-                update_config(&apply, |c| {
-                    kind.get_mut(c).sections.push(SectionConfig::default())
-                })
-            },
-        )),
-    )]));
-    section("Island groups", "Groups are the visual islands that separate widgets. Add widgets from the Islands page, then place them in either bar.", groups)
 }
 
 pub(crate) fn statusbar_view() -> BoxedWidget {

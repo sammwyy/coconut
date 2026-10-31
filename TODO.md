@@ -1,5 +1,12 @@
 # TODO
 
+- Resolve the pre-existing strict Clippy `implicit_clone` diagnostic in
+  `apps/settings/src/services/settings.rs` when converting an existing String error.
+
+- Investigate the pre-existing Settings Connectivity scene failure at the
+  subpage back-button drag-region assertion. It also fails with the original
+  Settings layout; bar editor scenes are validated independently.
+
 - Extend clipboard capture beyond UTF-8 text and wlr-data-control to rich MIME
   entries, images, and ext-data-control; retain original formats on restoration.
 - Coordinate compositor-side authorization of privileged direct clipboard
@@ -15,10 +22,6 @@
   (`cloned_ref_to_slice_refs` in `crates/file-menu/src/operations.rs`).
 - Implement native notification history and unread counts for the statusbar
   notification capsule in the shell design.
-- `shell.toml` is only read at startup, including when edited through
-  `coconut settings`; changes there require restarting the shell process to
-  take effect. The active CreamUI theme (`cream/active_theme.toml`) is the
-  exception — the settings window itself updates live when you switch it.
 - `statusbar.position` and `dockbar.position` only anchor correctly on the
   Wayland layer-shell backend (`creamui-platform`'s `WindowRole::TopPanel`/`BottomPanel`
   handling). The Windows backend does not place panel-role windows at all

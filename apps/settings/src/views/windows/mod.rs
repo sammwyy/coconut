@@ -215,7 +215,7 @@ impl ShortcutState {
         self.status.set(String::new());
     }
 
-    fn record_native(
+    pub(crate) fn record_native(
         &self,
         event: creamui_render::platform::KeyEvent,
         modifiers: creamui_render::platform::Modifiers,

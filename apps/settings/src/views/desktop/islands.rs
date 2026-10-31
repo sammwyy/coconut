@@ -1,12 +1,10 @@
-use crate::components::{group, labeled_group, row, section, update_config};
-use coconut_core::{IslandEntry, ShellConfig};
+use crate::components::{group, labeled_group, row, section};
 use coconut_plugin_app_launcher::{AppLauncherIsland, OpenWindowsIsland};
 use coconut_plugin_clock::ClockConfig;
 use coconut_plugin_kit::{ConfigField, Island};
 use creamui_core::{BoxedWidget, Size};
-use creamui_reactive::Signal;
 use creamui_widgets::layout::{Align, Flex};
-use creamui_widgets::{Button, ButtonSize, ButtonState, ButtonVariant, Switch, TextInput};
+use creamui_widgets::{Button, ButtonSize, ButtonState, ButtonVariant, TextInput};
 
 struct KnownIsland {
     id: &'static str,
@@ -60,46 +58,7 @@ fn known_islands() -> Vec<KnownIsland> {
     ]
 }
 
-fn island_present(config: &ShellConfig, id: &str, statusbar: bool) -> bool {
-    let bar = if statusbar {
-        &config.statusbar
-    } else {
-        &config.dockbar
-    };
-    bar.sections
-        .iter()
-        .flat_map(|section| &section.islands)
-        .any(|entry| entry.id == id)
-}
-
-fn toggle_island(config: &mut ShellConfig, id: &str, statusbar: bool) {
-    let bar = if statusbar {
-        &mut config.statusbar
-    } else {
-        &mut config.dockbar
-    };
-    let present = bar
-        .sections
-        .iter()
-        .flat_map(|section| &section.islands)
-        .any(|entry| entry.id == id);
-    if present {
-        for section in &mut bar.sections {
-            section.islands.retain(|entry| entry.id != id);
-        }
-        return;
-    }
-    if bar.sections.is_empty() {
-        bar.sections.push(Default::default());
-    }
-    bar.sections[0].islands.push(IslandEntry::with_id(id));
-}
-
-pub fn build(
-    size: Size,
-    config: &Signal<ShellConfig>,
-    settings: &crate::views::desktop::island_settings::State,
-) -> BoxedWidget {
+pub fn build(size: Size, settings: &crate::views::desktop::island_settings::State) -> BoxedWidget {
     if let Some(id) = creamui_router::use_params().get("widget_id") {
         if let Some(entry) = known_islands()
             .into_iter()
@@ -110,56 +69,48 @@ pub fn build(
         return crate::components::pages::unavailable_page("Unknown widget");
     }
 
-    let toggles = group(
-        known_islands()
-            .into_iter()
-            .map(|entry| island_row(entry, config))
-            .collect(),
-    );
+    let widgets = group(known_islands().into_iter().map(island_row).collect());
     let format = group(vec![clock_format_row()]);
 
     section(
         "Islands",
-        "Choose whether each widget appears in the statusbar, dockbar, or both.",
+        "Add and arrange items in the bar editor. Configure shared widget behavior here.",
         vec![
-            labeled_group("Widgets", toggles),
+            group(vec![
+                bar_editor_row("Statusbar", "/desktop/statusbar?tab=contents"),
+                bar_editor_row("Dockbar", "/desktop/dock?tab=contents"),
+            ]),
+            labeled_group("Widgets", widgets),
             labeled_group("Clock", format),
         ],
     )
 }
 
-fn island_row(entry: KnownIsland, config: &Signal<ShellConfig>) -> BoxedWidget {
-    let status_checked = island_present(&config.get(), entry.id, true);
-    let dock_checked = island_present(&config.get(), entry.id, false);
-    let status_apply = config.clone();
-    let id = entry.id;
-    let status_switch: BoxedWidget = Box::new(Switch::new(status_checked, move || {
-        update_config(&status_apply, |c| toggle_island(c, id, true));
-    }));
-    let dock_apply = config.clone();
-    let dock_switch: BoxedWidget = Box::new(Switch::new(dock_checked, move || {
-        update_config(&dock_apply, |c| toggle_island(c, id, false));
-    }));
-    let mut control = Flex::row()
-        .gap(8.0)
-        .align(Align::Center)
-        .child(Box::new(creamui_widgets::Text::secondary("Status")) as BoxedWidget)
-        .child(status_switch)
-        .child(Box::new(creamui_widgets::Text::secondary("Dock")) as BoxedWidget)
-        .child(dock_switch);
-    if !entry.schema.is_empty() {
+fn bar_editor_row(label: &str, route: &'static str) -> BoxedWidget {
+    let router = creamui_router::use_router();
+    row(
+        label,
+        Box::new(Button::styled(
+            ButtonVariant::Secondary,
+            ButtonSize::Sm,
+            "Edit contents…",
+            ButtonState::Normal,
+            move || crate::routes::open(&router, route),
+        )),
+    )
+}
+
+fn island_row(entry: KnownIsland) -> BoxedWidget {
+    let mut control = Flex::row().gap(8.0).align(Align::Center);
+    let route = coconut_plugin_kit::bar_editor::item_settings_route(entry.id);
+    if let Some(route) = route.filter(|route| *route != "/desktop/widgets") {
         let router = creamui_router::use_router();
         control = control.child(Box::new(Button::styled(
             ButtonVariant::Secondary,
             ButtonSize::Sm,
-            "Configure",
+            "Configure…",
             ButtonState::Normal,
-            move || {
-                crate::routes::open(
-                    &router,
-                    &format!("/desktop/widgets/{}", crate::routes::segment(id)),
-                )
-            },
+            move || crate::routes::open(&router, route),
         )));
     }
     row(entry.label, Box::new(control))
@@ -207,7 +158,6 @@ fn clock_format_row() -> BoxedWidget {
 pub(crate) fn route_view() -> BoxedWidget {
     let context = creamui_reactive::use_context::<crate::views::context::ViewContext>();
     let size = context.size;
-    let config = &context.config;
     let island_settings = &context.island_settings;
-    build(size, config, island_settings)
+    build(size, island_settings)
 }

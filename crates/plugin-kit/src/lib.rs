@@ -10,6 +10,7 @@
 //! workspace depends on this crate yet — `plugins/<id>` crates and
 //! `desktop/shell`'s engine rewrite (Phase 4) are the first consumers.
 
+pub mod bar_editor;
 pub mod chrome;
 mod config;
 pub mod design;
