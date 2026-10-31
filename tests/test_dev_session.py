@@ -131,7 +131,7 @@ class DevSessionTests(unittest.TestCase):
 
     def test_private_bus_uses_staged_services_and_returns_shell_status(self):
         self.env["COCONUT_TEST_STATUS"] = "7"
-        result = subprocess.run(["bash", str(ROOT / "dev.sh"), "--", "--profile", "test profile"],
+        result = subprocess.run(["bash", str(ROOT / "scripts/dev.sh"), "--", "--profile", "test profile"],
                                 env=self.env, capture_output=True, text=True, timeout=25)
         self.assertEqual(result.returncode, 7, result.stdout + result.stderr)
         run = self.run_directory()
@@ -151,7 +151,7 @@ class DevSessionTests(unittest.TestCase):
 
     def test_interrupt_stops_compositor_and_services(self):
         self.env["COCONUT_TEST_HOLD"] = "1"
-        child = subprocess.Popen(["bash", str(ROOT / "dev.sh")], env=self.env,
+        child = subprocess.Popen(["bash", str(ROOT / "scripts/dev.sh")], env=self.env,
                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         try:
             run = wait_for(self.run_directory)
@@ -171,10 +171,10 @@ class DevSessionTests(unittest.TestCase):
         record = Path(self.fixture.name) / "build-arguments"
         executable(commands / "bash", '#!/bin/sh\nprintf "%s\\n" "$@" > "$COCONUT_TEST_BUILD_ARGS"\n')
         self.env.update(PATH=f"{commands}:{os.environ['PATH']}", COCONUT_TEST_BUILD_ARGS=str(record))
-        result = subprocess.run(["/bin/bash", str(ROOT / "dev.sh"), "--build"], env=self.env,
+        result = subprocess.run(["/bin/bash", str(ROOT / "scripts/dev.sh"), "--build"], env=self.env,
                                 capture_output=True, text=True, timeout=25)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertEqual(record.read_text().splitlines(), [str(ROOT / "build.sh"), "--no-upx"])
+        self.assertEqual(record.read_text().splitlines(), [str(ROOT / "scripts/build.sh"), "--no-upx"])
         self.assert_stopped(self.run_directory())
 
 
@@ -203,7 +203,7 @@ if sys.argv[1] == "--build":
             env = dict(os.environ, PATH=f"{commands}:{os.environ['PATH']}",
                        COCONUT_BUILD_DIR=str(staged), CARGO_TARGET_DIR=str(target.parent),
                        COCONUT_TEST_UPX_RECORD=str(record), COCONUT_QT_MAJORS="6")
-            result = subprocess.run(["bash", str(ROOT / "build.sh"), "--no-upx"], env=env,
+            result = subprocess.run(["bash", str(ROOT / "scripts/build.sh"), "--no-upx"], env=env,
                                     capture_output=True, text=True, timeout=15)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertFalse(record.exists())

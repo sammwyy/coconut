@@ -32,13 +32,16 @@ stay calm, responsive, and consistent.
 Run the desktop and its local portal services without installing:
 
 ```bash
-./dev.sh --build  # Build into .build/ without UPX, then start Blair and Coconut.
-./dev.sh          # Use the existing staged binaries.
+./scripts/dev.sh --build  # Build into .build/ without UPX, then start Blair and Coconut.
+./scripts/dev.sh          # Use the existing staged binaries.
 ```
 
 The development session uses its own D-Bus bus and XDG directories. See the
 [shell development guide](docs/dev/SHELL.md#build-and-run) for dependencies,
 Blair selection, logs and running additional apps in that session.
+
+Use `make dev`, `make build`, or `make test` as shortcuts to the
+repository scripts.
 
 | Command | Purpose |
 | --- | --- |
@@ -137,6 +140,9 @@ See the [development documentation](docs/README.md):
 - [Application development](docs/dev/APPS.md): architecture, CreamUI components,
   design, interaction patterns, performance, and validation.
 - [Code style](CODESTYLE.md): source quality and comment rules.
+
+Run `./scripts/setup.sh --dry-run` to inspect native dependencies, then
+`./scripts/setup.sh` to install them.
 
 For a local development session:
 

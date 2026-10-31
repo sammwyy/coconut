@@ -30,44 +30,60 @@ If you use a different layout, update the path dependencies in the relevant
 
 ## Install system dependencies
 
+Use the repository setup script for native build and session dependencies:
+
+```bash
+./scripts/setup.sh --dry-run
+./scripts/setup.sh
+```
+
+It reads `/etc/os-release` and supports Fedora (`dnf`), Debian/Ubuntu (`apt`),
+Arch (`pacman`) and openSUSE (`zypper`). `make setup` is a shortcut.
+The script prints each package-manager command and requests `sudo`
+only for installation; `sudo ./scripts/setup.sh` also works. Package managers
+prompt before applying changes. On Arch, dependency installation includes a
+full system upgrade (`pacman -Syu`) to avoid a partial upgrade. The script does
+not enable extra repositories, build Blair, fetch sibling repositories or
+install system Rust/Cargo packages.
+Install and manage the stable Rust toolchain with `rustup` as your regular
+user, not through `sudo`; `./scripts/setup.sh` only installs native system
+dependencies. If a package is unavailable in your configured repositories,
+use the corresponding manual instructions below.
+
 ### Arch Linux
 
 ```bash
-sudo pacman -Syu --needed base-devel rustup pkgconf pipewire clang libclang \
+sudo pacman -Syu --needed base-devel pkgconf pipewire clang libclang \
   wayland libxkbcommon dbus
-rustup default stable
 ```
 
 ### Debian and Ubuntu
 
 ```bash
 sudo apt update
-sudo apt install build-essential rustup pkg-config libpipewire-0.3-dev \
+sudo apt install build-essential pkg-config libpipewire-0.3-dev \
   clang libclang-dev libwayland-dev libxkbcommon-dev libdbus-1-dev
-rustup default stable
 ```
 
-On systems where `rustup` is unavailable from the configured APT repositories,
-install the stable toolchain with the [official Rust installer](https://rustup.rs/).
+Install `rustup` for your user from the [official Rust installer](https://rustup.rs/)
+if you do not already have a user-managed toolchain.
 
 ### Fedora and RHEL-compatible distributions
 
 ```bash
-sudo dnf install @development-tools rust cargo pkgconf-pkg-config pipewire-devel \
+sudo dnf install @development-tools pkgconf-pkg-config pipewire-devel \
   clang clang-devel wayland-devel libxkbcommon-devel dbus-devel
 ```
 
 On RHEL-compatible systems, enable the appropriate development repositories if
-one or more `*-devel` packages are unavailable. If the packaged Rust version is
-too old, install the current stable toolchain with [rustup](https://rustup.rs/).
+one or more `*-devel` packages are unavailable.
 
 ### openSUSE
 
 ```bash
 sudo zypper install -t pattern devel_basis
-sudo zypper install rustup pkg-config pipewire-devel clang libclang-devel \
+sudo zypper install pkg-config pipewire-devel clang libclang-devel \
   wayland-devel libxkbcommon-devel dbus-1-devel
-rustup default stable
 ```
 
 For another distribution, install the equivalent C compiler toolchain,
@@ -88,11 +104,11 @@ See [THEMES.md](../THEMES.md) for adapter builds and isolated native tests.
 From the Coconut checkout:
 
 ```bash
-./dev.sh --build
-./dev.sh
+./scripts/dev.sh --build
+./scripts/dev.sh
 ```
 
-`dev.sh --build` runs `build.sh --no-upx`, then starts Blair with `--run` and
+`scripts/dev.sh --build` runs `scripts/build.sh --no-upx`, then starts Blair with `--run` and
 launches Coconut's shell, background, Appearance, Permissions, FileChooser and
 Clipboard services from `.build/`. Without `--build`, it uses the staged binaries as they
 are. Application launches resolve `.build/` first, including apps opened from
@@ -115,7 +131,7 @@ Blair is selected from `.build/blair`, `../blair/.build/blair`,
 in its checkout separately. Override its executable with `COCONUT_DEV_BLAIR`,
 the broker with `COCONUT_DEV_PORTAL`, or the staging directory with
 `COCONUT_BUILD_DIR`. Forward compositor arguments after `--`, for example
-`./dev.sh -- --profile development`. A graphical parent session selects Blair's
+`./scripts/dev.sh -- --profile development`. A graphical parent session selects Blair's
 Winit backend for a nested window; a TTY uses its normal backend selection.
 
 Each run prints its directory. Component logs and a sourceable `environment`
@@ -237,13 +253,13 @@ To produce a full set of staged release binaries (compressed with `upx` when
 available) and install them, use the repository scripts:
 
 ```bash
-./build.sh
-./install.sh
+./scripts/build.sh
+./scripts/install.sh
 # Or install into ~/.local without sudo:
-./install.sh --user
+./scripts/install.sh --user
 ```
 
-`build.sh` compiles every installable binary into `.build/`; `install.sh`
+`scripts/build.sh` compiles every installable binary into `.build/`; `scripts/install.sh`
 copies all staged binaries without compiling. Its default is system-wide
 installation into `/usr/bin`, requesting `sudo` when needed. `--user` selects
 `~/.local` and must run without `sudo`. Add `--build` to compile and stage before

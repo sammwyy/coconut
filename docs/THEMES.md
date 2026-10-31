@@ -264,7 +264,7 @@ system palette; application-specific Qt Quick styles may need their own support.
 The plugin uses QPA private APIs and must be built against the Qt version
 installed on the target system. `build.sh` builds Qt 6 by default. To also
 build Qt 5, install its development/private headers and use
-`COCONUT_QT_MAJORS="5 6" ./build.sh`. Qt 5 and Qt 6 plugins are installed
+`COCONUT_QT_MAJORS="5 6" ./scripts/build.sh`. Qt 5 and Qt 6 plugins are installed
 alongside each other; Qt's plugin metadata selects a compatible build. Qt 6 is
 covered by the native integration test; Qt 5 requires validation on a Qt 5 host.
 Sandboxed applications additionally need access to a compatible native theme or

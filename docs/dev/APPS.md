@@ -424,8 +424,8 @@ Document platform support and optional services honestly.
 For an installable executable, update:
 
 1. Its app manifest, data assets, and README.
-2. The package/binary list in [build.sh](../../build.sh).
-3. The executable and desktop-entry installation in [install.sh](../../install.sh).
+2. The package/binary list in [build.sh](../../scripts/build.sh).
+3. The executable and desktop-entry installation in [install.sh](../../scripts/install.sh).
 4. Affected installation fixtures, currently including
    [the CFiles installer test](../../apps/files/src/installation_tests.rs).
 5. The [root application list](../../README.md) and relevant developer commands.

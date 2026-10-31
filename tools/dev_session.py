@@ -49,9 +49,9 @@ def find_executable(override, candidates, description):
 def prepare(build):
     missing = [name for name in BINARIES if not executable(build / name)]
     if missing:
-        raise RuntimeError(f"missing staged binaries: {', '.join(missing)}; run ./dev.sh --build")
+        raise RuntimeError(f"missing staged binaries: {', '.join(missing)}; run ./scripts/dev.sh --build")
     if not list((build / "qt/plugins/platformthemes").glob("libcoconut-qt*.so")):
-        raise RuntimeError("staged Qt plugin missing; run ./dev.sh --build")
+        raise RuntimeError("staged Qt plugin missing; run ./scripts/dev.sh --build")
     for command in ("dbus-run-session", "dbus-update-activation-environment", "gdbus"):
         if not shutil.which(command):
             raise RuntimeError(f"{command} is required for the development session")

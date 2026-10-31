@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="${COCONUT_BUILD_DIR:-$ROOT/.build}"
 DO_BUILD=0
 while [ "$#" -gt 0 ]; do
@@ -9,7 +9,7 @@ while [ "$#" -gt 0 ]; do
         --build) DO_BUILD=1 ;;
         -h | --help)
             cat <<'USAGE'
-Usage: ./dev.sh [--build] [-- BLAIR_ARGUMENTS...]
+Usage: ./scripts/dev.sh [--build] [-- BLAIR_ARGUMENTS...]
 
 Start Coconut and its portals from .build/ on a private session bus.
   --build   Run build.sh --no-upx before starting the session.
@@ -28,7 +28,7 @@ USAGE
 done
 
 if [ "$DO_BUILD" -eq 1 ]; then
-    bash "$ROOT/build.sh" --no-upx
+    bash "$ROOT/scripts/build.sh" --no-upx
 fi
 
 exec python3 "$ROOT/tools/dev_session.py" --build-dir "$BUILD_DIR" -- "$@"

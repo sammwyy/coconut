@@ -37,7 +37,7 @@ install -Dm755 target/release/cmonitor ~/.local/bin/cmonitor
 install -Dm644 data/cmonitor.desktop ~/.local/share/applications/cmonitor.desktop
 ```
 
-The development installer (`../../install.sh` at the repository root)
+The development installer (`../../scripts/install.sh`)
 installs both.
 
 ## Development

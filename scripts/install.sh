@@ -1,15 +1,15 @@
 #!/bin/bash
-# Coconut installer: lays down the release binaries staged by ./build.sh in
+# Coconut installer: lays down the release binaries staged by ./scripts/build.sh in
 # .build/, registers the portal backends, and creates a "Coconut" session
 # profile (startcoconut + wayland-sessions entry) so greeters and session
 # managers can discover it.
 #
-# Usage: ./install.sh [WM] [--build] [--user] [--force|force]
+# Usage: ./scripts/install.sh [WM] [--build] [--user] [--force|force]
 #
 #   WM        compositor for the session profile (e.g. blair, kwin,
 #             hyprland); used even when not auto-detected. No WM argument
 #             asks interactively.
-#   --build   run ./build.sh first to compile and stage the binaries.
+#   --build   run ./scripts/build.sh first to compile and stage the binaries.
 #   --user    install for the current user (~/.local) instead of
 #             system-wide; without it the script elevates with sudo.
 #   --force   never prompt: a missing WM detection is accepted silently and
@@ -18,7 +18,7 @@
 # COCONUT_WM still selects the compositor when no WM argument is given.
 # External compositors are only *used*, never installed or configured here.
 set -e
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="${COCONUT_BUILD_DIR:-$ROOT/.build}"
 CALLER_PATH="${COCONUT_INSTALL_CALLER_PATH:-$PATH}"
 BINARIES=(coconut coconut-bg coconut-greeter coconut-settings coconut-appearance
@@ -64,7 +64,7 @@ fi
 # Build as the invoking user, before any sudo elevation, so target/ stays
 # owned by them and sudo never touches the toolchain.
 if [ "$DO_BUILD" -eq 1 ] && [ "${COCONUT_INSTALL_BUILT:-}" != 1 ]; then
-    bash "$ROOT/build.sh"
+    bash "$ROOT/scripts/build.sh"
 fi
 
 # ------------------------------------------------------- privilege check
@@ -77,7 +77,7 @@ if [ "$USER_INSTALL" -eq 0 ] && [ "$(id -u)" -ne 0 ]; then
         exit 1
     fi
     exec sudo COCONUT_INSTALL_BUILT=1 COCONUT_BUILD_DIR="$BUILD_DIR" \
-        COCONUT_INSTALL_CALLER_PATH="$CALLER_PATH" bash "$ROOT/install.sh" "$@"
+        COCONUT_INSTALL_CALLER_PATH="$CALLER_PATH" bash "$ROOT/scripts/install.sh" "$@"
 fi
 
 # ---------------------------------------------------------------- binaries
@@ -88,12 +88,12 @@ for bin in "${BINARIES[@]}"; do
 done
 if [ "${#missing[@]}" -ne 0 ]; then
     echo "install.sh: staged binaries missing: ${missing[*]}" >&2
-    echo "Run ./build.sh first (as a regular user), then re-run this script." >&2
+    echo "Run ./scripts/build.sh first (as a regular user), then re-run this script." >&2
     exit 1
 fi
 qt_plugins=("$BUILD_DIR"/qt/plugins/platformthemes/libcoconut-qt*.so)
 if [ ! -f "${qt_plugins[0]}" ]; then
-    echo "install.sh: Qt theme plugin missing; run ./build.sh first" >&2
+    echo "install.sh: Qt theme plugin missing; run ./scripts/build.sh first" >&2
     exit 1
 fi
 

@@ -1,12 +1,12 @@
 #!/bin/bash
 # Coconut builder: compiles every installable binary in this repository with
-# the release profile and stages the results in .build/ so install.sh can lay
+# the release profile and stages the results in .build/ so scripts/install.sh can lay
 # them down without a Rust toolchain or the sources at install time.
 #
 # When `upx` is available each staged binary is compressed in place; without
 # it the binaries are staged uncompressed. Pass --no-upx to skip compression.
 set -e
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="${COCONUT_BUILD_DIR:-$ROOT/.build}"
 TARGET_DIR="${CARGO_TARGET_DIR:-$ROOT/target}"
 COMPRESS=1
@@ -14,7 +14,7 @@ for arg in "$@"; do
     case "$arg" in
         --no-upx) COMPRESS=0 ;;
         -h | --help)
-            echo "Usage: ./build.sh [--no-upx]"
+            echo "Usage: ./scripts/build.sh [--no-upx]"
             exit 0
             ;;
         *)
@@ -87,4 +87,4 @@ for entry in "${PACKAGES[@]}"; do
     bin="${entry##*:}"
     printf '  %-16s %s\n' "$bin" "$(du -h "$BUILD_DIR/$bin" | cut -f1)"
 done
-echo "Run ./install.sh for a system-wide install, or ./install.sh --user."
+echo "Run ./scripts/install.sh for a system-wide install, or ./scripts/install.sh --user."
