@@ -15,6 +15,13 @@ The executable is `cfiles`; the desktop name is **File Explorer**.
   backend for open, save, and folder-selection dialogs.
 - Renders through CreamUI's CPU backend; `CUI_OVERRIDE_RENDER_BACKEND=gpu`
   opts into `wgpu` per launch.
+- Shows image, video, audio cover and embedded Windows executable icon previews
+  in directory views, falling back to themed file icons when unavailable.
+  A lower-left badge shows the associated default application's icon when
+  installed; a lower-right link badge identifies symbolic links (including
+  linked folders). MIME badges are resolved off the UI thread. Previews are
+  generated off the UI thread and shared with the desktop through
+  [Coconut's private thumbnail cache](../../crates/thumbnails/README.md).
 
 ## Build
 

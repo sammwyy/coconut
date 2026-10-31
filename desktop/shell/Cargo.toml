@@ -21,6 +21,7 @@ perf-metrics = [
 
 [dependencies]
 coconut-file-menu.workspace = true
+coconut-thumbnails.workspace = true
 coconut-theme.workspace = true
 coconut-integration-cream.workspace = true
 coconut-api = { workspace = true }

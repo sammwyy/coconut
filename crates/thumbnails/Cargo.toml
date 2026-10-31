@@ -1,0 +1,19 @@
+[package]
+name = "coconut-thumbnails"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Private thumbnail generation and cache for Coconut"
+
+[dependencies]
+image-rs = { workspace = true, features = ["png", "jpeg", "webp", "gif", "bmp", "ico", "tiff"] }
+ring.workspace = true
+resvg.workspace = true
+symphonia.workspace = true
+tempfile.workspace = true
+url.workspace = true
+
+[lints]
+workspace = true

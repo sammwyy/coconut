@@ -9,6 +9,7 @@ use crate::{
     portal::{PortalSelection, PortalType},
     window::{WindowMode, WindowRequest},
 };
+use creamui_image::ImageData;
 use creamui_reactive::{batch, Signal};
 use creamui_render::{
     platform::{KeyEvent, Modifiers},
@@ -17,6 +18,7 @@ use creamui_render::{
 use creamui_widgets::{ScrollController, TextController};
 use std::{
     cell::{Cell, RefCell},
+    collections::{HashMap, HashSet, VecDeque},
     fs,
     path::{Path, PathBuf},
     process::Command,
@@ -36,6 +38,12 @@ pub(crate) struct BrowserState {
     pub(crate) places: Rc<Vec<files::Place>>,
     pub(crate) drives: Signal<Vec<files::Drive>>,
     pub(crate) icons: Icons,
+    application_icons: Rc<RefCell<HashMap<String, Option<ImageData>>>>,
+    previews: Rc<RefCell<HashMap<PathBuf, Option<ImageData>>>>,
+    preview_queue: Rc<RefCell<VecDeque<PathBuf>>>,
+    preview_pending: Rc<RefCell<HashSet<PathBuf>>>,
+    preview_running: Rc<Cell<bool>>,
+    preview_revision: Signal<u64>,
     pub(crate) name: TextController,
     pub(crate) message: Signal<Option<String>>,
     pub(crate) overwrite: Signal<Option<PathBuf>>,
@@ -97,6 +105,12 @@ impl BrowserState {
             places: Rc::new(places),
             drives: Signal::new(files::drives()),
             icons: Icons::load(),
+            application_icons: Rc::new(RefCell::new(HashMap::new())),
+            previews: Rc::new(RefCell::new(HashMap::new())),
+            preview_queue: Rc::new(RefCell::new(VecDeque::new())),
+            preview_pending: Rc::new(RefCell::new(HashSet::new())),
+            preview_running: Rc::new(Cell::new(false)),
+            preview_revision: Signal::new(0),
             name: TextController::new(name),
             message: Signal::new(None),
             overwrite: Signal::new(None),
@@ -109,6 +123,81 @@ impl BrowserState {
             search_active: Signal::new(false),
             address_editing: Signal::new(false),
         }
+    }
+    pub(crate) fn preview(&self, path: &Path) -> Option<ImageData> {
+        self.preview_revision.get();
+        if !coconut_thumbnails::Thumbnailer::supports(path) {
+            return None;
+        }
+        if let Some(cached) = self.previews.borrow().get(path) {
+            return cached.clone();
+        }
+        if self.window.borrow().is_some()
+            && self.preview_pending.borrow_mut().insert(path.to_path_buf())
+        {
+            let mut queue = self.preview_queue.borrow_mut();
+            if queue.len() >= 64 {
+                if let Some(obsolete) = queue.pop_front() {
+                    self.preview_pending.borrow_mut().remove(&obsolete);
+                }
+            }
+            queue.push_back(path.to_path_buf());
+            drop(queue);
+            self.load_next_preview();
+        }
+        None
+    }
+
+    pub(crate) fn application_icon(&self, path: &Path) -> Option<ImageData> {
+        let mime = mime_guess::from_path(path).first_or_octet_stream();
+        self.application_icons
+            .borrow()
+            .get(mime.essence_str())
+            .cloned()
+            .flatten()
+    }
+
+    fn load_next_preview(&self) {
+        if self.preview_running.get() {
+            return;
+        }
+        let Some(path) = self.preview_queue.borrow_mut().pop_front() else {
+            return;
+        };
+        let Some(window) = self.window.borrow().clone() else {
+            return;
+        };
+        self.preview_running.set(true);
+        let state = self.clone();
+        let requested = path.clone();
+        window.app().spawn_background(
+            move || {
+                coconut_thumbnails::Thumbnailer::new()
+                    .and_then(|generator| generator.get(&path, 160))
+            },
+            move |result| {
+                let image = match result {
+                    Ok(Some(bytes)) => ImageData::from_bytes(&bytes).ok(),
+                    Ok(None) => None,
+                    Err(error) => {
+                        eprintln!("cfiles: thumbnail {}: {error}", requested.display());
+                        None
+                    }
+                };
+                let mut previews = state.previews.borrow_mut();
+                if previews.len() >= 256 {
+                    previews.clear();
+                }
+                previews.insert(requested.clone(), image);
+                drop(previews);
+                state.preview_pending.borrow_mut().remove(&requested);
+                state.preview_running.set(false);
+                state
+                    .preview_revision
+                    .update(|revision| *revision = revision.wrapping_add(1));
+                state.load_next_preview();
+            },
+        );
     }
     pub(crate) fn toggle_search(&self) {
         let active = !self.search_active.peek();

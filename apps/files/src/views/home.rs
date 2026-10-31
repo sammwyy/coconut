@@ -169,6 +169,9 @@ pub(crate) fn home_view(b: &BrowserState, tab: &Tab, width: f32) -> BoxedWidget 
             files::Entry {
                 path: path.clone(),
                 directory: false,
+                symlink: path
+                    .symlink_metadata()
+                    .is_ok_and(|meta| meta.file_type().is_symlink()),
                 bytes: 0,
                 modified: None,
                 created: None,

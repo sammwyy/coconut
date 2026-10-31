@@ -273,7 +273,7 @@ pub(crate) fn file_icon(path: &Path) -> &'static str {
         .as_str()
     {
         "png" | "jpg" | "jpeg" | "svg" | "webp" | "gif" => "image",
-        "mp3" | "ogg" | "wav" | "flac" => "music",
+        "mp3" | "ogg" | "wav" | "flac" | "m4a" | "opus" | "wma" | "aac" => "music",
         "mp4" | "mkv" | "webm" | "mov" => "video",
         _ => "file",
     }

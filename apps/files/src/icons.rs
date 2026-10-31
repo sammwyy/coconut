@@ -43,6 +43,10 @@ impl Icons {
                 r#"<path d="M10 18V5l10-2v13M10 9l10-2"/><ellipse cx="7" cy="18" rx="3" ry="3"/><ellipse cx="17" cy="16" rx="3" ry="3"/>"#,
             ),
             (
+                "link",
+                r#"<path d="M10 14a4 4 0 0 0 6 0l3-3a4 4 0 0 0-6-6l-2 2m3 3a4 4 0 0 0-6 0l-3 3a4 4 0 0 0 6 6l2-2"/>"#,
+            ),
+            (
                 "drive",
                 r#"<path d="m3 14 3-9h12l3 9"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M16 17h2M6 17h.01"/>"#,
             ),

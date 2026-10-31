@@ -3,6 +3,7 @@ use crate::{
     config::ItemSize,
     navigation::{DirectoryView, SortColumn, VisibleEntries},
 };
+use creamui_image::{Image, ImageFit};
 use creamui_widgets::{RawVirtualList, VirtualListState};
 use std::time::SystemTime;
 
@@ -438,7 +439,7 @@ fn directory_entry(
                 6.0,
             ),
             vec![
-                glyph(b, icon, 56.0 * scale, t.colors.accent),
+                entry_art(b, &entry, icon, 56.0 * scale, t.colors.accent),
                 label(
                     short(&name, text_capacity(96.0 * scale - 12.0, 14.0)),
                     12.0,
@@ -449,7 +450,7 @@ fn directory_entry(
     } else {
         let c = &b.explorer.columns;
         let layout = detail_layout(c, width);
-        let mut cells = vec![glyph(b, icon, 24.0 * scale, t.colors.accent)];
+        let mut cells = vec![entry_art(b, &entry, icon, 24.0 * scale, t.colors.accent)];
         if c.name {
             cells.push(view(
                 name_column(layout.name, 20.0),
@@ -651,13 +652,85 @@ pub(crate) fn columns_view(b: &BrowserState, tab: &Tab, width: f32) -> BoxedWidg
     )
 }
 
+fn entry_art(
+    b: &BrowserState,
+    entry: &files::Entry,
+    fallback: &str,
+    size: f32,
+    color: Color,
+) -> BoxedWidget {
+    let preview = (!entry.directory).then(|| b.preview(&entry.path)).flatten();
+    let application = (!entry.directory)
+        .then(|| b.application_icon(&entry.path))
+        .flatten();
+    let base: BoxedWidget = if let Some(data) = preview {
+        Box::new(
+            Image::new(data)
+                .layout(fixed(size, size))
+                .fit(ImageFit::Contain),
+        )
+    } else {
+        glyph(b, fallback, size, color)
+    };
+    if application.is_none() && !entry.symlink {
+        return base;
+    }
+    let mut layers = vec![base];
+    let badge_size = (size * 0.38).max(8.0);
+    if let Some(data) = application {
+        layers.push(Box::new(
+            RawView::new(badge_style(badge_size, true)).child(Box::new(
+                Image::new(data)
+                    .layout(fixed(badge_size, badge_size))
+                    .fit(ImageFit::Contain),
+            )),
+        ));
+    }
+    if entry.symlink {
+        layers.push(Box::new(
+            RawView::new(badge_style(badge_size, false)).child(glyph(
+                b,
+                "link",
+                badge_size * 0.85,
+                use_theme().colors.accent,
+            )),
+        ));
+    }
+    view(fixed(size, size), layers)
+}
+
+fn badge_style(size: f32, left: bool) -> creamui_core::Style {
+    use creamui_core::layout::{LengthPercentageAuto, Position};
+    creamui_core::Style::new()
+        .layout(Style {
+            position: Position::Absolute,
+            inset: creamui_core::layout::Rect {
+                left: if left {
+                    LengthPercentageAuto::Length(0.0)
+                } else {
+                    LengthPercentageAuto::Auto
+                },
+                right: if left {
+                    LengthPercentageAuto::Auto
+                } else {
+                    LengthPercentageAuto::Length(0.0)
+                },
+                top: LengthPercentageAuto::Auto,
+                bottom: LengthPercentageAuto::Length(0.0),
+            },
+            ..fixed(size, size)
+        })
+        .background(use_theme().colors.surface)
+        .corner_radius(size * 0.2)
+}
+
 fn column_entry(b: &BrowserState, entry: files::Entry, selected: bool) -> BoxedWidget {
     let icon = if entry.directory {
         "folder"
     } else {
         file_icon(&entry.path)
     };
-    let mut children = vec![glyph(b, icon, 18.0, use_theme().colors.accent)];
+    let mut children = vec![entry_art(b, &entry, icon, 18.0, use_theme().colors.accent)];
     children.push(view(
         Style {
             flex_grow: 1.0,

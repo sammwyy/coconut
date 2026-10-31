@@ -47,7 +47,7 @@ impl BrowserState {
         let paths = request.paths.clone();
         let hidden = request.hidden;
         let work = move || {
-            paths
+            let results: DirectoryResults = paths
                 .iter()
                 .map(|path| {
                     files::entries(path, hidden).map_err(|error| {
@@ -55,24 +55,61 @@ impl BrowserState {
                         format!("Could not read this folder: {error}")
                     })
                 })
-                .collect()
+                .collect();
+            let mime_types: HashSet<String> = results
+                .iter()
+                .filter_map(|result| result.as_ref().ok())
+                .flat_map(|entries| entries.iter())
+                .filter(|entry| !entry.directory)
+                .map(|entry| {
+                    mime_guess::from_path(&entry.path)
+                        .first_or_octet_stream()
+                        .essence_str()
+                        .to_owned()
+                })
+                .collect();
+            let theme = crate::icon_theme::IconTheme::system();
+            let associations = delib::mimeapps::MimeApps::default();
+            let badges: HashMap<String, Option<ImageData>> = mime_types
+                .into_iter()
+                .map(|mime| {
+                    let icon = associations
+                        .default_application(&mime)
+                        .and_then(|application| {
+                            application.icon().and_then(|name| theme.load(&[name]))
+                        });
+                    (mime, icon)
+                })
+                .collect();
+            (results, badges)
         };
         let window = self.window.borrow().clone();
         if let Some(window) = window {
             self.directory_job_running.set(true);
             let state = self.clone();
-            window.app().spawn_background(work, move |results| {
-                state.directory_job_running.set(false);
-                state.finish_directory_load(&request, results);
-                state.load_directories();
-            });
+            window
+                .app()
+                .spawn_background(work, move |(results, badges)| {
+                    state.directory_job_running.set(false);
+                    state.application_icons.borrow_mut().extend(badges);
+                    state.finish_directory_load(&request, results);
+                    state.load_directories();
+                });
         } else {
-            self.finish_directory_load(&request, work());
+            let (results, badges) = work();
+            self.application_icons.borrow_mut().extend(badges);
+            self.finish_directory_load(&request, results);
             self.load_directories();
         }
     }
 
     fn finish_directory_load(&self, request: &DirectoryRequest, results: DirectoryResults) {
+        self.previews.borrow_mut().retain(|path, _| {
+            !request
+                .paths
+                .iter()
+                .any(|directory| path.parent() == Some(directory.as_path()))
+        });
         self.tabs.update(|tabs| {
             let Some(tab) = tabs.iter_mut().find(|tab| {
                 Rc::ptr_eq(&tab.identity, &request.identity)

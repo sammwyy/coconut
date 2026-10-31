@@ -12,6 +12,7 @@ use url::Url;
 pub(crate) struct Entry {
     pub path: PathBuf,
     pub directory: bool,
+    pub symlink: bool,
     pub bytes: u64,
     pub modified: Option<SystemTime>,
     pub created: Option<SystemTime>,
@@ -60,6 +61,7 @@ pub(crate) fn entries(path: &Path, show_hidden: bool) -> io::Result<Vec<Entry>> 
         items.push(Entry {
             path: entry.path(),
             directory: metadata.is_dir(),
+            symlink: entry.file_type()?.is_symlink(),
             bytes: metadata.len(),
             modified: metadata.modified().ok(),
             created: metadata.created().ok(),
@@ -68,6 +70,24 @@ pub(crate) fn entries(path: &Path, show_hidden: bool) -> io::Result<Vec<Entry>> 
     }
     items.sort_by_cached_key(|entry| (!entry.directory, entry.name().to_lowercase()));
     Ok(items)
+}
+
+#[cfg(test)]
+mod symlink_tests {
+    use super::*;
+
+    #[test]
+    fn linked_folders_and_broken_links_keep_their_marker() {
+        let root = tempfile::tempdir().unwrap();
+        fs::create_dir(root.path().join("folder")).unwrap();
+        std::os::unix::fs::symlink("folder", root.path().join("linked")).unwrap();
+        std::os::unix::fs::symlink("missing", root.path().join("broken")).unwrap();
+        let items = entries(root.path(), false).unwrap();
+        let linked = items.iter().find(|entry| entry.name() == "linked").unwrap();
+        assert!(linked.directory && linked.symlink);
+        let broken = items.iter().find(|entry| entry.name() == "broken").unwrap();
+        assert!(!broken.directory && broken.symlink);
+    }
 }
 
 #[derive(Clone)]

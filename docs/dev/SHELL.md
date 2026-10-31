@@ -288,6 +288,11 @@ pkg-config --modversion libpipewire-0.3
 
 ## Desktop context menus
 
+Desktop files use the shared private thumbnail cache for images, video, audio
+covers and PE icons. A badge at the lower left identifies the MIME default
+application when it has an icon; a badge at the lower right identifies symlinks.
+Launcher icons and generic MIME/folder icons remain the fallback.
+
 The desktop uses `coconut-file-menu` for item and directory-background actions.
 Right-clicking an icon selects it without activating it; empty-space clicks clear
 the selection. Common file actions match File Explorer. The desktop adds Sort

@@ -13,6 +13,7 @@ path = "src/main.rs"
 
 [dependencies]
 coconut-file-menu.workspace = true
+coconut-thumbnails.workspace = true
 coconut-integration-cream.workspace = true
 dbus.workspace = true
 url.workspace = true

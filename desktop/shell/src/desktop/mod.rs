@@ -275,6 +275,8 @@ struct DesktopEntry {
     path: PathBuf,
     label: String,
     icon: Option<ImageData>,
+    application_icon: Option<ImageData>,
+    symlink: bool,
     kind: EntryKind,
     target: DesktopTarget,
 }
@@ -465,7 +467,7 @@ fn desktop_icon(
 }
 
 fn icon_content(entry: &DesktopEntry, layout: &IconLayout, selected: bool) -> BoxedWidget {
-    let icon = entry_icon(entry, layout.glyph, layout.foreground);
+    let icon = decorated_icon(entry, layout.glyph, layout.foreground);
     let fill = if layout.background {
         layout.background_color
     } else {
@@ -502,6 +504,68 @@ fn icon_content(entry: &DesktopEntry, layout: &IconLayout, selected: bool) -> Bo
             <RawText color={layout.label_color} font_size={layout.label_font} width={layout.icon_box}>{label}</RawText>
         </Flex>
     })
+}
+
+fn decorated_icon(entry: &DesktopEntry, size: f32, color: Color) -> BoxedWidget {
+    let base = entry_icon(entry, size, color);
+    if entry.application_icon.is_none() && !entry.symlink {
+        return base;
+    }
+    let badge = (size * 0.38).max(9.0);
+    let mut layers = vec![base];
+    if let Some(data) = entry.application_icon.clone() {
+        layers.push(Box::new(
+            RawView::new(badge_style(badge, true)).child(Box::new(
+                Image::new(data)
+                    .layout(LayoutStyle {
+                        size: fixed(badge, badge),
+                        ..Default::default()
+                    })
+                    .fit(ImageFit::Contain),
+            )),
+        ) as BoxedWidget);
+    }
+    if entry.symlink {
+        layers.push(
+            Box::new(RawView::new(badge_style(badge, false)).child(pixel_icon(
+                "symlink-badge",
+                badge * 0.85,
+                color,
+            ))) as BoxedWidget,
+        );
+    }
+    Box::new(
+        RawView::new(LayoutStyle {
+            size: fixed(size, size),
+            ..Default::default()
+        })
+        .with_children(layers),
+    )
+}
+
+fn badge_style(size: f32, left: bool) -> Style {
+    Style::new()
+        .layout(LayoutStyle {
+            position: Position::Absolute,
+            inset: LayoutRect {
+                left: if left {
+                    LengthPercentageAuto::Length(0.0)
+                } else {
+                    LengthPercentageAuto::Auto
+                },
+                right: if left {
+                    LengthPercentageAuto::Auto
+                } else {
+                    LengthPercentageAuto::Length(0.0)
+                },
+                top: LengthPercentageAuto::Auto,
+                bottom: LengthPercentageAuto::Length(0.0),
+            },
+            size: fixed(size, size),
+            ..Default::default()
+        })
+        .background(use_theme().colors.surface)
+        .corner_radius(size * 0.2)
 }
 
 fn free_icon_position(
@@ -548,27 +612,50 @@ fn entry_icon(entry: &DesktopEntry, size: f32, foreground: Color) -> BoxedWidget
 
 fn load_entries(icon_theme: &str) -> Vec<DesktopEntry> {
     let icons = IconResolver::new(icon_theme);
+    let associations = delib::mimeapps::MimeApps::default();
+    let mut application_icons = HashMap::new();
+    let thumbnails = coconut_thumbnails::Thumbnailer::new()
+        .map_err(|error| eprintln!("coconut: thumbnail cache unavailable: {error}"))
+        .ok();
     let mut entries: Vec<_> = fs::read_dir(desktop_directory())
         .ok()
         .into_iter()
         .flatten()
         .flatten()
-        .filter_map(|entry| desktop_entry(entry.path(), &icons))
+        .filter_map(|entry| {
+            desktop_entry(
+                entry.path(),
+                &icons,
+                thumbnails.as_ref(),
+                &associations,
+                &mut application_icons,
+            )
+        })
         .collect();
     entries.sort_by_key(|entry| entry.label.to_ascii_lowercase());
     entries
 }
 
-fn desktop_entry(path: PathBuf, icons: &IconResolver) -> Option<DesktopEntry> {
+fn desktop_entry(
+    path: PathBuf,
+    icons: &IconResolver,
+    thumbnails: Option<&coconut_thumbnails::Thumbnailer>,
+    associations: &delib::mimeapps::MimeApps,
+    application_icons: &mut HashMap<String, Option<ImageData>>,
+) -> Option<DesktopEntry> {
     let name = path.file_name()?.to_str()?;
     if name.starts_with('.') {
         return None;
     }
+    let symlink =
+        fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.file_type().is_symlink());
     if path.is_dir() {
         return Some(DesktopEntry {
             path: path.clone(),
             label: name.to_owned(),
             icon: load_best_icon(icons, &folder_icon_names(&path), ICON_RASTER_SIZE),
+            application_icon: None,
+            symlink,
             kind: EntryKind::Folder,
             target: DesktopTarget::Path(path),
         });
@@ -579,10 +666,37 @@ fn desktop_entry(path: PathBuf, icons: &IconResolver) -> Option<DesktopEntry> {
     {
         return launcher_entry(&path, icons);
     }
+    let mime = mime_guess::from_path(&path)
+        .first_or_octet_stream()
+        .essence_str()
+        .to_owned();
+    let application_icon = application_icons
+        .entry(mime.clone())
+        .or_insert_with(|| {
+            associations
+                .default_application(&mime)
+                .and_then(|application| {
+                    application
+                        .icon()
+                        .and_then(|name| icons.load(IconRequest::named(name, 48)))
+                })
+        })
+        .clone();
     Some(DesktopEntry {
-        path: path.to_path_buf(),
+        path: path.clone(),
         label: name.to_owned(),
-        icon: load_best_icon(icons, &file_icon_names(&path), ICON_RASTER_SIZE),
+        icon: thumbnails
+            .and_then(|generator| match generator.get(&path, ICON_RASTER_SIZE) {
+                Ok(image) => image,
+                Err(error) => {
+                    eprintln!("coconut: thumbnail {}: {error}", path.display());
+                    None
+                }
+            })
+            .and_then(|bytes| ImageData::from_bytes(&bytes).ok())
+            .or_else(|| load_best_icon(icons, &file_icon_names(&path), ICON_RASTER_SIZE)),
+        application_icon,
+        symlink,
         kind: EntryKind::File,
         target: DesktopTarget::Path(path),
     })
@@ -620,6 +734,8 @@ fn launcher_entry(path: &Path, icons: &IconResolver) -> Option<DesktopEntry> {
             .or_else(|| fields.get("Name"))?
             .to_string(),
         icon,
+        application_icon: None,
+        symlink: fs::symlink_metadata(path).is_ok_and(|metadata| metadata.file_type().is_symlink()),
         kind: EntryKind::Launcher,
         target: DesktopTarget::Launch {
             program: program.clone(),
@@ -992,6 +1108,8 @@ mod tests {
                 path: path.clone(),
                 label: "Document".into(),
                 icon: None,
+                application_icon: None,
+                symlink: true,
                 kind: EntryKind::File,
                 target: DesktopTarget::Path(path),
             }]);
