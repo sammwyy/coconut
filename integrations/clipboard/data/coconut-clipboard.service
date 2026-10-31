@@ -1,0 +1,11 @@
+[Unit]
+Description=Coconut clipboard history and permission-controlled API
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=dbus
+BusName=org.coconut.Clipboard
+ExecStart="/usr/bin/coconut-clipboard"
+Restart=on-failure
+RestartSec=3

@@ -16,7 +16,7 @@ systemd user unit. It exposes:
 
 - `org.coconut.Permissions1` at `/org/coconut/Permissions1`: `Ask`,
   `BeginRequest`, `WaitRequest`, `CancelRequest`, `Decide`, `DescribeRequest`,
-  `List`, `Revoke`, `SetDecision`, `Forget`, `Manage`, and the `Changed` signal.
+  `List`, `Revoke`, `SetDecision`, `Forget`, `Manage`, `AuthorizeClipboard`, and the `Changed` signal.
 - `org.freedesktop.impl.portal.Access` at
   `/org/freedesktop/portal/desktop`: the XDG Access backend selected by
   `coconut-permissions.portal` and `coconut-portals.conf`.
@@ -27,7 +27,17 @@ Only the D-Bus connection owning `org.blair.Compositor` may begin a capture
 permission request on behalf of a Wayland or D-Bus client. Blair supplies the
 executable path from
 `/proc/<pid>/exe` or the verified `flatpak:<app-id>` subject. The service
-currently accepts `screen-capture` requests.
+accepts `screen-capture` requests through the compositor methods.
+
+`AuthorizeClipboard(caller, permission)` accepts delegation only from the
+installed `coconut-clipboard` executable beside the portal. The portal resolves
+the client's unique D-Bus name itself and supports separate `clipboard-read`,
+`clipboard-history` and `clipboard-write` decisions. The installed shell and
+Settings have default access based on executable identity; saved denials take
+precedence. Prompts support once/remembered grants and are cancelled when the
+client or delegating service disconnects. Settings → Privacy → Clipboard manages
+these decisions. See the [clipboard API guide](../../integrations/clipboard/README.md)
+for the full capability model and its compositor enforcement boundary.
 
 `BeginRequest(subject, permission)` returns a request ID immediately, allowing
 the compositor to cancel it even while the consent dialog is open.

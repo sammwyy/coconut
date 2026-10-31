@@ -14,6 +14,8 @@
 ## Desktop integration
 
 - [Themes](THEMES.md): Coconut, CreamUI, GTK, and Qt appearance integration.
+- [Clipboard](../integrations/clipboard/README.md): session history, permissions,
+  D-Bus API, configuration and native integration tests.
 - [Project overview](../README.md): applications, session behavior, and platform notes.
 
 The application guide applies to both human contributors and coding agents.

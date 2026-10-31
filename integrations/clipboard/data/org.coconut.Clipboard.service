@@ -1,0 +1,4 @@
+[D-BUS Service]
+Name=org.coconut.Clipboard
+Exec="/usr/bin/coconut-clipboard"
+SystemdService=coconut-clipboard.service

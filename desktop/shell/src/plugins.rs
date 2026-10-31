@@ -14,6 +14,8 @@ pub fn all_plugins() -> Vec<Box<dyn Plugin>> {
         Box::new(coconut_plugin_workspaces::WorkspacesPlugin),
         Box::new(coconut_plugin_weather::WeatherPlugin),
         Box::new(coconut_plugin_clock::ClockPlugin),
+        #[cfg(target_os = "linux")]
+        Box::new(coconut_plugin_clipboard::ClipboardPlugin),
         Box::new(coconut_plugin_current_playing::CurrentPlayingPlugin),
         Box::new(coconut_plugin_app_launcher::AppLauncherPlugin),
         Box::new(coconut_plugin_app_drawer::AppDrawerPlugin),

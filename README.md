@@ -19,6 +19,7 @@ stay calm, responsive, and consistent.
 - Application browsing, category navigation, and search
 - Now-playing information with playback controls
 - Clock and weather widgets
+- A permission-controlled clipboard history service and optional history widget
 - A control center for network, brightness, volume, Bluetooth, battery, and
   power profiles
 - Floating volume and brightness indicators with configurable placement
@@ -52,6 +53,7 @@ Blair selection, logs and running additional apps in that session.
 | `cviewer [IMAGE ...]` | Open Image Viewer with zoom, pan, rotation, temporary color adjustments and metadata. |
 | `coconut-screenshots` | Take a screenshot and annotate it: drag to select, draw, blur, erase, then copy or save. `--screen` captures headlessly, `--save-as` asks where to save. |
 | `coconut-permission-portal --service` | Run the permission service that stores per-application decisions and shows consent prompts. |
+| `coconut-clipboard` | Run the session clipboard history service and its permission-controlled D-Bus API. |
 | `cterm --settings` | Open Terminal Settings. |
 | `coconut files` | Start the file manager. |
 | `cfiles --settings` | Open File Explorer settings. |
@@ -67,7 +69,7 @@ Blair selection, logs and running additional apps in that session.
 `coconut-bg` renders the desktop background as an independent session daemon;
 the installed session profile launches both automatically — `startcoconut`
 (the greeter-facing bootstrapper, which starts the compositor selected at
-install time) hands off to `coconut-session`, which spawns `coconut-bg` and
+install time) hands off to `coconut-session`, which spawns `coconut-bg`, `coconut-clipboard` and
 then the shell. Future session components get added there, not to the shell.
 When running pieces by hand instead of through the session, start
 `coconut-bg` alongside `coconut` yourself. It renders one bottom
@@ -80,6 +82,12 @@ linear gradient, or a built-in GPU shader animated through frame callbacks.
 Each shader can be tuned independently for animation speed, target frame rate
 (1-60 fps) and palette colors under `[shaders.<name>]`. When GPU rendering is
 unavailable, shader mode falls back to the solid color.
+
+Clipboard history is configured in **Settings → Privacy → Clipboard**. Enable
+its optional icon in **Settings → Desktop → Islands**. History stays in memory,
+with configurable size and expiration, and supports text on compositors with
+wlr-data-control, including Blair. See the [service/API guide](integrations/clipboard/README.md)
+for permissions and configuration, and the [widget guide](plugins/clipboard/README.md).
 
 ## Notifications and status updates
 

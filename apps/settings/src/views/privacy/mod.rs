@@ -26,6 +26,12 @@ fn build(state: &State, nav: &creamui_router::Router) -> BoxedWidget {
             card(
                 "Permissions",
                 vec![
+                    detail_link(
+                        "Clipboard",
+                        "History limits and application access",
+                        Page::Clipboard,
+                        nav,
+                    ),
                     state.preference(
                         "Location services",
                         "location",
@@ -60,6 +66,7 @@ fn build(state: &State, nav: &creamui_router::Router) -> BoxedWidget {
     )
 }
 pub mod camera;
+pub mod clipboard;
 pub mod fingerprint;
 pub mod microphone;
 pub mod screen_capture;

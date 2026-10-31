@@ -1,0 +1,23 @@
+[package]
+name = "coconut-plugin-clipboard"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Optional clipboard history island and popup"
+
+[dependencies]
+coconut-integration-clipboard.workspace = true
+coconut-plugin-kit.workspace = true
+creamui-core.workspace = true
+creamui-reactive.workspace = true
+creamui-render = { workspace = true, default-features = true }
+creamui-widgets.workspace = true
+chrono.workspace = true
+
+[dev-dependencies]
+creamui-theme.workspace = true
+
+[lints]
+workspace = true

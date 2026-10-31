@@ -1,6 +1,9 @@
 use crate::{
     identity,
-    store::{store_path, Store, Verdict, SCREEN_CAPTURE},
+    store::{
+        is_clipboard_permission, store_path, Store, Verdict, CLIPBOARD_HISTORY, CLIPBOARD_READ,
+        SCREEN_CAPTURE,
+    },
 };
 use futures_util::StreamExt;
 use std::{
@@ -66,6 +69,7 @@ struct Pending {
 
 struct NativeRequest {
     owner: String,
+    delegate: Option<String>,
     prompt: Option<String>,
     receiver: Option<oneshot::Receiver<Answer>>,
 }
@@ -77,6 +81,8 @@ struct Daemon {
     seq: AtomicU64,
     prompt_executable: PathBuf,
     settings: PathBuf,
+    clipboard: PathBuf,
+    shell: PathBuf,
     prompt_timeout: Duration,
 }
 
@@ -96,6 +102,8 @@ impl Daemon {
             native: Mutex::new(HashMap::new()),
             seq: AtomicU64::new(0),
             settings: directory.join("coconut-settings"),
+            clipboard: directory.join("coconut-clipboard"),
+            shell: directory.join("coconut"),
             prompt_timeout: PROMPT_TIMEOUT,
             prompt_executable,
         }
@@ -226,11 +234,13 @@ impl Daemon {
             .lock()
             .unwrap()
             .iter()
-            .filter(|(_, request)| request.owner == owner)
-            .map(|(id, _)| id.clone())
+            .filter(|(_, request)| {
+                request.owner == owner || request.delegate.as_deref() == Some(owner)
+            })
+            .map(|(id, request)| (id.clone(), request.owner.clone()))
             .collect();
-        for id in ids {
-            self.cancel_native(owner, &id);
+        for (id, owner) in ids {
+            self.cancel_native(&owner, &id);
         }
     }
 
@@ -295,6 +305,99 @@ struct Permissions {
     )
 )]
 impl Permissions {
+    async fn authorize_clipboard(
+        &self,
+        caller: String,
+        permission: String,
+        #[zbus(header)] header: Header<'_>,
+        #[zbus(connection)] connection: &Connection,
+    ) -> fdo::Result<String> {
+        identity::require_executable(&self.daemon.clipboard, &header, connection).await?;
+        if !is_clipboard_permission(&permission) {
+            return Err(fdo::Error::InvalidArgs(
+                "Unsupported clipboard permission".into(),
+            ));
+        }
+        let (pid, subject) = identity::connection_subject(&caller, connection).await?;
+        let saved = self
+            .daemon
+            .store
+            .lock()
+            .unwrap()
+            .lookup(&subject, &permission);
+        let trusted = !subject.starts_with("flatpak:")
+            && (identity::executable_matches(pid, &self.daemon.shell)
+                || identity::executable_matches(pid, &self.daemon.settings));
+        let verdict = if let Some(verdict) = saved {
+            verdict
+        } else if trusted {
+            Verdict::Allow
+        } else {
+            let (title, action) = match permission.as_str() {
+                CLIPBOARD_READ => ("Read clipboard", "read the current clipboard contents"),
+                CLIPBOARD_HISTORY => (
+                    "Clipboard history",
+                    "read and manage your saved clipboard history",
+                ),
+                _ => ("Write clipboard", "replace the current clipboard contents"),
+            };
+            let spec = PromptSpec {
+                subject: subject.clone(),
+                permission: permission.clone(),
+                title: title.into(),
+                body: format!(
+                    "{} wants to {action}.",
+                    subject.rsplit('/').next().unwrap_or(&subject)
+                ),
+                deny_label: "Deny".into(),
+                grant_label: "Allow once".into(),
+                offer_always: true,
+                choices: Vec::new(),
+            };
+            let id = format!(
+                "clipboard-{}",
+                self.daemon.seq.fetch_add(1, Ordering::Relaxed)
+            );
+            let (prompt, receiver, fresh) = {
+                let mut native = self.daemon.native.lock().unwrap();
+                if native.len() >= 256 {
+                    return Err(fdo::Error::LimitsExceeded(
+                        "Too many permission requests".into(),
+                    ));
+                }
+                let (prompt, receiver, fresh) = self.daemon.register_for(
+                    spec,
+                    Some((subject.clone(), permission)),
+                    Some(id.clone()),
+                );
+                native.insert(
+                    id.clone(),
+                    NativeRequest {
+                        owner: caller.clone(),
+                        delegate: header.sender().map(ToString::to_string),
+                        prompt: Some(prompt.clone()),
+                        receiver: None,
+                    },
+                );
+                (prompt, receiver, fresh)
+            };
+            if fresh {
+                if let Err(error) = self.daemon.spawn_prompt(prompt.clone()) {
+                    failure(error);
+                    self.daemon.deliver(&prompt, Answer::denied());
+                }
+            }
+            let answer = receiver.await.unwrap_or_else(|_| Answer::denied());
+            self.daemon.native.lock().unwrap().remove(&id);
+            answer.verdict
+        };
+        let current = identity::connection_subject(&caller, connection).await?;
+        if current != (pid, subject) {
+            return Err(fdo::Error::AccessDenied("Caller identity changed".into()));
+        }
+        Ok(verdict.name().into())
+    }
+
     async fn ask(
         &self,
         subject: String,
@@ -382,6 +485,7 @@ impl Permissions {
             id.clone(),
             NativeRequest {
                 owner,
+                delegate: None,
                 prompt: prompt.clone(),
                 receiver: Some(rx),
             },

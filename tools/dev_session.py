@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 BINARIES = (
     "coconut", "coconut-bg", "coconut-greeter", "coconut-settings",
     "coconut-appearance", "cterm", "cfiles", "cmonitor", "cplayer", "cedit",
-    "ccalc", "cviewer", "coconut-screenshots", "coconut-permission-portal",
+    "ccalc", "cviewer", "coconut-screenshots", "coconut-permission-portal", "coconut-clipboard",
 )
 SERVICES = (
     ("integrations/appearance/data", "org.freedesktop.impl.portal.desktop.coconut",
@@ -26,6 +26,7 @@ SERVICES = (
      "cfiles.portal", ("cfiles", "--portal")),
     ("apps/permission-portal/data", "org.coconut.Permissions",
      "coconut-permissions.portal", ("coconut-permission-portal", "--service")),
+    ("integrations/clipboard/data", "org.coconut.Clipboard", None, ("coconut-clipboard",)),
 )
 
 
@@ -115,7 +116,8 @@ def prepare(build):
             if line.startswith("Exec=") else line
             for line in definition.splitlines() if not line.startswith("SystemdService="))
         (services / f"{name}.service").write_text(definition + "\n")
-        shutil.copyfile(source / portal, portals / portal)
+        if portal:
+            shutil.copyfile(source / portal, portals / portal)
     (services / "org.freedesktop.portal.Desktop.service").write_text(
         "[D-BUS Service]\nName=org.freedesktop.portal.Desktop\nExec="
         + " ".join(map(dbus_quote, activation + [str(broker)])) + "\n")

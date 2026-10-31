@@ -10,11 +10,12 @@
 # The daemons are Wayland clients: when the compositor exits their socket
 # dies and they terminate with it — no explicit cleanup needed here.
 #
-# Add future session components (policy agent, clipboard sync, OSD daemon,
+# Add future session components (policy agent, OSD daemon,
 # …) as background spawns above the exec line.
 
 DIR="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
 
 "$DIR/coconut-bg" &
+"$DIR/coconut-clipboard" &
 
 exec "$DIR/coconut"

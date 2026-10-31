@@ -22,7 +22,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_DIR="${COCONUT_BUILD_DIR:-$ROOT/.build}"
 CALLER_PATH="${COCONUT_INSTALL_CALLER_PATH:-$PATH}"
 BINARIES=(coconut coconut-bg coconut-greeter coconut-settings coconut-appearance
-    cterm cfiles cmonitor cplayer cedit ccalc cviewer coconut-screenshots coconut-permission-portal)
+    cterm cfiles cmonitor cplayer cedit ccalc cviewer coconut-screenshots coconut-permission-portal coconut-clipboard)
 
 # -------------------------------------------------------------- arguments
 
@@ -170,6 +170,12 @@ sed "s|/usr/bin|$bin_sed|g" \
     > "$USER_UNITS/coconut-permission-portal.service"
 cp "$ROOT/apps/permission-portal/data/coconut-permissions.portal" \
     "$DATA/xdg-desktop-portal/portals/"
+sed "s|/usr/bin|$bin_sed|g" \
+    "$ROOT/integrations/clipboard/data/org.coconut.Clipboard.service" \
+    > "$DATA/dbus-1/services/org.coconut.Clipboard.service"
+sed "s|/usr/bin|$bin_sed|g" \
+    "$ROOT/integrations/clipboard/data/coconut-clipboard.service" \
+    > "$USER_UNITS/coconut-clipboard.service"
 cp "$ROOT/apps/files/data/cfiles.desktop" \
     "$ROOT/apps/terminal/data/cterm.desktop" \
     "$ROOT/apps/monitor/data/cmonitor.desktop" \
@@ -281,7 +287,7 @@ else
 
     echo "Session profile \"Coconut\" installed:"
     echo "  bootstrapper : $INSTALL_BIN/startcoconut (wm: $wm)"
-    echo "  session procs: $INSTALL_BIN/coconut-session (bg + shell)"
+    echo "  session procs: $INSTALL_BIN/coconut-session (bg + clipboard + shell)"
     echo "  session entry: $SESSIONS_DIR/coconut.desktop"
     if [ "$SESSIONS_DIR" != "/usr/share/wayland-sessions" ]; then
         echo "  note: system greeters may need it in /usr/share/wayland-sessions/"

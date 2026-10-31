@@ -43,6 +43,7 @@ PACKAGES=(
     coconut-image-viewer:cviewer
     coconut-screenshots:coconut-screenshots
     coconut-permission-portal:coconut-permission-portal
+    coconut-integration-clipboard:coconut-clipboard
 )
 
 pkgs=()

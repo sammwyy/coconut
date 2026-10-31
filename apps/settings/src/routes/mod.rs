@@ -352,6 +352,11 @@ fn routes() -> Vec<RouteDefinition> {
             crate::views::privacy::screen_capture::route_view,
         ),
         (
+            "/privacy/clipboard",
+            Section::Detail(Page::Clipboard),
+            crate::views::privacy::clipboard::route_view,
+        ),
+        (
             "/desktop/notifications",
             Section::Detail(Page::Notifications),
             crate::views::desktop::notifications::route_view,

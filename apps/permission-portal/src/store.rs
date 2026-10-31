@@ -6,6 +6,16 @@ use std::{
 };
 
 pub const SCREEN_CAPTURE: &str = "screen-capture";
+pub const CLIPBOARD_READ: &str = "clipboard-read";
+pub const CLIPBOARD_HISTORY: &str = "clipboard-history";
+pub const CLIPBOARD_WRITE: &str = "clipboard-write";
+
+pub fn is_clipboard_permission(permission: &str) -> bool {
+    matches!(
+        permission,
+        CLIPBOARD_READ | CLIPBOARD_HISTORY | CLIPBOARD_WRITE
+    )
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]

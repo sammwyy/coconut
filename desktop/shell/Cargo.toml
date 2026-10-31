@@ -61,6 +61,7 @@ coconut-registry = { workspace = true, default-features = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 coconut-integration-appearance.workspace = true
+coconut-plugin-clipboard.workspace = true
 
 [target.'cfg(target_os = "windows")'.dependencies]
 coconut-registry = { workspace = true, default-features = false, features = ["windows"] }

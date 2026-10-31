@@ -116,6 +116,185 @@ fn prompt_worker() {
 }
 
 #[tokio::test]
+async fn clipboard_broker_rejects_an_untrusted_delegate_even_with_the_service_bus_name() {
+    use crate::store::CLIPBOARD_READ;
+    let bus = Bus::new();
+    let root = tempfile::tempdir().unwrap();
+    let mut daemon = Arc::try_unwrap(daemon(root.path(), &bus, "once"))
+        .ok()
+        .unwrap();
+    let executable = std::env::current_exe().unwrap();
+    daemon.clipboard = root.path().join("not-the-clipboard-service");
+    daemon.settings = root.path().join("not-settings");
+    daemon.shell = executable.clone();
+    let daemon = Arc::new(daemon);
+    let _server = connect(daemon.clone(), bus.connection().await)
+        .await
+        .unwrap();
+    let client = bus.connection().await;
+    client.request_name("org.coconut.Clipboard").await.unwrap();
+    let proxy = PermissionsProxy::new(&client).await.unwrap();
+    let name = client.unique_name().unwrap().to_string();
+    assert!(proxy
+        .authorize_clipboard(name, CLIPBOARD_READ.into())
+        .await
+        .is_err());
+}
+
+#[tokio::test]
+async fn clipboard_broker_disconnection_cancels_delegated_prompts() {
+    use crate::store::CLIPBOARD_HISTORY;
+    let bus = Bus::new();
+    let root = tempfile::tempdir().unwrap();
+    let mut daemon = Arc::try_unwrap(daemon(root.path(), &bus, "hold"))
+        .ok()
+        .unwrap();
+    daemon.clipboard = std::env::current_exe().unwrap();
+    daemon.settings = root.path().join("not-settings");
+    let daemon = Arc::new(daemon);
+    let _server = connect(daemon.clone(), bus.connection().await)
+        .await
+        .unwrap();
+    let client = bus.connection().await;
+    let name = client.unique_name().unwrap().to_string();
+    let delegate = bus.connection().await;
+    let stop = delegate.clone();
+    let request = tokio::spawn(async move {
+        PermissionsProxy::new(&delegate)
+            .await
+            .unwrap()
+            .authorize_clipboard(name, CLIPBOARD_HISTORY.into())
+            .await
+    });
+    wait_prompt(&daemon).await;
+    stop.close().await.unwrap();
+    assert!(tokio::time::timeout(Duration::from_secs(5), request)
+        .await
+        .unwrap()
+        .unwrap()
+        .is_err());
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while !daemon.pending.lock().unwrap().is_empty() {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert!(daemon.native.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn clipboard_permissions_use_verified_identity_and_recheck_saved_decisions() {
+    use crate::store::{CLIPBOARD_HISTORY, CLIPBOARD_READ, CLIPBOARD_WRITE};
+    let bus = Bus::new();
+    let root = tempfile::tempdir().unwrap();
+    let mut daemon = Arc::try_unwrap(daemon(root.path(), &bus, "once"))
+        .ok()
+        .unwrap();
+    let executable = std::env::current_exe().unwrap();
+    let subject = executable.to_str().unwrap();
+    daemon.clipboard = executable.clone();
+    daemon.settings = root.path().join("not-settings");
+    daemon.shell = executable.clone();
+    let daemon = Arc::new(daemon);
+    let _server = connect(daemon.clone(), bus.connection().await)
+        .await
+        .unwrap();
+    let client = bus.connection().await;
+    let proxy = PermissionsProxy::new(&client).await.unwrap();
+    let name = client.unique_name().unwrap().to_string();
+    for permission in [CLIPBOARD_READ, CLIPBOARD_HISTORY, CLIPBOARD_WRITE] {
+        assert_eq!(
+            proxy
+                .authorize_clipboard(name.clone(), permission.into())
+                .await
+                .unwrap(),
+            "allow"
+        );
+    }
+    daemon
+        .store
+        .lock()
+        .unwrap()
+        .set(subject, CLIPBOARD_HISTORY, Verdict::Deny)
+        .unwrap();
+    assert_eq!(
+        proxy
+            .authorize_clipboard(name.clone(), CLIPBOARD_HISTORY.into())
+            .await
+            .unwrap(),
+        "deny"
+    );
+    assert_eq!(
+        proxy
+            .authorize_clipboard(name.clone(), CLIPBOARD_READ.into())
+            .await
+            .unwrap(),
+        "allow"
+    );
+    assert!(proxy
+        .authorize_clipboard(subject.into(), CLIPBOARD_READ.into())
+        .await
+        .is_err());
+    assert!(proxy
+        .authorize_clipboard(name, SCREEN_CAPTURE.into())
+        .await
+        .is_err());
+}
+
+#[tokio::test]
+async fn clipboard_one_time_consent_is_not_persisted_and_disconnect_cancels_prompts() {
+    use crate::store::CLIPBOARD_HISTORY;
+    let bus = Bus::new();
+    let root = tempfile::tempdir().unwrap();
+    let mut daemon = Arc::try_unwrap(daemon(root.path(), &bus, "once"))
+        .ok()
+        .unwrap();
+    daemon.clipboard = std::env::current_exe().unwrap();
+    daemon.settings = root.path().join("not-settings");
+    let daemon = Arc::new(daemon);
+    let _server = connect(daemon.clone(), bus.connection().await)
+        .await
+        .unwrap();
+    let delegate = bus.connection().await;
+    let proxy = PermissionsProxy::new(&delegate).await.unwrap();
+    let client = bus.connection().await;
+    let name = client.unique_name().unwrap().to_string();
+    assert_eq!(
+        proxy
+            .authorize_clipboard(name.clone(), CLIPBOARD_HISTORY.into())
+            .await
+            .unwrap(),
+        "allow"
+    );
+    assert!(daemon.store.lock().unwrap().entries().is_empty());
+    assert!(daemon.native.lock().unwrap().is_empty());
+
+    let script = std::fs::read_to_string(&daemon.prompt_executable).unwrap();
+    std::fs::write(
+        &daemon.prompt_executable,
+        script.replace("COCONUT_TEST_PROMPT='once'", "COCONUT_TEST_PROMPT='hold'"),
+    )
+    .unwrap();
+    drop(proxy);
+    let request = tokio::spawn(async move {
+        PermissionsProxy::new(&delegate)
+            .await
+            .unwrap()
+            .authorize_clipboard(name, CLIPBOARD_HISTORY.into())
+            .await
+    });
+    wait_prompt(&daemon).await;
+    drop(client);
+    let result = tokio::time::timeout(Duration::from_secs(5), request)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(result.is_err());
+    assert!(daemon.pending.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn ask_remains_responsive_and_remembered_decisions_are_saved_before_reply() {
     let bus = Bus::new();
     let root = tempfile::tempdir().unwrap();

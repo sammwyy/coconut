@@ -19,6 +19,7 @@ pub enum Page {
     Camera,
     Microphone,
     ScreenCapture,
+    Clipboard,
     Notifications,
     HotCorners,
     WindowRules,
@@ -49,6 +50,7 @@ impl Page {
             Self::Camera => "Camera permissions",
             Self::Microphone => "Microphone permissions",
             Self::ScreenCapture => "Screen capture permissions",
+            Self::Clipboard => "Clipboard",
             Self::Notifications => "Notifications & popups",
             Self::HotCorners => "Hot corners",
             Self::WindowRules => "Window rules",
@@ -70,7 +72,11 @@ impl Page {
             | Self::Startup
             | Self::AddStartup => Section::Applications,
             Self::Password | Self::AddUser | Self::OnlineAccounts => Section::Users,
-            Self::Fingerprint | Self::Camera | Self::Microphone => Section::Privacy,
+            Self::Fingerprint
+            | Self::Camera
+            | Self::Microphone
+            | Self::ScreenCapture
+            | Self::Clipboard => Section::Privacy,
             Self::Notifications | Self::HotCorners => Section::Desktop,
             Self::WindowRules => Section::Windows,
             _ => Section::System,

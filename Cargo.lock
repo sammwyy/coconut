@@ -940,6 +940,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "coconut-integration-clipboard"
+version = "0.1.0"
+dependencies = [
+ "delib",
+ "libc",
+ "serde",
+ "tempfile",
+ "tokio",
+ "toml 0.9.12+spec-1.1.0",
+ "wayland-client",
+ "wayland-protocols-wlr",
+ "zbus",
+]
+
+[[package]]
 name = "coconut-integration-cream"
 version = "0.1.0"
 dependencies = [
@@ -1154,6 +1169,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "coconut-plugin-clipboard"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "coconut-integration-clipboard",
+ "coconut-plugin-kit",
+ "creamui-core",
+ "creamui-reactive",
+ "creamui-render",
+ "creamui-theme",
+ "creamui-widgets",
+]
+
+[[package]]
 name = "coconut-plugin-clock"
 version = "0.1.0"
 dependencies = [
@@ -1345,6 +1374,7 @@ dependencies = [
  "coconut-integration-kwin",
  "coconut-plugin-app-drawer",
  "coconut-plugin-app-launcher",
+ "coconut-plugin-clipboard",
  "coconut-plugin-clock",
  "coconut-plugin-current-playing",
  "coconut-plugin-kit",

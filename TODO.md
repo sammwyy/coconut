@@ -1,5 +1,11 @@
 # TODO
 
+- Extend clipboard capture beyond UTF-8 text and wlr-data-control to rich MIME
+  entries, images, and ext-data-control; retain original formats on restoration.
+- Coordinate compositor-side authorization of privileged direct clipboard
+  protocols with Blair. Coconut's clipboard/history permissions currently protect
+  the session service API; direct native protocol access follows compositor policy.
+
 - Bound on-disk thumbnail cache growth with expiration/eviction, and add
   integration fixtures for real-world GStreamer/FFmpeg codec combinations
   and PE icon variants.

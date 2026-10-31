@@ -3,6 +3,7 @@
 mod appearance;
 mod applications;
 mod blair;
+mod clipboard;
 mod hardware;
 use coconut_api::settings::{
     Action, Choice, Entry, Preference, SettingsIntegration, Snapshot, Value,
@@ -181,6 +182,15 @@ impl SettingsIntegration for LinuxSettings {
             Action::SetScreenCapturePermission { subject, allowed } => {
                 set_screen_capture_permission(&subject, allowed)?
             }
+            Action::SetClipboardPermission {
+                subject,
+                permission,
+                allowed,
+            } => clipboard::set_permission(&subject, &permission, Some(allowed))?,
+            Action::RevokeClipboardPermission {
+                subject,
+                permission,
+            } => clipboard::set_permission(&subject, &permission, None)?,
             Action::AddPrinter { name, uri } => hardware::add_printer(&name, &uri)?,
             Action::CheckUpdates => {
                 return command_timeout(
@@ -505,6 +515,9 @@ fn discover_preferences(snapshot: &mut Snapshot) {
 }
 
 fn set_preference(key: &str, value: Value) -> Result<(), String> {
+    if clipboard::supports(key) {
+        return clipboard::set(key, value);
+    }
     if appearance::supports(key) {
         return appearance::set(key, value);
     }
@@ -593,6 +606,7 @@ fn set_preference(key: &str, value: Value) -> Result<(), String> {
 }
 
 fn discover_privacy(snapshot: &mut Snapshot) {
+    clipboard::discover(snapshot);
     for device in ["camera", "microphone"] {
         match device_permissions(device) {
             Ok(entries) => {

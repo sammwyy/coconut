@@ -47,6 +47,7 @@ coconut-theme = { path = "crates/theme" }
 coconut-integration-blair = { path = "integrations/blair" }
 coconut-integration-appearance = { path = "integrations/appearance" }
 coconut-integration-cream = { path = "integrations/cream" }
+coconut-integration-clipboard = { path = "integrations/clipboard" }
 coconut-integration-gtk = { path = "integrations/gtk" }
 coconut-integration-qt = { path = "integrations/qt" }
 coconut-integration-bluez = { path = "integrations/bluez" }
@@ -63,6 +64,7 @@ coconut-integration-windows = { path = "integrations/windows" }
 coconut-plugin-app-drawer = { path = "plugins/app_drawer" }
 coconut-plugin-app-launcher = { path = "plugins/app_launcher" }
 coconut-plugin-clock = { path = "plugins/clock" }
+coconut-plugin-clipboard = { path = "plugins/clipboard" }
 coconut-plugin-current-playing = { path = "plugins/current_playing" }
 coconut-plugin-workspaces = { path = "plugins/workspaces" }
 coconut-plugin-tray = { path = "plugins/tray" }

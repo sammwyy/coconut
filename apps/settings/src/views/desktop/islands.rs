@@ -16,6 +16,12 @@ struct KnownIsland {
 
 fn known_islands() -> Vec<KnownIsland> {
     vec![
+        #[cfg(target_os = "linux")]
+        KnownIsland {
+            id: "clipboard",
+            label: "Clipboard history",
+            schema: Vec::new(),
+        },
         KnownIsland {
             id: "workspaces",
             label: "Workspaces",

@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 BINARIES = (
     "coconut", "coconut-bg", "coconut-greeter", "coconut-settings",
     "coconut-appearance", "cterm", "cfiles", "cmonitor", "cplayer", "cedit",
-    "ccalc", "cviewer", "coconut-screenshots", "coconut-permission-portal",
+    "ccalc", "cviewer", "coconut-screenshots", "coconut-permission-portal", "coconut-clipboard",
 )
 
 
@@ -57,6 +57,7 @@ if name == "coconut":
 names = {
     "coconut-appearance": "org.freedesktop.impl.portal.desktop.coconut",
     "coconut-permission-portal": "org.coconut.Permissions",
+    "coconut-clipboard": "org.coconut.Clipboard",
     "cfiles": "org.freedesktop.impl.portal.desktop.cfiles",
     "broker": "org.freedesktop.portal.Desktop",
 }
@@ -138,7 +139,7 @@ class DevSessionTests(unittest.TestCase):
         self.assertEqual(json.loads((run / "blair-arguments.json").read_text())[:2],
                          ["--profile", "test profile"])
         for name in ("coconut", "coconut-bg", "coconut-appearance", "cfiles",
-                     "coconut-permission-portal", "broker"):
+                     "coconut-permission-portal", "coconut-clipboard", "broker"):
             env = json.loads((run / f"{name}.json").read_text())
             self.assertEqual(env["PATH"].split(":")[0], str(self.build))
             self.assertEqual(env["WAYLAND_DISPLAY"], "dev-test")

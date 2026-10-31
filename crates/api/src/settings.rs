@@ -92,6 +92,15 @@ pub enum Action {
         subject: String,
         allowed: bool,
     },
+    SetClipboardPermission {
+        subject: String,
+        permission: String,
+        allowed: bool,
+    },
+    RevokeClipboardPermission {
+        subject: String,
+        permission: String,
+    },
     AddPrinter {
         name: String,
         uri: String,

@@ -93,8 +93,8 @@ From the Coconut checkout:
 ```
 
 `dev.sh --build` runs `build.sh --no-upx`, then starts Blair with `--run` and
-launches Coconut's shell, background, Appearance, Permissions and FileChooser
-services from `.build/`. Without `--build`, it uses the staged binaries as they
+launches Coconut's shell, background, Appearance, Permissions, FileChooser and
+Clipboard services from `.build/`. Without `--build`, it uses the staged binaries as they
 are. Application launches resolve `.build/` first, including apps opened from
 the shell and file operation menus. The greeter is a separate login process and
 is not started inside the desktop session.
@@ -254,6 +254,12 @@ copies can hide newly installed `/usr/bin` binaries. Update the preferred prefix
 or remove obsolete copies, then restart running apps to load the new binaries.
 
 ## Verification and useful commands
+
+The clipboard service runs separately from the shell and exposes a permission-controlled
+D-Bus API. Its [integration guide](../../integrations/clipboard/README.md) covers
+configuration, supported compositors and an isolated native clipboard workflow test.
+The [optional widget](../../plugins/clipboard/README.md) follows the existing
+island/panel architecture and can be placed in either bar.
 
 ```bash
 cargo fmt --check

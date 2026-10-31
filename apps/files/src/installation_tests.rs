@@ -45,6 +45,7 @@ fn user_installer_installs_theme_integrations_and_preserves_existing_policy() {
         "cviewer",
         "coconut-screenshots",
         "coconut-permission-portal",
+        "coconut-clipboard",
     ] {
         executable(&staged.join(binary), "#!/bin/sh\nexit 0\n");
     }
@@ -85,7 +86,7 @@ fn user_installer_installs_theme_integrations_and_preserves_existing_policy() {
         String::from_utf8_lossy(&output.stderr)
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("Installed 14 staged binaries"));
+    assert!(stdout.contains("Installed 15 staged binaries"));
     assert!(stdout.contains("PATH selects other copies"));
     assert!(stdout.contains(&format!("cfiles: {}", commands.join("cfiles").display())));
     for binary in fs::read_dir(&staged)
@@ -136,6 +137,16 @@ fn user_installer_installs_theme_integrations_and_preserves_existing_policy() {
     assert!(screenshots.contains("Exec=coconut-screenshots"));
     assert!(screenshots.contains("X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2"));
     assert!(install_root.join("bin/coconut-permission-portal").exists());
+    assert!(install_root.join("bin/coconut-clipboard").exists());
+    let clipboard =
+        fs::read_to_string(data.join("dbus-1/services/org.coconut.Clipboard.service")).unwrap();
+    assert!(clipboard.contains(&format!(
+        "Exec=\"{}/bin/coconut-clipboard\"",
+        install_root.display()
+    )));
+    assert!(config
+        .join("systemd/user/coconut-clipboard.service")
+        .exists());
     let permissions =
         fs::read_to_string(data.join("dbus-1/services/org.coconut.Permissions.service")).unwrap();
     assert!(permissions.contains(&format!(
