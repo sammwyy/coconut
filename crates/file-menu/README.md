@@ -24,7 +24,9 @@ appear immediately; background inspection enables Paste and fills Open with in
 place without moving the menu. Dismissed menus ignore later inspection results.
 The menu remains
 open when keyboard focus moves from its parent to a popup, and popup descendants
-close before their ancestors. Missing platform support, a missing input serial,
+close before their ancestors. Losing focus from the deepest popup dismisses the
+whole menu; transferring focus into a submenu keeps the menu open.
+Missing platform support, a missing input serial,
 or popup creation failure selects the same menu inside the application instead.
 Windows and the Winit backend use this hosted fallback.
 
