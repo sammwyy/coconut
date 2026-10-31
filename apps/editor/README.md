@@ -13,6 +13,10 @@ The application follows Coconut's system appearance and live theme changes.
 Windows render through CreamUI's CPU backend; `CUI_OVERRIDE_RENDER_BACKEND=gpu`
 opts into `wgpu` per launch. `build.sh` stages the executable; `install.sh`
 installs it and its desktop entry. All application text is English.
+Text editing follows the configured system font when one is set, including
+proportional fonts; the cursor, selection and pointer positions use its shaped
+glyph advances. Without a configured font, the text view prefers a monospace
+font. HEX and Binary views retain fixed-width cells.
 
 ## Editing
 

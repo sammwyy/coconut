@@ -1,6 +1,6 @@
 //! Installed font families, and the face the terminal draws with.
 //!
-//! The settings list is every family name found in a system font file.
+//! The settings list contains monospaced families found in system font files.
 //! The default is the first monospace candidate whose glyphs fit one cell,
 //! so a desktop that already aliases `monospace` to a tight face (KDE does)
 //! keeps that face, and Windows still lands on Cascadia Mono or Consolas.
@@ -25,10 +25,7 @@ struct Family {
 }
 
 pub fn install(requested: &str) {
-    let name = match family_named(requested) {
-        Some(family) => family.name.clone(),
-        None => default_family(),
-    };
+    let name = effective_family(requested);
     let already = INSTALLED.with(|installed| installed.borrow().eq_ignore_ascii_case(&name));
     if already {
         return;
@@ -58,27 +55,55 @@ pub fn default_family() -> String {
                 if mono_metrics(&path).is_none() {
                     continue;
                 }
-                if let Some(name) = family_of_path(&path) {
+                if let Some(name) = family_of_path(&path)
+                    .filter(|name| family_named(name).is_some_and(is_monospaced_family))
+                {
                     return name;
                 }
             }
             catalog()
-                .first()
+                .iter()
+                .find(|family| is_monospaced_family(family))
                 .map(|family| family.name.clone())
                 .unwrap_or_else(|| "monospace".to_string())
         })
         .clone()
 }
 
-/// Family names for the settings dropdown. `selected` stays visible when that
-/// face is no longer installed, so the saved value is not silently replaced.
-pub fn font_choices(selected: &str) -> Vec<String> {
-    let mut names: Vec<String> = catalog().iter().map(|family| family.name.clone()).collect();
-    let selected = selected.trim();
-    if !selected.is_empty() && !names.iter().any(|name| name.eq_ignore_ascii_case(selected)) {
-        names.insert(0, selected.to_string());
-    }
-    names
+/// Family names for the settings dropdown.
+pub fn font_choices(_selected: &str) -> Vec<String> {
+    static MONOSPACED: OnceLock<Vec<String>> = OnceLock::new();
+    MONOSPACED
+        .get_or_init(|| {
+            catalog()
+                .iter()
+                .filter(|family| is_monospaced_family(family))
+                .map(|family| family.name.clone())
+                .collect()
+        })
+        .clone()
+}
+
+pub fn effective_family(requested: &str) -> String {
+    family_named(requested)
+        .filter(|family| is_monospaced_family(family))
+        .map(|family| family.name.clone())
+        .unwrap_or_else(default_family)
+}
+
+fn is_monospaced_family(family: &Family) -> bool {
+    let Some(regular) = FontFace::from_path(&family.regular)
+        .ok()
+        .and_then(|face| mono_advance(&face))
+    else {
+        return false;
+    };
+    family.bold.as_ref().is_none_or(|path| {
+        FontFace::from_path(path)
+            .ok()
+            .and_then(|face| mono_advance(&face))
+            .is_some_and(|bold| (regular - bold).abs() < 0.05)
+    })
 }
 
 fn family_named(name: &str) -> Option<&'static Family> {
@@ -244,15 +269,19 @@ fn same_file(left: &Path, right: &Path) -> bool {
 /// Advance of "M" when the face is monospace and its line box is not huge.
 fn mono_metrics(path: &Path) -> Option<f32> {
     let face = FontFace::from_path(path).ok()?;
-    let m = advance(&face, "M")?;
-    let i = advance(&face, "i")?;
-    if m < 1.0 {
-        return None;
-    }
-    let ratio = i / m;
+    let m = mono_advance(&face)?;
     let line = face.line_metrics(SAMPLE_PX).line_height / SAMPLE_PX;
     let em = m / SAMPLE_PX;
-    (ratio >= 0.92 && em <= 0.72 && line <= 1.5).then_some(m)
+    (em <= 0.72 && line <= 1.5).then_some(m)
+}
+
+fn mono_advance(face: &FontFace) -> Option<f32> {
+    let m = advance(face, "M")?;
+    (m >= 1.0
+        && ["i", "W", " ", "0", "l", "@"]
+            .iter()
+            .all(|glyph| advance(face, glyph).is_some_and(|width| (width - m).abs() < 0.05)))
+    .then_some(m)
 }
 
 fn advance(face: &FontFace, text: &str) -> Option<f32> {
@@ -288,6 +317,31 @@ mod tests {
             "line box is too tall: ascent={} descent={} height={height}",
             line.ascent,
             line.descent
+        );
+    }
+
+    #[test]
+    fn font_choices_exclude_proportional_families() {
+        let choices = font_choices("");
+        let proportional = catalog()
+            .iter()
+            .find(|family| {
+                let face = FontFace::from_path(&family.regular).unwrap();
+                let m = advance(&face, "M").unwrap();
+                let i = advance(&face, "i").unwrap();
+                (m - i).abs() > 0.5
+            })
+            .expect("an installed proportional font is needed for this test");
+        assert!(!choices.contains(&proportional.name));
+        assert!(!font_choices(&proportional.name).contains(&proportional.name));
+        let fallback = default_family();
+        assert_eq!(effective_family(&proportional.name), fallback);
+        install(&proportional.name);
+        let requested = creamui_fonts::resolve(FAMILY, FontWeight::Regular).id();
+        install(&fallback);
+        assert_eq!(
+            creamui_fonts::resolve(FAMILY, FontWeight::Regular).id(),
+            requested
         );
     }
 }

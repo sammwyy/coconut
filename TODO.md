@@ -1,5 +1,9 @@
 # TODO
 
+- Implement the desktop-readiness milestones in [ROADMAP.md](ROADMAP.md), starting
+  with protected Wi-Fi, session authorization, and component supervision;
+  coordinate XWayland and multi-monitor dependencies with Blair.
+
 - Resolve the pre-existing strict Clippy `implicit_clone` diagnostic in
   `apps/settings/src/services/settings.rs` when converting an existing String error.
 

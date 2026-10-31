@@ -12,22 +12,54 @@ pub struct Metrics {
     pub width: f32,
     pub height: f32,
     pub font_size: f32,
+    pub monospaced: bool,
 }
 impl Metrics {
     pub fn load(family: &str, font_size: u8) -> Self {
-        use creamui_fonts::{FontWeight, LayoutSettings};
         crate::backends::install_terminal_font(family);
         let font_size = font_size as f32;
-        let face = creamui_fonts::resolve(FONT, FontWeight::Regular);
-        let shaped =
-            creamui_fonts::cached_layout(&face, "M", font_size, &LayoutSettings::default());
-        let width = shaped.chars.first().map(|c| c.advance).unwrap_or(8.5);
+        let face = creamui_fonts::resolve(FONT, creamui_fonts::FontWeight::Regular);
+        let bold = creamui_fonts::resolve(FONT, creamui_fonts::FontWeight::Bold);
+        Self::from_faces(&face, &bold, font_size)
+    }
+    fn from_faces(
+        face: &creamui_fonts::FontFace,
+        bold: &creamui_fonts::FontFace,
+        font_size: f32,
+    ) -> Self {
+        let advance = |face: &creamui_fonts::FontFace, ch: char| {
+            creamui_fonts::cached_layout(
+                face,
+                &ch.to_string(),
+                font_size,
+                &creamui_fonts::LayoutSettings::default(),
+            )
+            .chars
+            .first()
+            .map_or(0.0, |c| c.advance)
+        };
+        let m = advance(face, 'M');
+        let monospaced = [face, bold].iter().all(|face| {
+            ['i', ' ', 'W', 'M']
+                .iter()
+                .all(|&ch| (advance(face, ch) - m).abs() < 0.05)
+        });
+        let width = if monospaced {
+            m
+        } else {
+            [face, bold]
+                .iter()
+                .flat_map(|face| (' '..='~').map(move |ch| advance(face, ch)))
+                .fold(m, f32::max)
+        }
+        .max(1.0);
         // The underline is drawn on the bottom 3px of the cell.
         let height = (face.line_metrics(font_size).line_height + 3.0).ceil();
         Self {
             width,
             height,
             font_size,
+            monospaced,
         }
     }
     fn cell_rect(&self, origin: Rect, row: u16, start: u16, end: u16, scale: f32) -> Rect {
@@ -253,6 +285,7 @@ impl Widget for TerminalScreen {
                 }
                 let span = if cell.is_wide() { 2 } else { 1 };
                 if self.ligatures
+                    && m.monospaced
                     && !cell.is_wide()
                     && cell.has_contents()
                     && cell.contents().is_ascii()
@@ -319,7 +352,11 @@ impl Widget for TerminalScreen {
                         cell.contents(),
                         fg,
                         m.font_size,
-                        TextAlign::Start,
+                        if m.monospaced {
+                            TextAlign::Start
+                        } else {
+                            TextAlign::Center
+                        },
                         Some(FONT),
                         cell.bold(),
                         cell.italic(),
@@ -611,6 +648,83 @@ mod tests {
     use super::*;
 
     #[test]
+    fn proportional_font_keeps_ascii_glyphs_inside_fixed_cells() {
+        let face = creamui_fonts::FontFace::from_bytes(include_bytes!(
+            "../../../assets/fonts/plus-jakarta-sans/Regular.ttf"
+        ))
+        .unwrap();
+        let metrics = Metrics::from_faces(&face, &face, 14.0);
+        let width = |ch: &str| {
+            creamui_fonts::cached_layout(&face, ch, 14.0, &creamui_fonts::LayoutSettings::default())
+                .chars[0]
+                .advance
+        };
+        assert!(!metrics.monospaced);
+        assert!(metrics.width >= width("W"));
+        assert!(metrics.width >= width("@"));
+        assert!(metrics.width > width("i"));
+        let origin = Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 400.0,
+            height: 100.0,
+        };
+        let first = metrics.cell_rect(origin, 0, 0, 1, 1.0);
+        let second = metrics.cell_rect(origin, 0, 1, 2, 1.0);
+        assert_eq!(first.x + first.width, second.x);
+        creamui_reactive::with_context_scope(|| {
+            use creamui_render::{Damage, Rasterizer, SceneRecorder};
+            use creamui_theme::{Theme, ThemeProvider};
+            let theme = Theme::dark();
+            creamui_reactive::provide_context(ThemeProvider::new(theme));
+            let metrics = Metrics::load("Plus Jakarta Sans", 14);
+            assert!(metrics.monospaced);
+            let (tx, _rx) = std::sync::mpsc::sync_channel(128);
+            let mut session = Session::spawn(
+                1,
+                &crate::terminal::idle_cwd(),
+                &crate::terminal::idle_command(),
+                tx,
+            )
+            .unwrap();
+            session.resize(3, 32).unwrap();
+            session.process(b"Wi i  WW  oo -> ok").unwrap();
+            let screen = TerminalScreen {
+                session: Rc::new(RefCell::new(session)),
+                selection: Signal::new(None),
+                revision: Signal::new(0),
+                metrics,
+                ctrl_held: Signal::new(false),
+                open_target: None,
+                focused: true,
+                on_focus: None,
+                ligatures: true,
+                background_opacity: 100,
+            };
+            let mut recorder = SceneRecorder::new();
+            recorder.begin(520, 110, 1.0, theme.colors.surface, theme.colors);
+            screen.paint(
+                &mut recorder,
+                Rect {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 520.0,
+                    height: 110.0,
+                },
+            );
+            if let Some(directory) = std::env::var_os("CTERM_SNAPSHOT_DIR") {
+                let mut raster = Rasterizer::new(520, 110);
+                raster.render(&recorder.finish(), &Damage::Full);
+                std::fs::create_dir_all(&directory).unwrap();
+                raster
+                    .pixmap()
+                    .save_png(std::path::PathBuf::from(directory).join("monospaced-fallback.png"))
+                    .unwrap();
+            }
+        });
+    }
+
+    #[test]
     fn ligatures_shape_compatible_terminal_runs_and_opacity_only_fades_backgrounds() {
         use creamui_core::runtime::{PaintOp, PaintPrimitive, RecordingPainter};
         use creamui_theme::{Theme, ThemeProvider};
@@ -618,7 +732,7 @@ mod tests {
             let theme = Theme::dark();
             creamui_reactive::provide_context(ThemeProvider::new(theme));
             let (tx, _rx) = std::sync::mpsc::sync_channel(128);
-            let text_runs = |ligatures| {
+            let text_runs = |ligatures, monospaced| {
                 let mut session = Session::spawn(
                     1,
                     &crate::terminal::idle_cwd(),
@@ -636,6 +750,7 @@ mod tests {
                         width: 8.0,
                         height: 16.0,
                         font_size: 14.0,
+                        monospaced,
                     },
                     ctrl_held: Signal::new(false),
                     open_target: None,
@@ -665,10 +780,12 @@ mod tests {
                     })
                     .collect::<Vec<_>>()
             };
-            let ligature_runs = text_runs(true);
-            let plain_runs = text_runs(false);
+            let ligature_runs = text_runs(true, true);
+            let plain_runs = text_runs(false, true);
+            let proportional_runs = text_runs(true, false);
             assert!(ligature_runs.iter().any(|text| text == "==> flag"));
             assert!(ligature_runs.len() < plain_runs.len());
+            assert_eq!(proportional_runs, plain_runs);
             assert_eq!(
                 with_opacity(Color::rgba(1, 2, 3, 200), 75),
                 Color::rgba(1, 2, 3, 150)
@@ -710,6 +827,7 @@ mod tests {
             width: 8.0,
             height: 16.0,
             font_size: 14.0,
+            monospaced: true,
         };
         let selection = Signal::new(None);
         let screen = TerminalScreen {
@@ -796,6 +914,7 @@ mod tests {
                 width: 8.43,
                 height: 23.0,
                 font_size: 14.0,
+                monospaced: true,
             };
             let screen = TerminalScreen {
                 session: Rc::new(RefCell::new(session)),
@@ -939,6 +1058,7 @@ mod tests {
                     width: 8.43,
                     height: 23.0,
                     font_size: 14.0,
+                    monospaced: true,
                 },
                 ctrl_held: Signal::new(false),
                 open_target: None,

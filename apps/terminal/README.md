@@ -25,6 +25,12 @@ The executable is `cterm`; the desktop name is **Terminal**.
 - Windows render through CreamUI's CPU backend; `CUI_OVERRIDE_RENDER_BACKEND=gpu`
   opts into `wgpu` per launch.
 
+Terminal settings offer installed monospaced fonts only, preserving aligned
+columns and even spacing. If a saved font is unavailable or proportional, the
+terminal uses an installed monospaced default; Settings shows the replacement
+and lets you save it. Install a monospaced font if none is available. CEdit can
+still use proportional fonts for regular text editing.
+
 ## Build
 
 ```sh

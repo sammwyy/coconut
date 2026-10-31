@@ -44,15 +44,19 @@ pub struct State {
 }
 impl State {
     pub fn new() -> Self {
-        let (config, message) = match Config::load() {
+        let (mut config, mut message) = match Config::load() {
             Ok(config) => (config, None),
             Err(error) => (Config::default(), Some(error)),
         };
+        let saved = config.clone();
+        if let Some(font_message) = normalize_font(&mut config) {
+            message = Some(font_message);
+        }
         Self {
             window: Rc::new(RefCell::new(None)),
             scroll: ScrollController::new(0.0),
             page: Signal::new(Page::General),
-            saved: Signal::new(config.clone()),
+            saved: Signal::new(saved),
             config: Signal::new(config),
             capturing: Signal::new(None),
             message: Signal::new(message),
@@ -264,7 +268,7 @@ impl State {
                 setting_row(
                     Symbol::Appearance,
                     "Font",
-                    "For terminal text.",
+                    "Only monospaced fonts keep terminal columns aligned.",
                     Box::new(
                         Select::controlled(&labels, self.font.clone())
                             .searchable()
@@ -793,12 +797,36 @@ fn heading(title: &str, subtitle: &str) -> BoxedWidget {
         ],
     )
 }
+fn normalize_font(config: &mut Config) -> Option<String> {
+    let effective = crate::backends::effective_font(&config.font);
+    if config.font.eq_ignore_ascii_case(&effective) {
+        return None;
+    }
+    let message = format!(
+        "Font {:?} is unavailable or not monospaced; using {effective}. Save to keep this choice.",
+        config.font
+    );
+    config.font = effective;
+    Some(message)
+}
 #[cfg(test)]
 mod tests {
     use super::*;
     use creamui_core::Renderer;
     use creamui_render::{Damage, Rasterizer, SceneRecorder, WindowDecorations};
     use creamui_theme::{Theme, ThemeProvider};
+    #[test]
+    fn old_font_selection_is_replaced_before_saving() {
+        let mut config = Config {
+            font: "Unavailable Proportional".into(),
+            ..Config::default()
+        };
+        let warning = normalize_font(&mut config).unwrap();
+        assert!(warning.contains("Unavailable Proportional"));
+        assert!(warning.contains("Save to keep this choice"));
+        assert_eq!(config.font, crate::backends::default_font());
+        assert!(normalize_font(&mut config).is_none());
+    }
     #[test]
     fn general_island_controls_render_edit_and_restore_defaults() {
         for (appearance, theme) in [("light", Theme::light()), ("dark", Theme::dark())] {

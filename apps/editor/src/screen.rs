@@ -9,10 +9,17 @@ use creamui_reactive::Signal;
 use creamui_theme::use_theme;
 use std::cell::{Cell, RefCell};
 use std::{ops::Range, rc::Rc};
-use unicode_width::UnicodeWidthChar;
 
 const FONT: &str = "DejaVu Sans Mono, Liberation Mono, Cascadia Mono, Consolas, monospace";
 const INSET: f32 = 12.0;
+fn editor_font(bytes: bool) -> String {
+    let preferred = creamui_fonts::preferred_family();
+    if bytes || preferred == creamui_fonts::DEFAULT_FAMILY {
+        FONT.to_string()
+    } else {
+        format!("{preferred}, {FONT}")
+    }
+}
 pub struct Highlights {
     pub tab: u64,
     pub revision: u64,
@@ -36,7 +43,10 @@ struct Metrics {
 }
 impl Metrics {
     fn new(editor: &Editor) -> Self {
-        let face = creamui_fonts::resolve(FONT, creamui_fonts::FontWeight::Regular);
+        let face = creamui_fonts::resolve(
+            &editor_font(editor.document.view.bytes()),
+            creamui_fonts::FontWeight::Regular,
+        );
         let shaped = creamui_fonts::cached_layout(
             &face,
             "M",
@@ -106,7 +116,7 @@ impl EditorScreen {
         let source = editor
             .document
             .text
-            .slice(start + left..(start + left + editor.columns + 8).min(end))
+            .slice(start + left..(start + left + editor.columns.max(1) * 2 + 16).min(end))
             .to_string();
         let line = if editor.document.markdown_mode() != MarkdownMode::Raw
             && editor.document.markdown_index.code_at(start)
@@ -116,16 +126,23 @@ impl EditorScreen {
             markdown::line(&source, editor.document.markdown_mode())
         };
         let mut x = metrics.gutter + INSET;
-        let scale = line.scale;
         let mut position = start + left;
-        for c in source.chars() {
-            let width =
-                advance(c, position - start, editor.tab_width) as f32 * metrics.cell * scale;
-            if p.x < x + width / 2.0 {
-                return position;
+        let font_family = editor_font(false);
+        for span in &line.spans {
+            for width in span_widths(
+                span,
+                metrics,
+                line.scale,
+                position - start,
+                editor.tab_width,
+                &font_family,
+            ) {
+                if p.x < x + width / 2.0 {
+                    return position;
+                }
+                x += width;
+                position += 1;
             }
-            x += width;
-            position += 1;
         }
         position
     }
@@ -186,6 +203,7 @@ impl Widget for EditorScreen {
         let _ = self.revision.get();
         let editor = self.tab.borrow();
         let metrics = Metrics::new(&editor);
+        let font_family = editor_font(editor.document.view.bytes());
         let colors = use_theme().colors;
         painter.push_clip(rect);
         painter.fill_rect(rect, colors.surface, 0.0);
@@ -231,7 +249,7 @@ impl Widget for EditorScreen {
                     },
                     metrics.font * 0.82,
                     TextAlign::End,
-                    Some(FONT),
+                    Some(&font_family),
                     false,
                     false,
                 );
@@ -274,7 +292,7 @@ impl Widget for EditorScreen {
                             colors.text_primary,
                             metrics.font,
                             TextAlign::Start,
-                            Some(FONT),
+                            Some(&font_family),
                             false,
                             false,
                         );
@@ -320,7 +338,7 @@ impl Widget for EditorScreen {
                         colors.text_secondary,
                         metrics.font,
                         TextAlign::Start,
-                        Some(FONT),
+                        Some(&font_family),
                         false,
                         false,
                     );
@@ -379,10 +397,15 @@ impl Widget for EditorScreen {
                 };
                 let mut buffer = String::new();
                 let mut run_x = x;
-                for c in span.text.chars() {
-                    let width = advance(c, position - begin, editor.tab_width) as f32
-                        * metrics.cell
-                        * line.scale;
+                let widths = span_widths(
+                    &span,
+                    metrics,
+                    line.scale,
+                    position - begin,
+                    editor.tab_width,
+                    &font_family,
+                );
+                for (c, width) in span.text.chars().zip(widths) {
                     let cell = Rect {
                         x,
                         y,
@@ -440,6 +463,7 @@ impl Widget for EditorScreen {
                             span_color,
                             metrics.font * line.scale,
                             &span,
+                            &font_family,
                         );
                         buffer.clear();
                         x += width;
@@ -468,6 +492,7 @@ impl Widget for EditorScreen {
                     span_color,
                     metrics.font * line.scale,
                     &span,
+                    &font_family,
                 );
                 if x > rect.x + rect.width {
                     break;
@@ -612,12 +637,53 @@ fn contains(ranges: &[Range<usize>], position: usize) -> bool {
         .get(index)
         .is_some_and(|range| range.contains(&position))
 }
-fn advance(c: char, column: usize, tab_width: usize) -> usize {
-    if c == '\t' {
-        tab_width - column % tab_width
+fn span_widths(
+    span: &markdown::Span,
+    metrics: Metrics,
+    scale: f32,
+    column: usize,
+    tab_width: usize,
+    font_family: &str,
+) -> Vec<f32> {
+    let weight = if span.bold {
+        creamui_fonts::FontWeight::Bold
     } else {
-        c.width().unwrap_or(1)
+        creamui_fonts::FontWeight::Regular
+    };
+    let face = creamui_fonts::resolve(font_family, weight);
+    let space = creamui_fonts::cached_layout(
+        &face,
+        " ",
+        metrics.font * scale,
+        &creamui_fonts::LayoutSettings::default(),
+    )
+    .chars
+    .first()
+    .map_or(metrics.cell * scale, |c| c.advance);
+    let mut widths = Vec::with_capacity(span.text.chars().count());
+    for chunk in span.text.split_inclusive('\t') {
+        let text = chunk.strip_suffix('\t').unwrap_or(chunk);
+        let printable: String = text
+            .chars()
+            .map(|c| if c.is_control() { '·' } else { c })
+            .collect();
+        widths.extend(
+            creamui_fonts::cached_layout(
+                &face,
+                &printable,
+                metrics.font * scale,
+                &creamui_fonts::LayoutSettings::default(),
+            )
+            .chars
+            .iter()
+            .map(|c| c.advance),
+        );
+        if chunk.ends_with('\t') {
+            let cells = tab_width - (column + widths.len()) % tab_width;
+            widths.push(cells as f32 * space);
+        }
     }
+    widths
 }
 fn draw_run(
     painter: &mut dyn Painter,
@@ -626,6 +692,7 @@ fn draw_run(
     color: creamui_theme::Color,
     font: f32,
     span: &markdown::Span,
+    font_family: &str,
 ) {
     if text.is_empty() {
         return;
@@ -636,7 +703,7 @@ fn draw_run(
         color,
         font,
         TextAlign::Start,
-        Some(FONT),
+        Some(font_family),
         span.bold,
         span.italic,
     );
@@ -731,6 +798,96 @@ mod tests {
             metrics,
         );
         assert_eq!(position, 3);
+    }
+    #[test]
+    fn pointer_positions_follow_proportional_font_advances() {
+        let face = creamui_fonts::FontFace::from_bytes(include_bytes!(
+            "../../../assets/fonts/plus-jakarta-sans/Regular.ttf"
+        ))
+        .unwrap();
+        creamui_fonts::register_bytes(
+            "DejaVu Sans Mono",
+            creamui_fonts::FontWeight::Regular,
+            face.font_ref().data,
+        )
+        .unwrap();
+        let mut document = Document::default();
+        document.replace(0..0, "Wi i").unwrap();
+        let editor = Editor::new(document);
+        let metrics = Metrics::new(&editor);
+        let shaped = creamui_fonts::cached_layout(
+            &face,
+            "Wi i",
+            editor.font_size,
+            &creamui_fonts::LayoutSettings::default(),
+        );
+        let expected = shaped.chars[1].x + shaped.chars[1].advance / 2.0;
+        let position = EditorScreen::target(
+            &editor,
+            Point {
+                x: metrics.gutter + INSET + expected + 0.1,
+                y: 4.0,
+            },
+            metrics,
+        );
+        assert_eq!(position, 2);
+    }
+    #[test]
+    fn configured_font_controls_text_without_changing_byte_cells() {
+        let original = creamui_fonts::preferred_family();
+        creamui_fonts::set_preferred_family(Some("Noto Sans".into()));
+        assert!(editor_font(false).starts_with("Noto Sans, "));
+        assert_eq!(editor_font(true), FONT);
+        creamui_fonts::set_preferred_family(Some(original));
+    }
+    #[test]
+    fn configured_proportional_font_renders_text_and_caret() {
+        creamui_reactive::with_context_scope(|| {
+            let theme = Theme::dark();
+            creamui_reactive::provide_context(ThemeProvider::new(theme));
+            creamui_fonts::register_bytes(
+                "Editor Proportional Preview",
+                creamui_fonts::FontWeight::Regular,
+                include_bytes!("../../../assets/fonts/plus-jakarta-sans/Regular.ttf"),
+            )
+            .unwrap();
+            let original = creamui_fonts::preferred_family();
+            creamui_fonts::set_preferred_family(Some("Editor Proportional Preview".into()));
+            let mut document = Document::default();
+            document
+                .replace(0..0, "Wide W, narrow i, spaces  between.\nWi i  Wi i")
+                .unwrap();
+            let screen = screen(document);
+            screen.tab.borrow_mut().move_to(7, false);
+            let size = Size {
+                width: 660.0,
+                height: 180.0,
+            };
+            let mut recorder = SceneRecorder::new();
+            recorder.begin(660, 180, 1.0, theme.colors.surface, theme.colors);
+            let root = crate::ui::view(
+                layout::Style {
+                    size: layout::Size {
+                        width: layout::Dimension::Length(size.width),
+                        height: layout::Dimension::Length(size.height),
+                    },
+                    ..crate::ui::column(0.0)
+                },
+                vec![Box::new(screen)],
+            );
+            let scene = Renderer::new().render(root, size, &mut recorder);
+            assert!(scene.focus_hit_test(Point { x: 80.0, y: 18.0 }).is_some());
+            if let Some(directory) = std::env::var_os("CEDIT_SNAPSHOT_DIR") {
+                let mut raster = Rasterizer::new(660, 180);
+                raster.render(&recorder.finish(), &Damage::Full);
+                std::fs::create_dir_all(&directory).unwrap();
+                raster
+                    .pixmap()
+                    .save_png(std::path::PathBuf::from(directory).join("proportional-font.png"))
+                    .unwrap();
+            }
+            creamui_fonts::set_preferred_family(Some(original));
+        });
     }
     #[test]
     fn editor_modes_render_in_both_themes() {

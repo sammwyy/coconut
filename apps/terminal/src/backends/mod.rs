@@ -126,6 +126,9 @@ pub fn default_font() -> String {
 pub fn font_choices(selected: &str) -> Vec<String> {
     fonts::font_choices(selected)
 }
+pub fn effective_font(requested: &str) -> String {
+    fonts::effective_family(requested)
+}
 pub fn take_startup(pending: &mut Vec<u8>) -> Startup {
     select_backend!(take_startup(pending))
 }
