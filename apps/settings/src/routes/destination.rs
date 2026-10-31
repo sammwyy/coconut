@@ -13,7 +13,7 @@ pub(crate) enum Section {
     DesktopIcons,
     Statusbar,
     Dockbar,
-    Tray,
+    Widget(String),
     Islands,
     Windows,
     System,
@@ -49,8 +49,8 @@ pub(crate) fn page_title(section: &Section) -> String {
         Section::DesktopIcons => "Desktop icons".into(),
         Section::Statusbar => "Statusbar".into(),
         Section::Dockbar => "Dockbar".into(),
-        Section::Tray => "Status icons".into(),
-        Section::Islands => "Islands".into(),
+        Section::Widget(id) => coconut_plugin_kit::bar_editor::item_label(id).into(),
+        Section::Islands => "Widgets".into(),
         Section::Layout => "Window layout".into(),
         Section::Titlebar => "Titlebar".into(),
         Section::Compositor => "Advanced".into(),
@@ -94,11 +94,12 @@ pub(crate) fn page_description(section: &Section) -> &'static str {
         Section::Accessibility => "Adjust the system for vision, hearing and motor needs.",
         Section::System => "Updates, storage, date, language and more.",
         Section::About => "Information about this device.",
+        Section::Widget(_) => "Widget behavior, panel and placement.",
         Section::IconPack => "Choose the icons used throughout the desktop.",
         Section::Sound => "Select the sound theme for desktop events.",
         Section::CursorTheme => "Choose the pointer style used by applications.",
         Section::Wallpaper | Section::DesktopIcons => "Personalize how your desktop looks.",
-        Section::Statusbar | Section::Dockbar | Section::Tray | Section::Islands => {
+        Section::Statusbar | Section::Dockbar | Section::Islands => {
             "Configure the desktop shell and its status controls."
         }
         Section::Layout | Section::Titlebar | Section::WorkingArea | Section::Focus => {
@@ -134,7 +135,7 @@ pub(crate) fn section_presentation(
         | Section::Desktop
         | Section::Statusbar
         | Section::Dockbar
-        | Section::Tray
+        | Section::Widget(_)
         | Section::Islands => (icons.wallpaper.clone(), Color::rgb(110, 105, 224)),
         Section::Windows
         | Section::Layout
@@ -167,11 +168,9 @@ pub(crate) fn parent(section: &Section) -> Section {
         Section::IconPack | Section::Sound | Section::Wallpaper | Section::CursorTheme => {
             Section::Personalization
         }
-        Section::DesktopIcons
-        | Section::Statusbar
-        | Section::Dockbar
-        | Section::Tray
-        | Section::Islands => Section::Desktop,
+        Section::DesktopIcons | Section::Statusbar | Section::Dockbar => Section::Desktop,
+        Section::Widget(_) => Section::Islands,
+        Section::Islands => Section::Islands,
         Section::Layout
         | Section::Titlebar
         | Section::Compositor

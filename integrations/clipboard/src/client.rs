@@ -52,6 +52,9 @@ impl Client {
     pub fn list(&self, offset: u32, limit: u32) -> zbus::Result<Vec<Entry>> {
         self.proxy()?.call("List", &(offset, limit))
     }
+    pub fn search(&self, query: &str, offset: u32, limit: u32) -> zbus::Result<Vec<Entry>> {
+        self.proxy()?.call("Search", &(query, offset, limit))
+    }
     pub fn get(&self, id: u64) -> zbus::Result<String> {
         self.proxy()?.call("Get", &(id,))
     }

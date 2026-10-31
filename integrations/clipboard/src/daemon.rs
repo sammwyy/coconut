@@ -165,6 +165,22 @@ impl Clipboard {
             .entries(offset as usize, limit as usize))
     }
 
+    async fn search(
+        &self,
+        query: &str,
+        offset: u32,
+        limit: u32,
+        #[zbus(header)] header: Header<'_>,
+        #[zbus(connection)] connection: &Connection,
+    ) -> fdo::Result<Vec<Entry>> {
+        self.authorize(HISTORY, &header, connection).await?;
+        Ok(self
+            .history
+            .lock()
+            .unwrap()
+            .search(query, offset as usize, limit as usize))
+    }
+
     async fn get(
         &self,
         id: u64,

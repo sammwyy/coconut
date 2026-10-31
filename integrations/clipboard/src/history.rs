@@ -93,9 +93,15 @@ impl History {
     }
 
     pub fn entries(&mut self, offset: usize, limit: usize) -> Vec<Entry> {
+        self.search("", offset, limit)
+    }
+
+    pub fn search(&mut self, query: &str, offset: usize, limit: usize) -> Vec<Entry> {
         self.prune();
+        let query = query.to_lowercase();
         self.items
             .iter()
+            .filter(|item| query.is_empty() || item.text.to_lowercase().contains(&query))
             .skip(offset)
             .take(limit.min(50))
             .map(|item| {
@@ -192,5 +198,28 @@ mod tests {
         assert!(history.remove(2));
         history.clear();
         assert_eq!(history.current.as_deref(), Some("new"));
+    }
+}
+
+#[cfg(test)]
+mod search_tests {
+    use super::*;
+    #[test]
+    fn search_matches_full_text_and_paginates_without_changing_history() {
+        let mut history = History::new(Config::default(), watch::channel(0).0);
+        history.record(format!("{} NeedLE 日本語", "x".repeat(600)).into());
+        history.record("another needle".into());
+        history.record("does not match".into());
+        let revision = *history.changed.borrow();
+        let matches = history.search("NEEDLE", 0, 1);
+        assert_eq!(matches[0].2, "another needle");
+        let second = history.search("needle", 1, 1);
+        assert_eq!(second.len(), 1);
+        assert_eq!(second[0].2.chars().count(), 512);
+        assert!(history.text(second[0].0).unwrap().contains("日本語"));
+        assert_eq!(history.search("日本語", 0, 50).len(), 1);
+        assert!(history.search("absent", 0, 50).is_empty());
+        assert_eq!(history.entries(0, 50).len(), 3);
+        assert_eq!(*history.changed.borrow(), revision);
     }
 }

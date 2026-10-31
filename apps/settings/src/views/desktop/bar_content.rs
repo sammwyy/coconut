@@ -111,12 +111,10 @@ impl State {
             .available
             .iter()
             .map(|id| {
-                let category = match id.as_str() {
-                    "app_launcher" | "open_windows" | "workspaces" => "Applications & workspaces",
-                    "clock" | "weather" | "current_playing" => "At a glance",
-                    "clipboard" => "Productivity",
-                    _ => "System controls",
-                };
+                let category = BAR_ITEMS
+                    .iter()
+                    .find(|item| item.id == id)
+                    .map_or("Other widgets", |item| item.category);
                 let state = self.clone();
                 let apply = catalog.apply.clone();
                 let group = catalog.group;

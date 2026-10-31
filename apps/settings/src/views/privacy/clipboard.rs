@@ -8,7 +8,18 @@ use creamui_widgets::{layout::Flex, Button, ButtonSize, Switch};
 
 pub(crate) fn route_view() -> BoxedWidget {
     let context = creamui_reactive::use_context::<ViewContext>();
-    build(&context.native)
+    let content = build(&context.native);
+    Box::new(
+        Flex::column()
+            .gap(18.0)
+            .child(crate::views::desktop::islands::page_link(
+                &context,
+                "Clipboard widget settings",
+                "History and retention are configured with the widget",
+                "/desktop/widgets/clipboard",
+            ))
+            .child(content),
+    )
 }
 
 fn build(state: &crate::services::settings::State) -> BoxedWidget {
@@ -57,11 +68,6 @@ fn build(state: &crate::services::settings::State) -> BoxedWidget {
     }
     let mut body = vec![
         value(snapshot.fact("clipboard-service")),
-        group(vec![
-            state.preference("Keep clipboard history", "clipboard-enabled", "Pause saving new entries; existing history remains until it expires"),
-            state.preference("History size", "clipboard-max-entries", "Maximum number of saved text entries"),
-            state.preference("Keep entries for", "clipboard-max-age", "Expired entries are removed automatically"),
-        ]),
         value("Applications request separate permissions for the current clipboard, history, and writing. Reset removes a saved decision so the next request asks again. The installed shell and Settings have access by default."),
         group(rows),
     ];
@@ -69,6 +75,26 @@ fn build(state: &crate::services::settings::State) -> BoxedWidget {
         body.push(value(error));
     }
     detail_page(body, state)
+}
+
+pub(crate) fn history_settings(state: &crate::services::settings::State) -> BoxedWidget {
+    group(vec![
+        state.preference(
+            "Keep clipboard history",
+            "clipboard-enabled",
+            "Pause saving new entries; existing history remains until it expires",
+        ),
+        state.preference(
+            "History size",
+            "clipboard-max-entries",
+            "Maximum number of saved text entries",
+        ),
+        state.preference(
+            "Keep entries for",
+            "clipboard-max-age",
+            "Expired entries are removed automatically",
+        ),
+    ])
 }
 
 #[cfg(test)]
@@ -159,7 +185,12 @@ mod tests {
                         },
                         ScrollController::default(),
                     )
-                    .child(build(&state));
+                    .child(Box::new(
+                        Flex::column()
+                            .gap(16.0)
+                            .child(history_settings(&state))
+                            .child(build(&state)),
+                    ));
                     let scene = Renderer::new().render(Box::new(widget), size, &mut recorder);
                     assert!(
                         scene.on_key_at(4).is_some(),

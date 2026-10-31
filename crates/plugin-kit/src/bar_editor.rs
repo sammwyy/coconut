@@ -12,72 +12,100 @@ pub struct BarItem {
     pub id: &'static str,
     pub label: &'static str,
     pub description: &'static str,
+    pub settings_route: &'static str,
+    pub category: &'static str,
 }
 
 pub const BAR_ITEMS: &[BarItem] = &[
     BarItem {
         id: "app_launcher",
+        settings_route: "/desktop/widgets/app_launcher",
+        category: "Applications",
         label: "App launcher",
         description: "Browse and search your applications",
     },
     BarItem {
         id: "open_windows",
+        settings_route: "/desktop/widgets/open_windows",
+        category: "Applications",
         label: "Open windows",
         description: "Switch between running applications",
     },
     BarItem {
         id: "workspaces",
+        settings_route: "/desktop/widgets/workspaces",
+        category: "Applications",
         label: "Workspaces",
         description: "Navigate your desktop workspaces",
     },
     BarItem {
         id: "clock",
+        settings_route: "/desktop/widgets/clock",
+        category: "Information",
         label: "Clock",
         description: "Time, date and calendar",
     },
     #[cfg(target_os = "linux")]
     BarItem {
         id: "clipboard",
+        settings_route: "/desktop/widgets/clipboard",
+        category: "Productivity",
         label: "Clipboard history",
         description: "Find and reuse recently copied text",
     },
     BarItem {
         id: "current_playing",
+        settings_route: "/desktop/widgets/current_playing",
+        category: "Information",
         label: "Now playing",
         description: "Media controls; appears while media is playing",
     },
     BarItem {
         id: "weather",
+        settings_route: "/desktop/widgets/weather",
+        category: "Information",
         label: "Weather",
         description: "Current conditions and forecast",
     },
     BarItem {
         id: "control_center",
+        settings_route: "/desktop/widgets/control_center",
+        category: "System controls",
         label: "Control center",
         description: "Quick access to system controls",
     },
     BarItem {
         id: "tray.wifi",
+        settings_route: "/desktop/widgets/tray.wifi",
+        category: "System controls",
         label: "Wi-Fi",
         description: "Wireless network status and connections",
     },
     BarItem {
         id: "tray.bluetooth",
+        settings_route: "/desktop/widgets/tray.bluetooth",
+        category: "System controls",
         label: "Bluetooth",
         description: "Bluetooth status and devices",
     },
     BarItem {
         id: "tray.battery",
+        settings_route: "/desktop/widgets/tray.battery",
+        category: "System controls",
         label: "Battery",
         description: "Battery status and power controls",
     },
     BarItem {
         id: "tray.volume",
+        settings_route: "/desktop/widgets/tray.volume",
+        category: "System controls",
         label: "Volume",
         description: "Sound level and output devices",
     },
     BarItem {
         id: "tray.brightness",
+        settings_route: "/desktop/widgets/tray.brightness",
+        category: "System controls",
         label: "Brightness",
         description: "Adjust display brightness",
     },
@@ -125,7 +153,7 @@ pub fn content_menu(
                 let settings = settings.clone();
                 items.push(ContextMenuItem::new(
                     "item-settings",
-                    "Item settings…",
+                    "Configure widget…",
                     move || settings(route.into()),
                 ));
             }
@@ -168,15 +196,11 @@ pub fn content_menu(
 }
 
 pub fn item_settings_route(id: &str) -> Option<&'static str> {
-    match id {
-        "app_launcher" => Some("/desktop/widgets/app_launcher"),
-        "open_windows" => Some("/desktop/widgets/open_windows"),
-        "clock" => Some("/desktop/widgets"),
-        "clipboard" => Some("/privacy/clipboard"),
-        "control_center" | "tray.wifi" | "tray.bluetooth" | "tray.battery" | "tray.volume"
-        | "tray.brightness" => Some("/desktop/tray"),
-        _ => None,
-    }
+    let id = if id == "logo" { "workspaces" } else { id };
+    BAR_ITEMS
+        .iter()
+        .find(|item| item.id == id)
+        .map(|item| item.settings_route)
 }
 
 #[derive(Clone)]
@@ -494,6 +518,34 @@ mod tests {
             );
             assert_eq!(group.len(), 2);
             assert!(group.iter().all(|item| item.children.is_empty()));
+        });
+    }
+
+    #[test]
+    fn configure_on_every_known_item_opens_its_own_widget_page() {
+        creamui_reactive::with_context_scope(|| {
+            for item in BAR_ITEMS {
+                let mut bar = DockConfig::default();
+                bar.sections[0].islands = vec![coconut_core::IslandEntry::with_id(item.id)];
+                let route = Rc::new(RefCell::new(String::new()));
+                let opened = route.clone();
+                let items = content_menu(
+                    BarKind::Statusbar,
+                    &bar,
+                    Target::Item { group: 0, item: 0 },
+                    Rc::new(|_| {}),
+                    Rc::new(move |value| *opened.borrow_mut() = value),
+                );
+                let configure = items
+                    .into_iter()
+                    .find(|item| item.id == "item-settings")
+                    .expect("every known widget is configurable");
+                let menu = ContextMenuController::new();
+                menu.open(Point::default(), vec![configure]);
+                menu.handle_key(&Key::Home);
+                menu.handle_key(&Key::Enter);
+                assert_eq!(*route.borrow(), item.settings_route);
+            }
         });
     }
 

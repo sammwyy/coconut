@@ -47,6 +47,11 @@ pub fn run() {
     let dock_scroll = ScrollController::new(0.0);
     let island_settings = crate::views::desktop::island_settings::State::default();
     let settings_search = TextController::new("");
+    let search_scroll = content_scroll.clone();
+    settings_search.on_change(move |_, next| {
+        search_scroll.set(0.0);
+        Some(next.to_owned())
+    });
     let maximized = Signal::new(false);
     let last_location = RefCell::new(view.url());
     let reported_decorations = Cell::new(WindowDecorationMode::Pending);
@@ -136,11 +141,19 @@ pub fn run() {
                     let window = state.window.clone();
                     let shortcuts = state.shortcut_settings.clone();
                     let bar_content = state.bar_content.clone();
+                    let search = state.settings_search.clone();
                     move |handle| {
                         shortcuts.attach_window(handle.clone());
                         let keys = bar_content.clone();
                         let shortcuts_keys = shortcuts.clone();
                         handle.on_keyboard_input(move |event, modifiers| {
+                            if event.pressed
+                                && event.key == creamui_render::platform::Key::Escape
+                                && !search.peek().is_empty()
+                            {
+                                search.set_value("");
+                                return true;
+                            }
                             coconut_plugin_kit::bar_editor::key_input(&event.key, modifiers)
                                 .is_some_and(|input| keys.handle_key(input, event.pressed))
                                 || shortcuts_keys.record_native(event, modifiers)
@@ -160,6 +173,7 @@ pub fn run() {
                         connectivity_revision.get();
                         let location = state.view.url();
                         if *last_location.borrow() != location {
+                            state.settings_search.set_value("");
                             state.bar_content.dismiss();
                             state.shortcut_settings.cancel_capture();
                             state.content_scroll.set(0.0);

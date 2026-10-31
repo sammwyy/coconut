@@ -4,8 +4,11 @@ use coconut_plugin_kit::{Panel, PanelRenderContext};
 use creamui_core::{BoxedWidget, Size};
 use creamui_reactive::Signal;
 use creamui_render::AppHandle;
-use creamui_widgets::ScrollController;
-use std::{cell::Cell, rc::Rc};
+use creamui_widgets::{ScrollController, TextController};
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+};
 
 const PAGE: u32 = 20;
 
@@ -20,18 +23,22 @@ struct State {
     page: Cell<u32>,
     request: Cell<u64>,
     scroll: ScrollController,
+    presentation: view::Presentation,
+    query: RefCell<String>,
+    reload_pending: Cell<bool>,
 }
 
-fn snapshot(client: &Client, page: u32) -> Result<Snapshot, String> {
+fn snapshot(client: &Client, page: u32, query: &str) -> Result<Snapshot, String> {
     let (available, enabled, message, revision) =
         client.status().map_err(|error| error.to_string())?;
     let (_, current) = client.current().map_err(|error| error.to_string())?;
     let mut entries = client
-        .list(page * PAGE, PAGE + 1)
+        .search(query, page * PAGE, PAGE + 1)
         .map_err(|error| error.to_string())?;
     let has_next = entries.len() > PAGE as usize;
     entries.truncate(PAGE as usize);
     Ok(Snapshot {
+        loading: false,
         available,
         enabled,
         revision,
@@ -43,16 +50,24 @@ fn snapshot(client: &Client, page: u32) -> Result<Snapshot, String> {
 }
 
 impl State {
+    fn reload(self: &Rc<Self>) {
+        self.load(|_| Ok(()), None);
+    }
+
     fn load(
         self: &Rc<Self>,
         action: impl FnOnce(&Client) -> Result<(), String> + Send + 'static,
         close: Option<Rc<dyn Fn()>>,
     ) {
         if self.busy.peek() {
+            self.reload_pending.set(true);
             return;
         }
+        self.reload_pending.set(false);
         self.busy.set(true);
         let page = self.page.get();
+        let query = self.query.borrow().clone();
+        let requested_query = query.clone();
         let request = self.request.get() + 1;
         self.request.set(request);
         let weak = Rc::downgrade(self);
@@ -60,7 +75,7 @@ impl State {
             move || {
                 let client = Client::session().map_err(|error| error.to_string())?;
                 action(&client)?;
-                snapshot(&client, page)
+                snapshot(&client, page, &query)
             },
             move |result: Result<Snapshot, String>| {
                 let Some(state) = weak.upgrade() else {
@@ -72,7 +87,17 @@ impl State {
                 creamui_reactive::batch(|| {
                     match result {
                         Ok(snapshot) => {
-                            state.snapshot.set(snapshot);
+                            if state.page.get() == page && *state.query.borrow() == requested_query
+                            {
+                                if snapshot.entries.is_empty() && page > 0 {
+                                    state.page.set(page - 1);
+                                    state.reload_pending.set(true);
+                                } else {
+                                    state.snapshot.set(snapshot);
+                                }
+                            } else {
+                                state.reload_pending.set(true);
+                            }
                             if let Some(close) = close {
                                 close();
                             }
@@ -80,6 +105,7 @@ impl State {
                         Err(error) => {
                             eprintln!("clipboard popup: {error}");
                             let mut snapshot = state.snapshot.peek();
+                            snapshot.loading = false;
                             snapshot.available = false;
                             snapshot.message = error;
                             state.snapshot.set(snapshot);
@@ -87,6 +113,9 @@ impl State {
                     }
                     state.busy.set(false);
                 });
+                if state.reload_pending.replace(false) {
+                    state.reload();
+                }
             },
         );
     }
@@ -107,7 +136,7 @@ impl State {
                 };
                 let next = result.as_ref().copied().unwrap_or(revision);
                 if result.is_err() || next != state.snapshot.peek().revision {
-                    state.load(|_| Ok(()), None);
+                    state.reload();
                 }
                 state.watch(next);
             },
@@ -141,8 +170,24 @@ impl Panel for ClipboardPanel {
                 page: Cell::new(0),
                 request: Cell::new(0),
                 scroll: ScrollController::default(),
+                presentation: view::Presentation {
+                    query: TextController::default(),
+                    confirm_clear: Signal::new(false),
+                },
+                query: RefCell::new(String::new()),
+                reload_pending: Cell::new(false),
             });
-            state.load(|_| Ok(()), None);
+            let weak = Rc::downgrade(&state);
+            state.presentation.query.on_change(move |_, next| {
+                if let Some(state) = weak.upgrade() {
+                    *state.query.borrow_mut() = next.to_owned();
+                    state.page.set(0);
+                    state.scroll.set(0.0);
+                    state.reload();
+                }
+                Some(next.to_owned())
+            });
+            state.reload();
             state.watch(0);
             state
         });
@@ -156,7 +201,7 @@ impl Panel for ClipboardPanel {
         let refresh = state.clone();
         let close = ctx.close.clone();
         let actions = Actions {
-            refresh: Rc::new(move || refresh.load(|_| Ok(()), None)),
+            refresh: Rc::new(move || refresh.reload()),
             pause: Rc::new(move || {
                 pause.load(
                     move |client| {
@@ -168,6 +213,7 @@ impl Panel for ClipboardPanel {
                 )
             }),
             clear: Rc::new(move || {
+                clear.page.set(0);
                 clear.load(
                     |client| client.clear().map_err(|error| error.to_string()),
                     None,
@@ -208,6 +254,7 @@ impl Panel for ClipboardPanel {
             state.page.get(),
             state.scroll.clone(),
             &actions,
+            &state.presentation,
         )
     }
 }

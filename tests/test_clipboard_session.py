@@ -138,6 +138,8 @@ class ClipboardSession(unittest.TestCase):
         entries = self.call("List", 0, 50)[0]
         self.assertEqual([entry[2] for entry in entries], ["fourth", "third", "second"])
         self.assertEqual(self.call("List", 1, 1)[0][0][2], "third")
+        self.assertEqual([entry[2] for entry in self.call("Search", "THIR", 0, 50)[0]], ["third"])
+        self.assertEqual(self.call("Search", "absent", 0, 50)[0], [])
         identifier = entries[-1][0]
         self.assertEqual(self.call("Get", identifier), ("second",))
         self.call("Restore", identifier)
@@ -156,7 +158,7 @@ class ClipboardSession(unittest.TestCase):
         self.copy("password", "x-kde-passwordManagerHint")
         self.wait_for(lambda: not self.call("Current")[0])
         self.assertEqual(self.call("List", 0, 50)[0], before)
-        for method, args in [("Current", ()), ("List", (0, 10)), ("SetText", ("denied",)), ("SetEnabled", ("false",)), ("Configure", (10, 128, 1024, 3600))]:
+        for method, args in [("Current", ()), ("List", (0, 10)), ("Search", ("second", 0, 10)), ("SetText", ("denied",)), ("SetEnabled", ("false",)), ("Configure", (10, 128, 1024, 3600))]:
             with self.assertRaises(ValueError):
                 self.call(method, *args, trusted=False)
         subject = str(Path(shutil.which("gdbus")).resolve())

@@ -28,7 +28,7 @@ fn build(state: &State, nav: &creamui_router::Router) -> BoxedWidget {
                 vec![
                     detail_link(
                         "Clipboard",
-                        "History limits and application access",
+                        "Application access to clipboard and history",
                         Page::Clipboard,
                         nav,
                     ),

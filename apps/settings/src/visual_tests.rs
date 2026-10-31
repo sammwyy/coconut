@@ -594,7 +594,7 @@ fn connectivity_layout_matches_reference() {
                     Section::Touchpad,
                     Section::Statusbar,
                     Section::Dockbar,
-                    Section::Tray,
+                    Section::Widget("control_center".into()),
                     Section::Islands,
                     Section::Layout,
                     Section::Titlebar,
@@ -1080,4 +1080,132 @@ fn bar_editor_keyboard_focus_follows_the_reordered_item() {
             ["open_windows", "clock", "workspaces"]
         );
     });
+}
+
+#[test]
+fn widget_catalog_and_every_detail_page_render_in_both_sizes() {
+    use coconut_api::settings::{Choice, Preference, Snapshot, Value};
+    use creamui_core::Point;
+    use creamui_theme::{Theme, ThemeProvider};
+    for (variant, base) in [("light", Theme::light()), ("dark", Theme::dark())] {
+        for (width, height) in [(1100, 760), (640, 480)] {
+            creamui_reactive::with_context_scope(|| {
+                let preview = Preview::new();
+                let context = &preview.context;
+                let theme = components::settings_theme(base);
+                creamui_reactive::provide_context(ThemeProvider::new(theme));
+                let mut native = Snapshot {
+                    loaded: true,
+                    ..Default::default()
+                };
+                native.preferences.insert(
+                    "clipboard-enabled".into(),
+                    Preference {
+                        writable: true,
+                        value: Some(Value::Bool(true)),
+                        ..Default::default()
+                    },
+                );
+                for (key, id, label) in [
+                    ("clipboard-max-entries", "50", "50 entries"),
+                    ("clipboard-max-age", "86400", "24 hours"),
+                ] {
+                    native.preferences.insert(
+                        key.into(),
+                        Preference {
+                            writable: true,
+                            value: Some(Value::Text(id.into())),
+                            choices: vec![Choice {
+                                id: id.into(),
+                                label: label.into(),
+                            }],
+                            ..Default::default()
+                        },
+                    );
+                }
+                context.native.snapshot.set(native);
+                let size = Size {
+                    width: width as f32,
+                    height: height as f32,
+                };
+                routes::open(&context.view, "/desktop/widgets");
+                editor_scene(&preview, size, &format!("{variant}-{width}-widgets"));
+                for (query, label) in [
+                    ("sound", "widgets-search"),
+                    ("no such widget here", "widgets-empty"),
+                ] {
+                    context.island_settings.search.set_value(query);
+                    editor_scene(&preview, size, &format!("{variant}-{width}-{label}"));
+                }
+                context.island_settings.search.set_value("");
+                for item in coconut_plugin_kit::bar_editor::BAR_ITEMS {
+                    context.content_scroll.set(0.0);
+                    routes::open(&context.view, item.settings_route);
+                    let scene = editor_scene(
+                        &preview,
+                        size,
+                        &format!("{variant}-{width}-widget-{}", item.id),
+                    );
+                    assert!(routes::current(&context.view) == Section::Widget(item.id.into()));
+                    scene
+                        .hit_test(Point { x: 306.0, y: 28.0 })
+                        .expect("widget back control")();
+                    assert!(
+                        routes::current(&context.view) == Section::Islands,
+                        "widget back goes to catalog"
+                    );
+                }
+                routes::open(&context.view, "/desktop/tray");
+                assert!(routes::current(&context.view) == Section::Widget("control_center".into()));
+                editor_scene(&preview, size, &format!("{variant}-{width}-legacy-tray"));
+            });
+        }
+    }
+}
+
+#[test]
+fn global_search_opens_widget_configuration_and_preserves_query_focus() {
+    use creamui_core::Point;
+    use creamui_theme::{Theme, ThemeProvider};
+    for (variant, base) in [("light", Theme::light()), ("dark", Theme::dark())] {
+        for (width, height) in [(1100, 760), (640, 480)] {
+            creamui_reactive::with_context_scope(|| {
+                let preview = Preview::new();
+                let context = &preview.context;
+                creamui_reactive::provide_context(ThemeProvider::new(components::settings_theme(
+                    base,
+                )));
+                let size = Size {
+                    width: width as f32,
+                    height: height as f32,
+                };
+                for query in ["clipboard", "clock", "sound", "no such setting"] {
+                    context.settings_search.set_value(query);
+                    context.content_scroll.set(0.0);
+                    editor_scene(
+                        &preview,
+                        size,
+                        &format!(
+                            "{variant}-{width}-global-search-{}",
+                            query.replace(' ', "-")
+                        ),
+                    );
+                }
+                context.settings_search.set_value("clipboard");
+                let scene = editor_scene(&preview, size, "global-search-click");
+                let point = (100..height)
+                    .find_map(|y| {
+                        let point = Point {
+                            x: (width as f32 + 256.0) / 2.0,
+                            y: y as f32,
+                        };
+                        scene.hit_test(point).is_some().then_some(point)
+                    })
+                    .expect("visible widget search result");
+                scene.hit_test(point).unwrap()();
+                assert!(context.settings_search.peek().is_empty());
+                assert!(routes::current(&context.view) == Section::Widget("clipboard".into()));
+            });
+        }
+    }
 }

@@ -29,22 +29,38 @@ pub(crate) fn build(context: &crate::views::context::ViewContext) -> BoxedWidget
     let theme = creamui_theme::use_theme();
 
     let current = routes::current(view);
-    let connectivity_detail = current == Section::Connectivity && connectivity.showing_detail();
-    let native_detail = routes::destination::parent(&current) != current;
+    let query = settings_search.value();
+    let searching = !query.trim().is_empty();
+    let connectivity_detail =
+        !searching && current == Section::Connectivity && connectivity.showing_detail();
+    let native_detail = !searching && routes::destination::parent(&current) != current;
     let decorations = creamui_render::use_window_decorations();
     let show_page_header = !connectivity_detail && !native_detail;
     let account_list = users.get();
-    let title = page_title(&current);
-    let description = page_description(&current);
+    let title = if searching {
+        "Search settings".into()
+    } else {
+        page_title(&current)
+    };
+    let description = if searching {
+        "Widgets and system preferences that match your search."
+    } else {
+        page_description(&current)
+    };
     let (category_icon, category_color) = section_presentation(&current, icons);
     creamui_reactive::provide_context(components::PageStyle {
         color: category_color,
         title: title.clone(),
     });
     let sidebar = settings_sidebar(&current, view, icons);
-    let content_has_own_scroll = matches!(current, Section::Statusbar | Section::Dockbar);
+    let content_has_own_scroll =
+        !searching && matches!(current, Section::Statusbar | Section::Dockbar);
     creamui_reactive::provide_context(context.clone());
-    let content = RouterOutlet::render();
+    let content = if searching {
+        crate::views::search::build(context, &query)
+    } else {
+        RouterOutlet::render()
+    };
 
     let sidebar_shell_style = Style {
         flex_direction: FlexDirection::Column,

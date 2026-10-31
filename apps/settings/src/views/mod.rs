@@ -13,3 +13,5 @@ pub mod shortcuts;
 pub mod system;
 pub mod users;
 pub mod windows;
+
+pub(crate) mod search;

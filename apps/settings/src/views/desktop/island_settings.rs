@@ -1,9 +1,12 @@
 use crate::components::{group, row, section};
 use coconut_core::modules::{load_module_value, save_module_value};
+use coconut_plugin_clock::ClockConfig;
 use coconut_plugin_kit::{ConfigField, FieldKind, NumberPresentation, NumberRange};
+use coconut_plugin_tray::TrayConfig;
 use creamui_core::layout::FlexDirection;
 use creamui_core::{BoxedWidget, Size};
 use creamui_macros::jsx;
+use creamui_reactive::Signal;
 use creamui_widgets::layout::Align;
 use creamui_widgets::{Slider, Switch, Text, TextController, TextInput, TextSize};
 use std::cell::RefCell;
@@ -13,12 +16,112 @@ use std::rc::Rc;
 /// Keeps text editing state alive while Settings rebuilds its immediate-mode
 /// widget tree. In particular, a numeric field must be allowed to temporarily
 /// contain an empty or out-of-range value while it is being edited.
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct State {
     inputs: Rc<RefCell<HashMap<(&'static str, &'static str), TextController>>>,
+    pub search: TextController,
+    pub clock: TextController,
+    pub tray: Signal<TrayConfig>,
+    pub busy: Signal<bool>,
+    pub status: Signal<String>,
+    pub saved_clock: Signal<String>,
+    pub saved_tray: Signal<TrayConfig>,
+}
+
+impl Default for State {
+    fn default() -> Self {
+        let clock: ClockConfig = coconut_core::modules::load_module("clock");
+        let tray: TrayConfig = coconut_core::modules::load_module("tray");
+        Self {
+            inputs: Default::default(),
+            search: TextController::default(),
+            clock: TextController::new(clock.format.clone()),
+            saved_clock: Signal::new(clock.format),
+            tray: Signal::new(tray.clone()),
+            saved_tray: Signal::new(tray),
+            busy: Signal::new(false),
+            status: Signal::new(String::new()),
+        }
+    }
 }
 
 impl State {
+    pub fn save_clock(&self, window: &creamui_render::WindowHandle) {
+        let format = self.clock.peek();
+        if !coconut_plugin_clock::valid_format(&format) {
+            self.status
+                .set("Enter a valid clock format, such as %H:%M.".into());
+            return;
+        }
+        if self.busy.peek() {
+            return;
+        }
+        self.busy.set(true);
+        self.status.set("Saving clock settings…".into());
+        let state = self.clone();
+        let saved = format.clone();
+        window.app().spawn_background(
+            move || {
+                coconut_core::modules::save_module("clock", &ClockConfig { format })
+                    .map_err(|error| error.to_string())?;
+                coconut_core::ipc::publish_module_config_changed()
+            },
+            move |result| {
+                creamui_reactive::batch(|| {
+                    state.busy.set(false);
+                    match result {
+                        Ok(()) => {
+                            state.saved_clock.set(saved);
+                            state
+                                .status
+                                .set("Clock settings saved. Start a new session to apply.".into());
+                        }
+                        Err(error) => {
+                            eprintln!("settings: clock configuration: {error}");
+                            state.status.set(format!("Could not save: {error}"));
+                        }
+                    }
+                });
+            },
+        );
+    }
+
+    pub fn save_tray(&self, window: &creamui_render::WindowHandle) {
+        if self.busy.peek() {
+            return;
+        }
+        let tray = self.tray.peek();
+        let saved = tray.clone();
+        let state = self.clone();
+        self.busy.set(true);
+        self.status.set("Saving system widget settings…".into());
+        window.app().spawn_background(
+            move || {
+                coconut_core::modules::save_module("tray", &tray)
+                    .map_err(|error| error.to_string())?;
+                coconut_core::ipc::publish_module_config_changed()
+            },
+            move |result| {
+                creamui_reactive::batch(|| {
+                    state.busy.set(false);
+                    match result {
+                        Ok(()) => {
+                            state.saved_tray.set(saved);
+                            state.status.set(
+                                "System widget settings saved. Start a new session to apply."
+                                    .into(),
+                            );
+                        }
+                        Err(error) => {
+                            eprintln!("settings: system widget configuration: {error}");
+                            state.status.set(format!("Could not save: {error}"));
+                        }
+                    }
+                });
+            },
+        );
+    }
+
     fn input(&self, id: &'static str, key: &'static str, initial: String) -> TextController {
         self.inputs
             .borrow_mut()

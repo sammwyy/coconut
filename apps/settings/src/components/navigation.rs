@@ -23,7 +23,11 @@ fn sidebar_item(
     view: &Router,
 ) -> BoxedWidget {
     let theme = creamui_theme::use_theme();
-    let active = routes::destination::parent(current) == section;
+    let active = if section == Section::Islands {
+        matches!(current, Section::Islands | Section::Widget(_))
+    } else {
+        routes::destination::parent(current) == section
+    };
     let select = view.clone();
     let item = RawButton::new(
         Style {
@@ -66,7 +70,7 @@ pub(crate) fn settings_sidebar(
 ) -> BoxedWidget {
     use creamui_theme::Color;
     Box::new(jsx! {
-        <Flex direction={FlexDirection::Column} gap={16.0} padding={12.0}>
+        <Flex direction={FlexDirection::Column} gap={10.0} padding={12.0}>
             {sidebar_group("NETWORK", vec![
                 sidebar_item(current, Section::Connectivity, "Connectivity", icons.status.clone(), Color::rgb(0, 153, 214), view),
                 sidebar_item(current, Section::Hardware, "Hardware", icons.devices.clone(), Color::rgb(0, 173, 188), view),
@@ -74,6 +78,7 @@ pub(crate) fn settings_sidebar(
             {sidebar_group("LOOK & FEEL", vec![
                 sidebar_item(current, Section::Personalization, "Personalization", icons.paintbrush.clone(), Color::rgb(193, 99, 190), view),
                 sidebar_item(current, Section::Desktop, "Desktop", icons.wallpaper.clone(), Color::rgb(110, 105, 224), view),
+                sidebar_item(current, Section::Islands, "Widgets", icons.applications.clone(), Color::rgb(110, 105, 224), view),
                 sidebar_item(current, Section::Windows, "Windows", icons.windows.clone(), Color::rgb(78, 125, 222), view),
             ])}
             {sidebar_group("WORKFLOW", vec![

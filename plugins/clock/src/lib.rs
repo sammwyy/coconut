@@ -37,6 +37,12 @@ impl Plugin for ClockPlugin {
     }
 }
 
+pub fn valid_format(format: &str) -> bool {
+    !format.trim().is_empty()
+        && !chrono::format::StrftimeItems::new(format)
+            .any(|item| matches!(item, chrono::format::Item::Error))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -58,5 +64,16 @@ mod tests {
             .id(),
             "clock"
         );
+    }
+}
+
+#[cfg(test)]
+mod format_tests {
+    #[test]
+    fn clock_format_rejects_invalid_directives_and_accepts_unicode() {
+        assert!(super::valid_format("%H:%M"));
+        assert!(super::valid_format("日本語 %A %H:%M:%S"));
+        assert!(!super::valid_format("%Q"));
+        assert!(!super::valid_format(""));
     }
 }

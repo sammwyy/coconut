@@ -54,6 +54,9 @@ pub(crate) fn current(router: &Router) -> Section {
         .into_iter()
         .find(|(path, _, _)| *path == matched.pattern)
         .map(|(_, destination, _)| match destination {
+            Section::Widget(id) => {
+                Section::Widget(router.params().remove("widget_id").unwrap_or(id))
+            }
             Section::User(_) => {
                 Section::User(router.params().remove("username").unwrap_or_default())
             }
@@ -130,7 +133,7 @@ fn routes() -> Vec<RouteDefinition> {
         ),
         (
             "/desktop/widgets/:widget_id",
-            Section::Islands,
+            Section::Widget(String::new()),
             crate::views::desktop::islands::route_view,
         ),
         (
@@ -193,8 +196,8 @@ fn routes() -> Vec<RouteDefinition> {
         ),
         (
             "/desktop/tray",
-            Section::Tray,
-            crate::views::desktop::tray::route_view,
+            Section::Widget("control_center".into()),
+            crate::views::desktop::islands::control_center_route,
         ),
         (
             "/desktop/widgets",
@@ -404,9 +407,18 @@ fn routes() -> Vec<RouteDefinition> {
     ]
 }
 
+pub(crate) fn searchable_pages() -> Vec<(String, String)> {
+    routes()
+        .into_iter()
+        .filter(|(path, _, _)| !path.contains(':') && *path != "/desktop/tray")
+        .map(|(path, section, _)| (path.to_owned(), destination::page_title(&section)))
+        .collect()
+}
+
 impl Section {
     pub(crate) fn path(&self) -> String {
         match self {
+            Self::Widget(id) => format!("/desktop/widgets/{}", segment(id)),
             Self::User(username) => format!("/users/{}", segment(username)),
             Self::Detail(Page::App(id)) => format!("/applications/installed/{}", segment(id)),
             Self::Unavailable(_) => "/not-found".into(),
@@ -450,6 +462,7 @@ mod tests {
     fn destinations_round_trip_through_registered_routes() {
         for (_, destination, _) in routes() {
             let destination = match destination {
+                Section::Widget(id) if id.is_empty() => Section::Widget("clock".into()),
                 Section::User(_) => Section::User("sample-user".into()),
                 Section::Detail(Page::App(_)) => {
                     Section::Detail(Page::App("org.example.App.desktop".into()))
@@ -491,6 +504,19 @@ mod tests {
         );
         open(&router, "/desktop/statusbar");
         assert!(router.location().query("tab").is_none());
+    }
+
+    #[test]
+    fn every_widget_has_one_destination_and_tray_links_open_control_center() {
+        for item in coconut_plugin_kit::bar_editor::BAR_ITEMS {
+            let router = create(item.settings_route).unwrap();
+            assert!(current(&router) == Section::Widget(item.id.into()));
+            assert!(destination::parent(&current(&router)) == Section::Islands);
+        }
+        assert!(
+            current(&create("/desktop/tray").unwrap()) == Section::Widget("control_center".into())
+        );
+        assert_eq!(destination::page_title(&Section::Islands), "Widgets");
     }
 
     #[test]

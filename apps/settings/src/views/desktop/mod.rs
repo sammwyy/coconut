@@ -107,7 +107,7 @@ fn build(state: &State, config: &Signal<ShellConfig>, nav: &creamui_router::Rout
                 vec![
                     link(
                         "Widgets",
-                        "Clock, weather, launcher and more",
+                        "Find and configure every widget and panel",
                         Section::Islands,
                         nav,
                     ),
@@ -127,12 +127,6 @@ fn build(state: &State, config: &Signal<ShellConfig>, nav: &creamui_router::Rout
                         "Desktop icons",
                         "Folders, shortcuts and layout",
                         Section::DesktopIcons,
-                        nav,
-                    ),
-                    link(
-                        "Status icons",
-                        "Network, battery, audio and brightness",
-                        Section::Tray,
                         nav,
                     ),
                 ],

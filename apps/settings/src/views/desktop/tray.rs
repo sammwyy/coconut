@@ -1,97 +1,123 @@
-use crate::components::{group, labeled_group, row, section};
-use coconut_core::ShellConfig;
+use super::islands::page_link;
+use crate::{
+    components::{group, labeled_group, row},
+    views::context::ViewContext,
+};
 use coconut_plugin_tray::{TrayConfig, TrayMode, TrayVisibility};
-use creamui_core::{BoxedWidget, Size};
-use creamui_reactive::Signal;
-use creamui_widgets::SegmentedControl;
+use creamui_core::{BoxedWidget, Styled};
+use creamui_widgets::{
+    layout::Flex, Button, ButtonSize, ButtonState, ButtonVariant, SegmentedControl, Select, Switch,
+    Text, TextSize,
+};
 
-const MODES: [TrayMode; 2] = [TrayMode::Grouped, TrayMode::Individual];
-const VISIBILITIES: [TrayVisibility; 3] = [
-    TrayVisibility::Always,
-    TrayVisibility::Hidden,
-    TrayVisibility::Off,
-];
+type GetVisibility = fn(&TrayConfig) -> TrayVisibility;
+type SetVisibility = fn(&mut TrayConfig, TrayVisibility);
 
-fn persist(tray: &TrayConfig) {
-    if let Err(error) = coconut_core::modules::save_module("tray", tray) {
-        eprintln!("settings: failed to save modules/tray.toml: {error}");
+pub(super) fn widget_options(context: &ViewContext, id: &str) -> BoxedWidget {
+    let state = &context.island_settings;
+    let tray = state.tray.get();
+    let mut body = Vec::<BoxedWidget>::new();
+    if id == "control_center" {
+        let update = state.tray.clone();
+        let mode = SegmentedControl::new(
+            usize::from(tray.mode == TrayMode::Individual),
+            move |index| {
+                update.update(|tray| {
+                    tray.mode = if index == 0 {
+                        TrayMode::Grouped
+                    } else {
+                        TrayMode::Individual
+                    }
+                })
+            },
+        )
+        .option("Together")
+        .option("Separate");
+        body.push(group(vec![row("Status controls", Box::new(mode))]));
+        body.push(labeled_group(
+            "Included controls",
+            group(
+                [
+                    ("Wi-Fi", "/desktop/widgets/tray.wifi"),
+                    ("Bluetooth", "/desktop/widgets/tray.bluetooth"),
+                    ("Battery", "/desktop/widgets/tray.battery"),
+                    ("Volume", "/desktop/widgets/tray.volume"),
+                    ("Brightness", "/desktop/widgets/tray.brightness"),
+                ]
+                .into_iter()
+                .map(|(label, route)| page_link(context, label, "Configure this control", route))
+                .collect(),
+            ),
+        ));
+    } else if let Some((get, set)) = visibility(id) {
+        let options = [
+            TrayVisibility::Always,
+            TrayVisibility::Hidden,
+            TrayVisibility::Off,
+        ];
+        let selected = options
+            .iter()
+            .position(|option| *option == get(&tray))
+            .unwrap_or(0);
+        let update = state.tray.clone();
+        let control = Select::controlled(
+            &["Bar and panel", "Panel only", "Off"],
+            context.native.select(id, selected),
+        )
+        .width(160.0)
+        .on_select(move |index| update.update(|tray| set(tray, options[index])));
+        let mut rows = vec![row("Show in", Box::new(control))];
+        if id == "tray.battery" {
+            let update = state.tray.clone();
+            rows.push(row(
+                "Battery percentage",
+                Box::new(Switch::new(tray.show_battery_percentage, move || {
+                    update
+                        .update(|tray| tray.show_battery_percentage = !tray.show_battery_percentage)
+                })),
+            ));
+        }
+        body.push(group(rows));
+        let (label, route) = match id {
+            "tray.wifi" => ("Network settings", "/connectivity/network"),
+            "tray.bluetooth" => ("Bluetooth settings", "/connectivity/bluetooth"),
+            "tray.volume" => ("Sound settings", "/hardware"),
+            "tray.brightness" => ("Display settings", "/hardware/displays"),
+            _ => ("Power settings", "/hardware"),
+        };
+        body.push(group(vec![
+            page_link(
+                context,
+                label,
+                "Configure the device and system behavior",
+                route,
+            ),
+            page_link(
+                context,
+                "Control Center",
+                "Choose whether controls appear together or separately",
+                "/desktop/widgets/control_center",
+            ),
+        ]));
     }
-    let _ = coconut_core::ipc::publish_module_config_changed();
+    let save = state.clone();
+    let window = context.window.clone();
+    body.push(Box::new(Flex::column().gap(10.0)
+        .child(Box::new(Text::secondary("Separate controls require Separate mode in Control Center. Apply changes, then start a new session.").size(TextSize::Sm)))
+        .child(Box::new(Button::styled(ButtonVariant::Primary, ButtonSize::Sm, "Apply changes", ButtonState::Normal, move || { if let Some(window) = window.borrow().as_ref() { save.save_tray(window); } }).disabled(state.busy.get() || tray == state.saved_tray.get())))));
+    Box::new(Flex::column().gap(18.0).with_children(body))
 }
 
-/// The tray's own settings (mode, per-device visibility) live in
-/// `modules/tray.toml`, not `shell.toml` — this section manages that file
-/// directly instead of the shared `ShellConfig` signal every other section
-/// edits. A generic, schema-free per-module editor (modeled on
-/// `sections/window.rs`'s `toml::Value` path helpers) is the real design
-/// for this from the dock/island/panel refactor plan; this is the minimal
-/// version that keeps Settings compiling and usable against the new
-/// `modules/<id>.toml` split.
-pub fn build(_: Size, _config: &Signal<ShellConfig>) -> BoxedWidget {
-    let tray: TrayConfig = coconut_core::modules::load_module("tray");
-    let state = Signal::new(tray);
-
-    let mode_selected = MODES
-        .iter()
-        .position(|mode| *mode == state.get().mode)
-        .unwrap_or(0);
-    let set_mode = state.clone();
-    let mode_control: BoxedWidget = Box::new(
-        SegmentedControl::new(mode_selected, move |index: usize| {
-            set_mode.update(|t| t.mode = MODES[index]);
-            persist(&set_mode.peek());
-        })
-        .option("One group")
-        .option("Separate"),
-    );
-
-    section(
-        "Status icons",
-        "Choose which quick status controls are shown and how they are arranged. Changes appear after signing out and back in.",
-        vec![
-            labeled_group("Arrangement", group(vec![row("Mode", mode_control)])),
-            labeled_group("Visibility", group(vec![
-                visibility_row("Wi-Fi", &state, |t| t.wifi, |t, v| t.wifi = v),
-                visibility_row("Bluetooth", &state, |t| t.bluetooth, |t, v| t.bluetooth = v),
-                visibility_row("Battery", &state, |t| t.battery, |t, v| t.battery = v),
-                visibility_row("Volume", &state, |t| t.volume, |t, v| t.volume = v),
-                visibility_row(
-                    "Brightness",
-                    &state,
-                    |t| t.brightness,
-                    |t, v| t.brightness = v,
-                ),
-            ])),
-        ],
-    )
-}
-
-fn visibility_row(
-    label: &str,
-    state: &Signal<TrayConfig>,
-    get: impl Fn(&TrayConfig) -> TrayVisibility,
-    set: impl Fn(&mut TrayConfig, TrayVisibility) + Copy + 'static,
-) -> BoxedWidget {
-    let selected = VISIBILITIES
-        .iter()
-        .position(|visibility| *visibility == get(&state.get()))
-        .unwrap_or(0);
-    let apply = state.clone();
-    let control: BoxedWidget = Box::new(
-        SegmentedControl::new(selected, move |index: usize| {
-            apply.update(|t| set(t, VISIBILITIES[index]));
-            persist(&apply.peek());
-        })
-        .option("Always")
-        .option("Hidden")
-        .option("Off"),
-    );
-    row(label, control)
-}
-
-pub(crate) fn route_view() -> BoxedWidget {
-    let context = creamui_reactive::use_context::<crate::views::context::ViewContext>();
-    let size = context.size;
-    let config = &context.config;
-    build(size, config)
+fn visibility(id: &str) -> Option<(GetVisibility, SetVisibility)> {
+    match id {
+        "tray.wifi" => Some((|tray| tray.wifi, |tray, value| tray.wifi = value)),
+        "tray.bluetooth" => Some((|tray| tray.bluetooth, |tray, value| tray.bluetooth = value)),
+        "tray.battery" => Some((|tray| tray.battery, |tray, value| tray.battery = value)),
+        "tray.volume" => Some((|tray| tray.volume, |tray, value| tray.volume = value)),
+        "tray.brightness" => Some((
+            |tray| tray.brightness,
+            |tray, value| tray.brightness = value,
+        )),
+        _ => None,
+    }
 }

@@ -50,7 +50,7 @@ impl Page {
             Self::Camera => "Camera permissions",
             Self::Microphone => "Microphone permissions",
             Self::ScreenCapture => "Screen capture permissions",
-            Self::Clipboard => "Clipboard",
+            Self::Clipboard => "Clipboard access",
             Self::Notifications => "Notifications & popups",
             Self::HotCorners => "Hot corners",
             Self::WindowRules => "Window rules",
