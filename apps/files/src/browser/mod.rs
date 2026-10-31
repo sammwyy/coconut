@@ -1,3 +1,4 @@
+mod loading;
 mod menus;
 use crate::{
     config::ExplorerConfig,
@@ -15,7 +16,7 @@ use creamui_render::{
 };
 use creamui_widgets::{ScrollController, TextController};
 use std::{
-    cell::RefCell,
+    cell::{Cell, RefCell},
     fs,
     path::{Path, PathBuf},
     process::Command,
@@ -43,11 +44,18 @@ pub(crate) struct BrowserState {
     pub(crate) window: Rc<RefCell<Option<WindowHandle>>>,
     pub(crate) result: Arc<Mutex<Option<PortalSelection>>>,
     pub(crate) explorer: ExplorerConfig,
+    directory_job_running: Rc<Cell<bool>>,
     pub(crate) search_active: Signal<bool>,
     pub(crate) address_editing: Signal<bool>,
 }
 impl BrowserState {
+    #[cfg(test)]
     pub(crate) fn new(request: WindowRequest) -> Self {
+        let state = Self::new_deferred(request);
+        state.load_directories();
+        state
+    }
+    pub(crate) fn new_deferred(request: WindowRequest) -> Self {
         let explorer = crate::config::Config::load().explorer;
         let location = request
             .start_directory
@@ -97,6 +105,7 @@ impl BrowserState {
             window: Rc::new(RefCell::new(None)),
             result: Arc::new(Mutex::new(None)),
             explorer,
+            directory_job_running: Rc::new(Cell::new(false)),
             search_active: Signal::new(false),
             address_editing: Signal::new(false),
         }
@@ -172,7 +181,17 @@ impl BrowserState {
         let index = self.active.peek();
         // Tab edits can write to nested text/scroll signals. Defer their
         // subscribers until Signal::update releases the tab list's borrow.
-        batch(|| self.tabs.update(|tabs| edit(&mut tabs[index])));
+        batch(|| {
+            self.tabs.update(|tabs| {
+                let tab = &mut tabs[index];
+                let previous_view = tab.view;
+                edit(tab);
+                if tab.view == DirectoryView::Columns && previous_view != tab.view {
+                    tab.reload();
+                }
+            });
+            self.load_directories();
+        });
     }
     pub(crate) fn navigate(&self, location: Location) {
         self.file_menu.close_menu();

@@ -14,7 +14,7 @@ use std::{
 /// The manager and the portal render the same native browser tree.
 pub fn show_window(request: WindowRequest) -> Option<crate::portal::PortalSelection> {
     ensure_wayland_display();
-    let browser = BrowserState::new(request);
+    let browser = BrowserState::new_deferred(request);
     let result = browser.result.clone();
     let window = browser.window.clone();
     let options = WindowOptions {
@@ -35,6 +35,7 @@ pub fn show_window(request: WindowRequest) -> Option<crate::portal::PortalSelect
             let keys = browser.clone();
             let blur = browser.clone();
             let pending = browser.file_menu.clone();
+            let loading = browser.clone();
             app.append_window(
                 options,
                 Color::rgba(0, 0, 0, 0),
@@ -51,6 +52,7 @@ pub fn show_window(request: WindowRequest) -> Option<crate::portal::PortalSelect
                         blur.close_search_if_empty();
                     });
                     *ready_window.borrow_mut() = Some(handle);
+                    loading.load_directories();
                 },
                 move |size| crate::views::build(&browser, size),
             );

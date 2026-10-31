@@ -30,22 +30,21 @@ fn build_scoped(b: &BrowserState, size: Size) -> BoxedWidget {
     } else {
         directory_view(b, &tab, content_width)
     };
-    let scroll: BoxedWidget =
-        if tab.view == DirectoryView::Columns && tab.location() != &Location::Home {
-            content
-        } else {
-            Box::new(
-                RawScrollView::controlled(
-                    Style {
-                        flex_grow: 1.0,
-                        flex_basis: Dimension::Length(0.0),
-                        ..column(0.0)
-                    },
-                    tab.scroll.clone(),
-                )
-                .child(content),
+    let scroll: BoxedWidget = if tab.location() != &Location::Home {
+        content
+    } else {
+        Box::new(
+            RawScrollView::controlled(
+                Style {
+                    flex_grow: 1.0,
+                    flex_basis: Dimension::Length(0.0),
+                    ..column(0.0)
+                },
+                tab.scroll.clone(),
             )
-        };
+            .child(content),
+        )
+    };
     let mut main = Vec::new();
     if tabs_at_top {
         if let Some(tabs) = tab_bar(b, content_width, sidebar_width, true) {

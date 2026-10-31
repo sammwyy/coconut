@@ -104,23 +104,25 @@ impl Icons {
         }
     }
     pub fn get(&self, name: &str) -> IconSource {
-        if let Some(names) = themed_names(name) {
-            if let Some(icon) = self.themed.borrow().get(name).cloned() {
-                return icon;
-            }
-            if let Some(image) = self.theme.load(names) {
-                let icon = IconSource::Image(IconImage {
+        if let Some(icon) = self.themed.borrow().get(name).cloned() {
+            return icon;
+        }
+        let icon = themed_names(name)
+            .and_then(|names| self.theme.load(names))
+            .map(|image| {
+                IconSource::Image(IconImage {
                     image: image.image().clone(),
                     monochrome: false,
-                });
-                self.themed.borrow_mut().insert(name.into(), icon.clone());
-                return icon;
-            }
-        }
-        self.fallback
-            .get(name)
-            .unwrap_or(&self.fallback["file"])
-            .clone()
+                })
+            })
+            .unwrap_or_else(|| {
+                self.fallback
+                    .get(name)
+                    .unwrap_or(&self.fallback["file"])
+                    .clone()
+            });
+        self.themed.borrow_mut().insert(name.into(), icon.clone());
+        icon
     }
 }
 

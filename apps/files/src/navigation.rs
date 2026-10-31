@@ -1,6 +1,6 @@
 use crate::{config::ExplorerConfig, filesystem as files};
-use creamui_widgets::{ScrollController, TextController};
-use std::{path::PathBuf, rc::Rc};
+use creamui_widgets::{ScrollController, TextController, VirtualListState};
+use std::{cell::RefCell, path::PathBuf, rc::Rc};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Location {
@@ -29,12 +29,30 @@ impl Location {
     }
 }
 
+pub(crate) struct VisibleEntries {
+    pub(crate) source: Rc<Vec<files::Entry>>,
+    pub(crate) query: String,
+    pub(crate) sort: SortColumn,
+    pub(crate) ascending: bool,
+    pub(crate) portal_type: Option<crate::portal::PortalType>,
+    pub(crate) filter: Option<crate::portal::FileFilter>,
+    pub(crate) entries: Rc<Vec<files::Entry>>,
+}
+
 #[derive(Clone)]
 pub(crate) struct Tab {
     pub(crate) history: Vec<Location>,
     pub(crate) cursor: usize,
     pub(crate) entries: Rc<Vec<files::Entry>>,
     pub(crate) error: Option<String>,
+    pub(crate) loading: bool,
+    pub(crate) load_revision: u64,
+    pub(crate) identity: Rc<()>,
+    pub(crate) column_entries: Rc<Vec<Result<Rc<Vec<files::Entry>>, String>>>,
+    pub(crate) column_visible: Vec<Rc<RefCell<Option<VisibleEntries>>>>,
+    pub(crate) visible: Rc<RefCell<Option<VisibleEntries>>>,
+    pub(crate) virtual_rows: VirtualListState,
+    pub(crate) column_rows: Vec<VirtualListState>,
     pub(crate) selected: Option<PathBuf>,
     pub(crate) view: DirectoryView,
     /// Directories displayed from left to right in Columns Mode.
@@ -66,6 +84,20 @@ impl Tab {
             cursor: 0,
             entries: Rc::new(Vec::new()),
             error: None,
+            loading: false,
+            load_revision: 0,
+            identity: Rc::new(()),
+            column_entries: Rc::new(Vec::new()),
+            column_visible: column_paths
+                .iter()
+                .map(|_| Rc::new(RefCell::new(None)))
+                .collect(),
+            visible: Rc::new(RefCell::new(None)),
+            virtual_rows: VirtualListState::new(0, 44.0),
+            column_rows: column_paths
+                .iter()
+                .map(|_| VirtualListState::new(0, 32.0))
+                .collect(),
             selected: None,
             view: if explorer.default_grid_view {
                 DirectoryView::Grid
@@ -90,25 +122,13 @@ impl Tab {
         &self.history[self.cursor]
     }
     pub(crate) fn reload(&mut self) {
+        self.load_revision = self.load_revision.wrapping_add(1);
+        self.loading = matches!(self.location(), Location::Directory(_));
         self.error = None;
-        self.entries = Rc::new(match self.location() {
-            Location::Home => Vec::new(),
-            Location::Directory(path) => match files::entries(path, self.show_hidden) {
-                Ok(entries) => entries,
-                Err(error) => {
-                    self.error = Some(format!("Could not read this folder: {error}"));
-                    Vec::new()
-                }
-            },
-        });
-        if self
-            .selected
-            .as_ref()
-            .is_some_and(|p| !self.entries.iter().any(|e| &e.path == p))
-        {
-            self.selected = None;
-        }
+        self.entries = Rc::new(Vec::new());
+        self.column_entries = Rc::new(Vec::new());
     }
+
     pub(crate) fn moved(&mut self) {
         self.selected = None;
         self.search.set_value("");
@@ -158,6 +178,10 @@ impl Tab {
             self.column_paths.push(path);
             self.column_scrolls.truncate(parent_index + 1);
             self.column_scrolls.push(ScrollController::new(0.0));
+            self.column_visible.truncate(parent_index + 1);
+            self.column_visible.push(Rc::new(RefCell::new(None)));
+            self.column_rows.truncate(parent_index + 1);
+            self.column_rows.push(VirtualListState::new(0, 32.0));
         } else {
             self.sync_columns();
         }
@@ -166,6 +190,16 @@ impl Tab {
 
     fn sync_columns(&mut self) {
         self.column_paths = column_paths(self.location());
+        self.column_visible = self
+            .column_paths
+            .iter()
+            .map(|_| Rc::new(RefCell::new(None)))
+            .collect();
+        self.column_rows = self
+            .column_paths
+            .iter()
+            .map(|_| VirtualListState::new(0, 32.0))
+            .collect();
         self.column_scrolls = self
             .column_paths
             .iter()

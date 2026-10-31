@@ -74,6 +74,24 @@ cargo fmt --check
 scenes for visual comparisons and are only used by tests.
 `CFILES_ICON_THEME` overrides the resolved desktop icon theme.
 
+## Directory performance
+
+Folder navigation and refresh load metadata on a background worker. Each window
+runs one directory load at a time, coalesces newer navigation requests, and ignores
+results for obsolete locations or closed tabs. Columns mode uses these same
+snapshots rather than reading directories during rendering.
+
+List, Grid and Columns mount only visible rows with a small overscan through
+CreamUI's virtual list. Filtering and sorting reuse a cached snapshot until the
+entries, query, sort order or chooser filter changes. Icon fallback results are
+cached as well. Directory metadata, filtered snapshots and row height indexes
+still use memory proportional to the number of entries; mounted widgets and
+painting are bounded by the viewport.
+
+`large_directories_mount_only_visible_rows_and_keep_cached_results` exercises
+20,000 entries, Unicode names, both themes, normal and compact windows, and
+scrolling to the last entry in all three views.
+
 ## Context menus
 
 Right-click a file or folder in Grid, List or Columns mode to act on that item

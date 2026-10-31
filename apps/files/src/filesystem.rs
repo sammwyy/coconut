@@ -66,11 +66,7 @@ pub(crate) fn entries(path: &Path, show_hidden: bool) -> io::Result<Vec<Entry>> 
             permissions: metadata.permissions().mode() & 0o777,
         });
     }
-    items.sort_by(|a, b| {
-        b.directory
-            .cmp(&a.directory)
-            .then_with(|| a.name().to_lowercase().cmp(&b.name().to_lowercase()))
-    });
+    items.sort_by_cached_key(|entry| (!entry.directory, entry.name().to_lowercase()));
     Ok(items)
 }
 

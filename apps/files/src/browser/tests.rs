@@ -701,3 +701,108 @@ fn home_context_targets_pinned_folders_drives_recent_files_and_background() {
         assert!(options.extras.iter().any(|item| item.id == "open-home"));
     });
 }
+
+#[test]
+fn large_directories_mount_only_visible_rows_and_keep_cached_results() {
+    let fixture = tempfile::tempdir().unwrap();
+    let seed = fixture.path().join("seed.txt");
+    fs::write(&seed, "text").unwrap();
+    let template = files::entries(fixture.path(), false).unwrap().remove(0);
+    let mut browser = BrowserState::new(WindowRequest::manager(Some(fixture.path().to_path_buf())));
+    browser.explorer = ExplorerConfig::default();
+    let entries = Rc::new(
+        (0..20_000)
+            .map(|index| files::Entry {
+                path: fixture
+                    .path()
+                    .join(format!("{index:05}-{}-日本語.txt", "long".repeat(50))),
+                ..template.clone()
+            })
+            .collect::<Vec<_>>(),
+    );
+    for theme in [Theme::light(), Theme::dark()] {
+        creamui_reactive::with_context_scope(|| {
+            creamui_reactive::provide_context(ThemeProvider::new(theme));
+            let _window = crate::test_window::TestWindow::install(TitlebarState {
+                mode: TitlebarMode::Server,
+                ..Default::default()
+            });
+            for mode in [
+                DirectoryView::List,
+                DirectoryView::Grid,
+                DirectoryView::Columns,
+            ] {
+                browser.edit(|tab| tab.view = mode);
+                browser.edit(|tab| {
+                    tab.entries = entries.clone();
+                    tab.column_entries = Rc::new(vec![Ok(entries.clone())]);
+                });
+                let cached = view::directory::visible_entries(&browser, &browser.tab());
+                assert_eq!(cached.len(), 20_000);
+                for size in [
+                    Size {
+                        width: 1100.0,
+                        height: 760.0,
+                    },
+                    Size {
+                        width: 640.0,
+                        height: 480.0,
+                    },
+                ] {
+                    let render =
+                        || {
+                            let started = Instant::now();
+                            let mut recorder = Recorder::default();
+                            let scene = Renderer::new().render(
+                                view::build(&browser, size),
+                                size,
+                                &mut recorder,
+                            );
+                            let count = (0..)
+                                .take_while(|index| scene.focus_id_at(*index).is_some())
+                                .count();
+                            assert!(
+                                count < 160,
+                                "mounted {count} focus targets for {} entries",
+                                entries.len()
+                            );
+                            assert!(
+                                recorder.0.iter().any(|(text, _)| text.starts_with("00000")
+                                    || text.starts_with("199")),
+                                "files must be painted"
+                            );
+                            assert!(Rc::ptr_eq(
+                                &cached,
+                                &view::directory::visible_entries(&browser, &browser.tab())
+                            ));
+                            eprintln!(
+                                "20,000 entries, {mode:?}, {}x{}: {count} focus targets, {:?}",
+                                size.width,
+                                size.height,
+                                started.elapsed()
+                            );
+                            recorder
+                        };
+                    let tab = browser.tab();
+                    tab.scroll.set(0.0);
+                    tab.column_scrolls[0].set(0.0);
+                    render();
+                    let (rows, scroll) = if mode == DirectoryView::Columns {
+                        (&tab.column_rows[0], &tab.column_scrolls[0])
+                    } else {
+                        (&tab.virtual_rows, &tab.scroll)
+                    };
+                    scroll.set((rows.total_height() - 220.0).max(0.0));
+                    let last = render();
+                    assert!(
+                        last.0.iter().any(|(text, _)| text.starts_with("19999")),
+                        "last entry must be reachable"
+                    );
+                }
+                browser.tab().search.set_value("no matching filename");
+                assert!(view::directory::visible_entries(&browser, &browser.tab()).is_empty());
+                browser.tab().search.set_value("");
+            }
+        });
+    }
+}

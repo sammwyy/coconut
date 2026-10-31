@@ -1,5 +1,8 @@
 # TODO
 
+- Resolve pre-existing strict Clippy failures in file-menu's copy tests
+  (`cloned_ref_to_slice_refs` in `crates/file-menu/src/operations.rs`) and the
+  shell's desktop entry loader (`implicit_clone` in `desktop/shell/src/desktop/mod.rs`).
 - Implement native notification history and unread counts for the statusbar
   notification capsule in the shell design.
 - `shell.toml` is only read at startup, including when edited through

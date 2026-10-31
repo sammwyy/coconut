@@ -113,47 +113,6 @@ impl BrowserState {
         options
     }
     pub(crate) fn refresh_directory(&self) {
-        let Some(window) = self.window.borrow().clone() else {
-            return;
-        };
-        let tab = self.tab();
-        let Location::Directory(path) = tab.location().clone() else {
-            return;
-        };
-        let index = self.active.peek();
-        let identity = tab.entries.clone();
-        let hidden = tab.show_hidden;
-        let inspect_path = path.clone();
-        let state = self.clone();
-        window.app().spawn_background(
-            move || files::entries(&inspect_path, hidden),
-            move |result| {
-                batch(|| {
-                    state.tabs.update(|tabs| {
-                        let Some(tab) = tabs.get_mut(index).filter(|tab| {
-                            tab.location() == &Location::Directory(path)
-                                && tab.show_hidden == hidden
-                                && Rc::ptr_eq(&tab.entries, &identity)
-                        }) else {
-                            return;
-                        };
-                        match result {
-                            Ok(entries) => {
-                                if tab.selected.as_ref().is_some_and(|path| {
-                                    !entries.iter().any(|entry| &entry.path == path)
-                                }) {
-                                    tab.selected = None;
-                                }
-                                tab.entries = Rc::new(entries);
-                                tab.error = None;
-                            }
-                            Err(error) => {
-                                tab.error = Some(format!("Could not read this folder: {error}"))
-                            }
-                        }
-                    })
-                });
-            },
-        );
+        self.edit(Tab::reload);
     }
 }
