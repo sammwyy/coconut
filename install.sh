@@ -179,6 +179,9 @@ cp "$ROOT/apps/files/data/cfiles.desktop" \
     "$ROOT/apps/viewer/data/cviewer.desktop" \
     "$ROOT/apps/screenshots/data/coconut-screenshots.desktop" \
     "$DATA/applications/"
+mkdir -p "$DATA/icons/hicolor/scalable/apps"
+install -m 644 "$ROOT/assets/icons/apps/app-files.svg" \
+    "$DATA/icons/hicolor/scalable/apps/cfiles.svg"
 
 for conf in blair-portals.conf coconut-portals.conf; do
     # Upgrade previously generated policies; preserve custom user selections.

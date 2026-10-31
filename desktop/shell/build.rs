@@ -4,7 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 fn main() {
-    let source_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/icons");
+    let source_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/glyphs");
     let output = PathBuf::from(env::var("OUT_DIR").expect("build output directory must exist"));
     let mut icons = Vec::new();
     collect_icons(&source_dir, &mut icons);
@@ -34,7 +34,7 @@ fn main() {
 }
 
 /// Icons are organized into per-category subfolders, so this walks
-/// `assets/icons` recursively; every icon is still registered by its bare
+/// `assets/glyphs` recursively; every icon is still registered by its bare
 /// file stem, wherever it lives in that tree.
 fn collect_icons(dir: &Path, icons: &mut Vec<PathBuf>) {
     println!("cargo:rerun-if-changed={}", dir.display());

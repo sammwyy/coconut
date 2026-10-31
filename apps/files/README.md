@@ -13,6 +13,8 @@ The executable is `cfiles`; the desktop name is **File Explorer**.
   file.
 - Ships a `.desktop` entry and an optional XDG Desktop Portal FileChooser
   backend for open, save, and folder-selection dialogs.
+- Installs the File Explorer icon from `assets/icons/apps/app-files.svg` as
+  `cfiles` in the desktop icon theme.
 - Renders through CreamUI's CPU backend; `CUI_OVERRIDE_RENDER_BACKEND=gpu`
   opts into `wgpu` per launch.
 - Shows image, video, audio cover and embedded Windows executable icon previews

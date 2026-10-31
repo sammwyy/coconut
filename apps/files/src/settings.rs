@@ -126,7 +126,7 @@ pub(crate) fn build(state: &State, size: Size) -> BoxedWidget {
         Page::About => (
             "About",
             "File Explorer",
-            coconut_ui::about!("File Explorer", Symbol::Folder),
+            coconut_ui::about!("File Explorer", state.icons.get("app")),
         ),
     };
     let mut document_children = if page == Page::About {

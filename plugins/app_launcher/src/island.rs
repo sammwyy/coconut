@@ -531,7 +531,7 @@ mod tests {
         use super::decode_svg_icon;
         use std::path::Path;
         let icon = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../assets/icons/settings/brightness.svg");
+            .join("../../assets/glyphs/settings/brightness.svg");
         assert!(decode_svg_icon(&icon).is_some());
     }
 }

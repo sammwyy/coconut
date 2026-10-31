@@ -44,6 +44,11 @@ transport surface; a monitor needs information displays; a file chooser has a
 selection/confirmation workflow. These are not reasons to duplicate generic menus,
 palettes, dialogs, or window controls.
 
+Bundled UI glyphs live in `assets/glyphs/<category>/<name>.svg`; application
+artwork lives in `assets/icons/apps/`. Reuse an existing glyph before adding
+another SVG or defining its paths inline in Rust. The shell registers glyphs
+by filename stem, so stems must be unique across categories.
+
 ## 2. Package and architecture
 
 Create an app under `apps/<name>/` with a `coconut-<name>` package, an explicit

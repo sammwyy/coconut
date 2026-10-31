@@ -69,7 +69,7 @@ pub fn run(paths: Vec<PathBuf>) {
 
 #[cfg(target_os = "linux")]
 fn tray_icon() -> TrayIcon {
-    let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32"><circle cx="16" cy="16" r="15" fill="#6366f1"/><path d="M12 8v16l13-8Z" fill="#fff"/></svg>"##;
+    let svg = include_bytes!("../../../../assets/icons/apps/app-music.svg");
     let image = ImageData::from_svg(svg, SvgSize::Exact(32, 32)).expect("bundled tray icon");
     TrayIcon::from_rgba(image.pixels().to_vec(), 32, 32).expect("tray icon dimensions")
 }

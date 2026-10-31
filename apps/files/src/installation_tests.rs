@@ -115,6 +115,12 @@ fn user_installer_installs_theme_integrations_and_preserves_existing_policy() {
         .join("xdg-desktop-portal/portals/cfiles.portal")
         .exists());
     assert!(data.join("applications/cfiles.desktop").exists());
+    let desktop = fs::read_to_string(data.join("applications/cfiles.desktop")).unwrap();
+    assert!(desktop.contains("Icon=cfiles\n"));
+    assert_eq!(
+        fs::read(data.join("icons/hicolor/scalable/apps/cfiles.svg")).unwrap(),
+        include_bytes!("../../../assets/icons/apps/app-files.svg")
+    );
     assert!(data.join("applications/cedit.desktop").exists());
     assert!(data.join("applications/ccalc.desktop").exists());
     assert!(install_root.join("bin/ccalc").exists());
