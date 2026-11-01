@@ -34,24 +34,18 @@ impl DesktopState {
             let refresh = self.clone();
             let settings = self.clone();
             options = options.properties(false).extras(vec![
-                ContextMenuItem::submenu(
-                    "sort",
-                    "Sort icons",
-                    vec![
-                        ContextMenuItem::new("sort-name", "Name", move || {
-                            creamui_reactive::batch(|| {
-                                sort.positions.set(HashMap::new());
-                                sort.selected.set(None);
-                                sort.entries.update(|entries| {
-                                    entries.sort_by_key(|entry| entry.label.to_lowercase())
-                                });
-                            });
-                        }),
-                        ContextMenuItem::new("arrange", "Align to grid", move || {
-                            arrange.positions.set(HashMap::new())
-                        }),
-                    ],
-                ),
+                ContextMenuItem::new("sort-name", "Sort by name", move || {
+                    creamui_reactive::batch(|| {
+                        sort.positions.set(HashMap::new());
+                        sort.selected.set(None);
+                        sort.entries.update(|entries| {
+                            entries.sort_by_key(|entry| entry.label.to_lowercase())
+                        });
+                    });
+                }),
+                ContextMenuItem::new("arrange", "Align to grid", move || {
+                    arrange.positions.set(HashMap::new())
+                }),
                 ContextMenuItem::new("refresh", "Refresh", move || refresh.reload()),
                 ContextMenuItem::new("desktop-settings", "Desktop settings…", move || {
                     let Some(window) = settings.desktop_window.borrow().clone() else {

@@ -488,7 +488,7 @@ fn icon_content(entry: &DesktopEntry, layout: &IconLayout, selected: bool) -> Bo
     let label = clamp_to_lines(
         &entry.label,
         layout.label_font,
-        layout.icon_box,
+        layout.tile_width,
         None,
         max_lines,
     );
@@ -500,10 +500,10 @@ fn icon_content(entry: &DesktopEntry, layout: &IconLayout, selected: bool) -> Bo
     };
     Box::new(jsx! {
         <Flex direction={FlexDirection::Column} size={(tile_width, tile_height)} padding={layout.outer_padding} gap={layout.gap} align={Align::Center} justify={Justify::Start} background={selection_tint} corner_radius={layout.hover_radius}>
-            <Flex size={(layout.icon_box, layout.icon_box)} align={Align::Center} justify={Justify::Center} background={fill} border={border} corner_radius={layout.corner_radius}>
+            <Flex size={(layout.icon_box, layout.icon_box)} flex_shrink={0.0} align={Align::Center} justify={Justify::Center} background={fill} border={border} corner_radius={layout.corner_radius}>
                 {icon}
             </Flex>
-            <RawText color={layout.label_color} font_size={layout.label_font} width={layout.icon_box}>{label}</RawText>
+            <RawText color={layout.label_color} font_size={layout.label_font} width={layout.tile_width} min_width={layout.tile_width} flex_shrink={0.0} text_align={creamui_core::TextAlign::Center}>{label}</RawText>
         </Flex>
     })
 }
@@ -566,6 +566,12 @@ fn badge_style(size: f32, left: bool) -> Style {
             size: fixed(size, size),
             ..Default::default()
         })
+        .property(creamui_core::StyleProp::AlignItems(
+            creamui_core::layout::AlignItems::Center,
+        ))
+        .property(creamui_core::StyleProp::JustifyContent(
+            creamui_core::layout::JustifyContent::Center,
+        ))
         .background(use_theme().colors.surface)
         .corner_radius(size * 0.2)
 }
@@ -1134,6 +1140,14 @@ mod tests {
                 size,
                 &mut recorder,
             );
+            if let Ok(prefix) = std::env::var("COCONUT_SHELL_SNAPSHOT") {
+                let mut raster = creamui_render::Rasterizer::new(900, 600);
+                raster.render(&recorder.finish(), &creamui_render::Damage::Full);
+                raster
+                    .pixmap()
+                    .save_png(format!("{prefix}-desktop.png"))
+                    .unwrap();
+            }
             let shell = ShellConfig::default();
             let layout = IconLayout::from_config(
                 &shell.desktop.icons,
@@ -1157,6 +1171,138 @@ mod tests {
             let background = Point { x: 700.0, y: 450.0 };
             scene.context_menu_at(background).unwrap()(background);
             assert_eq!(state.selected.peek(), None);
+        });
+    }
+
+    #[test]
+    fn desktop_labels_use_their_full_tile_width_without_shrinking_icons() {
+        struct Bounds {
+            labels: Vec<Rect>,
+            images: Vec<Rect>,
+        }
+        impl creamui_core::Painter for Bounds {
+            fn fill_rect(&mut self, _: Rect, _: Color, _: f32) {}
+            fn stroke_rect(&mut self, _: Rect, _: Color, _: f32, _: f32) {}
+            fn fill_text(
+                &mut self,
+                rect: Rect,
+                _: &str,
+                _: Color,
+                _: f32,
+                _: creamui_core::TextAlign,
+            ) {
+                self.labels.push(rect);
+            }
+            fn draw_image(&mut self, rect: Rect, _: &creamui_core::RgbaImage, _: Option<Color>) {
+                self.images.push(rect);
+            }
+        }
+        creamui_reactive::with_context_scope(|| {
+            coconut_plugin_kit::design::load_fonts();
+            creamui_reactive::provide_context(creamui_theme::ThemeProvider::new(
+                creamui_theme::Theme::dark(),
+            ));
+            let layout = test_layout();
+            for label in [
+                "Chatterino",
+                "GNU Radio Companion",
+                "A very long application shortcut name",
+            ] {
+                let entry = DesktopEntry {
+                    path: "/tmp/shortcut.desktop".into(),
+                    label: label.into(),
+                    icon: None,
+                    application_icon: None,
+                    symlink: false,
+                    kind: EntryKind::Launcher,
+                    target: DesktopTarget::Path("/tmp/shortcut.desktop".into()),
+                };
+                let mut bounds = Bounds {
+                    labels: Vec::new(),
+                    images: Vec::new(),
+                };
+                creamui_core::Renderer::new().render(
+                    icon_content(&entry, &layout, false),
+                    Size {
+                        width: layout.tile_width,
+                        height: layout.tile_height,
+                    },
+                    &mut bounds,
+                );
+                assert_eq!(bounds.labels.len(), 1);
+                let text = bounds.labels[0];
+                assert!((text.width - layout.tile_width).abs() <= 1.0);
+                assert!(
+                    text.height <= layout.label_line_height * UNSELECTED_LABEL_LINES as f32 + 1.0
+                );
+                assert!(text.y >= layout.outer_padding + layout.icon_box + layout.gap - 1.0);
+                assert!((bounds.images[0].width - layout.glyph).abs() <= 1.0);
+            }
+        });
+    }
+
+    #[test]
+    fn desktop_icons_keep_their_context_target_across_selection_rebuilds() {
+        creamui_reactive::with_context_scope(|| {
+            creamui_reactive::provide_context(creamui_theme::ThemeProvider::new(
+                creamui_theme::Theme::dark(),
+            ));
+            let state = DesktopState::default();
+            state.entries.set(
+                (0..4)
+                    .map(|index| {
+                        let path = PathBuf::from(format!("/tmp/document-{index}.txt"));
+                        DesktopEntry {
+                            path: path.clone(),
+                            label: format!("Document {index}"),
+                            icon: None,
+                            application_icon: None,
+                            symlink: index == 0,
+                            kind: EntryKind::File,
+                            target: DesktopTarget::Path(path),
+                        }
+                    })
+                    .collect(),
+            );
+            let size = Size {
+                width: 900.0,
+                height: 600.0,
+            };
+            let config = Signal::new(ShellConfig::default());
+            let shell = config.peek();
+            let layout = test_layout();
+            let area = usable_area(size, None, shell.dockbar.position, shell.dockbar.thickness);
+            let mut renderer = creamui_core::Renderer::new();
+            let mut recorder = creamui_render::SceneRecorder::new();
+            for index in [0, 1, 0, 3, 2, 0] {
+                let origin = initial_position_in_area(index, &layout, area);
+                for offset in [
+                    Point { x: 3.0, y: 3.0 },
+                    Point {
+                        x: layout.tile_width / 2.0,
+                        y: layout.outer_padding + layout.icon_box / 2.0,
+                    },
+                    Point {
+                        x: layout.tile_width - 3.0,
+                        y: layout.tile_height - 3.0,
+                    },
+                ] {
+                    recorder.begin(900, 600, 1.0, TRANSPARENT, use_theme().colors);
+                    let scene = renderer.render(
+                        build(size, state.clone(), config.clone(), Signal::new(None)),
+                        size,
+                        &mut recorder,
+                    );
+                    let at = Point {
+                        x: origin.x + offset.x,
+                        y: origin.y + offset.y,
+                    };
+                    scene
+                        .context_menu_at(at)
+                        .expect("the whole icon tile owns its menu")(at);
+                    assert_eq!(state.selected.peek(), Some(index));
+                }
+            }
         });
     }
 

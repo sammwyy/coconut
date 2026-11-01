@@ -320,9 +320,8 @@ Launcher icons and generic MIME/folder icons remain the fallback.
 
 The desktop uses `coconut-file-menu` for item and directory-background actions.
 Right-clicking an icon selects it without activating it; empty-space clicks clear
-the selection. Common file actions match File Explorer. The desktop adds Sort
-icons, Align to grid, Refresh and Desktop settings. Refresh preserves icon
-positions by file path and discards superseded background loads.
+the selection. Common file actions match File Explorer. The desktop adds Sort by name, Align to grid, Refresh and Desktop settings as
+direct actions. Refresh preserves icon positions by file path and discards superseded background loads.
 
 Keep generic menu behavior in CreamUI, file operations and shared menu composition
 in [coconut-file-menu](../../crates/file-menu/README.md), and desktop-only actions
@@ -374,7 +373,19 @@ helper, preserving the previous file when replacement fails.
 clicks, runtime context-menu builders, native file drag sources and filtered file
 drop targets. Both bar windows and `PanelHost` provide an `InteractionHost` in
 the reactive context. Menus use CreamUI's native popup host, with an overlay
-fallback, and respect keyboard dismissal and parent focus changes.
+fallback, and respect keyboard dismissal and parent focus changes. Opening a menu
+replaces the active menu in another host. Pending panel requests are cancelled by
+newer requests; popup replacement follows window teardown without a timed delay. Menu actions
+use the current client input serial when opening another popup on the bar.
+
+With a development session running, source its `environment` file and verify
+panel replacement with:
+
+```bash
+CUI_OVERRIDE_RENDER_BACKEND=cpu cargo test -p coconut-plugin-kit \
+  --features creamui-render/platform-wayland native_panel_switches \
+  -- --ignored --test-threads=1
+```
 
 ```rust,ignore
 Interactive::new(content)
@@ -400,7 +411,17 @@ transfer finishes. Unsupported backends return a native drag error.
 
 Plugins receive generic `PluginEvent` values through registered event handlers.
 Icon-theme changes and module-config invalidation do not require the shell to
-import a plugin's state types. The drawer and pinned-app plugin share the
+import a plugin's state types.
+
+The Open windows widget exposes capability-filtered Restore, Minimize,
+Maximize/Restore size, Open new window, Pin/Unpin, Close and Force quit actions.
+Restore explicitly focuses a window; the primary icon click retains its normal
+minimize toggle. Force quit requires confirmation and disconnects the owning
+native Wayland client through Blair, closing that client's windows without
+signalling a guessed PID. Native CreamUI toplevels announce their executable name
+as their application ID so the catalog can resolve their launcher and icon.
+
+The drawer and pinned-app plugin share the
 application catalog in plugin-kit; pin persistence belongs to coconut-core.
 See [Pinned apps](../../plugins/pinned_apps/README.md) for the widget, shared file
 format and validation commands. The shell has no pin/unpin dispatcher.
