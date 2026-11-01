@@ -1,35 +1,37 @@
+use super::control_editor::{self, Editor, GAP, ROW_HEIGHT};
+use super::control_tiles::{awake_tile, battery_tile, device_tile, slider_tile};
 use crate::config::TrayConfig;
+use crate::control_layout::COLUMNS;
 use crate::panels::{bluetooth, brightness, energy, network, volume};
 use crate::shared::{
     BatteryRevision, BluetoothPowered, BluetoothRevision, BrightnessLevel, KeepAwakeState,
     NetworkRevision, PowerProfileRevision, ToggleKeepAwake, VolumeLevel, WifiEnabled,
 };
+use crate::{Control, ControlLayout};
 use coconut_api::battery::{BatteryIntegration, Fallback as BatteryFallback};
 use coconut_api::bluetooth::{BluetoothIntegration, Fallback as BluetoothFallback};
 use coconut_api::brightness::{BrightnessIntegration, Fallback as BrightnessFallback};
 use coconut_api::network::{Fallback as NetworkFallback, NetworkIntegration};
 use coconut_api::volume::{Fallback as VolumeFallback, VolumeIntegration};
 use coconut_plugin_kit::chrome::{
-    compact_switch, fat_slider, shell_border, shell_card, shell_control_hover, shell_muted,
-    shell_panel, shell_selected, shell_text, wifi_strength_icon, ISLAND_RADIUS,
+    shell_border, shell_card, shell_muted, shell_text, wifi_strength_icon, ISLAND_RADIUS,
 };
 use coconut_plugin_kit::{Panel, PanelRenderContext};
-use creamui_core::layout::{FlexDirection, Style as LayoutStyle};
-use creamui_core::{Border, BoxedWidget, Size, StateStyle, Style, StyleProp, Styled, TextAlign};
-use creamui_macros::jsx;
+use creamui_core::layout::Style as LayoutStyle;
+use creamui_core::{Border, BoxedWidget, Size, StyleProp, Styled};
 use creamui_reactive::Signal;
 use creamui_widgets::{
-    layout::{fixed, Align, Flex},
-    RawButton, RawMarquee,
+    layout::{fixed, Align, Flex, Grid, StyleExt, Track},
+    ContextMenu, RawScrollView, RawText, RawView,
 };
 use std::rc::Rc;
 
 pub const WIDTH: u32 = 380;
 pub const HEIGHT: u32 = 620;
 
-const TILE_W: f32 = 169.0;
-const TILE_H: f32 = 86.0;
-const SLIDER_W: f32 = 324.0;
+#[cfg(test)]
+#[path = "control_center_tests.rs"]
+mod tests;
 
 /// Which content the control center popup currently shows, stored per-open
 /// via `ctx.scratch.get_or_insert_with(|| Signal::new(PanelView::Main))` so
@@ -87,11 +89,24 @@ enum PanelView {
 /// (including their own `scratch`-only state).
 pub struct ControlCenterPanel {
     tray: TrayConfig,
+    layout: Signal<ControlLayout>,
+    app: Option<creamui_render::AppHandle>,
 }
 
 impl ControlCenterPanel {
     pub fn new(tray: TrayConfig) -> Self {
-        Self { tray }
+        let mut layout: ControlLayout = coconut_core::modules::load_module("control-center");
+        layout.normalize();
+        Self {
+            tray,
+            layout: Signal::new(layout),
+            app: None,
+        }
+    }
+
+    pub fn with_app(mut self, app: creamui_render::AppHandle) -> Self {
+        self.app = Some(app);
+        self
     }
 }
 
@@ -137,6 +152,7 @@ impl Panel for ControlCenterPanel {
                     &ctx.shared,
                     &ctx.scratch,
                     Some(back_to_main(view.clone())),
+                    ctx.size,
                 );
             }
             PanelView::Bluetooth => {
@@ -144,16 +160,32 @@ impl Panel for ControlCenterPanel {
                     &ctx.shared,
                     &ctx.scratch,
                     Some(back_to_main(view.clone())),
+                    ctx.size,
                 );
             }
             PanelView::Energy => {
-                return energy::build_content(&ctx.shared, Some(back_to_main(view.clone())));
+                return energy::build_content(
+                    &ctx.shared,
+                    &ctx.scratch,
+                    ctx.size,
+                    Some(back_to_main(view.clone())),
+                );
             }
             PanelView::Brightness => {
-                return brightness::build_content(&ctx.shared, Some(back_to_main(view.clone())));
+                return brightness::build_content(
+                    &ctx.shared,
+                    &ctx.scratch,
+                    ctx.size,
+                    Some(back_to_main(view.clone())),
+                );
             }
             PanelView::Volume => {
-                return volume::build_content(&ctx.shared, Some(back_to_main(view.clone())));
+                return volume::build_content(
+                    &ctx.shared,
+                    &ctx.scratch,
+                    ctx.size,
+                    Some(back_to_main(view.clone())),
+                );
             }
             PanelView::Main => {}
         }
@@ -269,9 +301,6 @@ impl Panel for ControlCenterPanel {
                 _ => "battery-empty",
             }
         };
-        let battery_value = battery_percent
-            .map(|percent| format!("{percent}%"))
-            .unwrap_or_else(|| "--".into());
         let battery_caption = if battery_percent.is_none() {
             "(Unavailable)"
         } else if battery.charging() {
@@ -342,181 +371,228 @@ impl Panel for ControlCenterPanel {
             Rc::new(move || view.set(PanelView::Volume))
         };
 
-        let mut device_row = Flex::row().gap(10.0);
-        if self.tray.wifi.shows_in_panel() {
-            device_row = device_row.child(device_tile(
-                wifi_icon,
-                "Wi-Fi",
-                network_name,
-                wifi_caption,
-                wifi_on,
-                toggle_wifi,
-                open_network_view,
+        let editor = ctx
+            .scratch
+            .get_or_insert_with(|| Editor::new(self.layout.peek()));
+        let editing = editor.editing.get();
+        let layout = editor.layout.get();
+        let available: Vec<_> = Control::ALL
+            .into_iter()
+            .filter(|control| match control {
+                Control::Wifi => self.tray.wifi.shows_in_panel(),
+                Control::Bluetooth => self.tray.bluetooth.shows_in_panel(),
+                Control::Battery => self.tray.battery.shows_in_panel(),
+                Control::Brightness => self.tray.brightness.shows_in_panel(),
+                Control::Volume => self.tray.volume.shows_in_panel(),
+                Control::KeepAwake => true,
+            })
+            .collect();
+        let width = (ctx.size.width - 34.0).max(0.0);
+        let grid_width = (width - 8.0).max(0.0);
+        let column_width = (grid_width - GAP * f32::from(COLUMNS - 1)) / f32::from(COLUMNS);
+        let mut visible = layout.clone();
+        visible
+            .tiles
+            .retain(|tile| available.contains(&tile.control));
+        visible.tiles.sort_by_key(|tile| tile.control as u8);
+        let preview = editor.preview.get();
+        let rows = visible
+            .rows()
+            .max(preview.map_or(0, |tile| tile.row + u16::from(tile.height)));
+        let grid_height = (f32::from(rows) * (ROW_HEIGHT + GAP) - GAP).max(ROW_HEIGHT);
+        let mut grid = Grid::new()
+            .columns(usize::from(COLUMNS))
+            .gap(GAP)
+            .template_rows((0..rows.max(1)).map(|_| Track::px(ROW_HEIGHT)))
+            .size(grid_width, grid_height);
+        for tile in visible.tiles {
+            let size = Size {
+                width: f32::from(tile.width) * (column_width + GAP) - GAP,
+                height: f32::from(tile.height) * (ROW_HEIGHT + GAP) - GAP,
+            };
+            let content = if editing {
+                editor.tile(tile, size, column_width)
+            } else {
+                let content = match tile.control {
+                    Control::Wifi => device_tile(
+                        size,
+                        wifi_icon,
+                        "Wi-Fi",
+                        network_name.clone(),
+                        wifi_caption,
+                        wifi_on,
+                        toggle_wifi.clone(),
+                        open_network_view.clone(),
+                    ),
+                    Control::Bluetooth => device_tile(
+                        size,
+                        bluetooth_icon,
+                        "Bluetooth",
+                        bluetooth_name.clone(),
+                        bluetooth_caption,
+                        bluetooth_on,
+                        toggle_bluetooth.clone(),
+                        open_bluetooth_view.clone(),
+                    ),
+                    Control::Battery => battery_tile(
+                        size,
+                        battery_icon,
+                        battery_percent,
+                        battery_caption,
+                        open_energy_view.clone(),
+                    ),
+                    Control::KeepAwake => awake_tile(size, awake, toggle_awake.clone()),
+                    Control::Brightness => slider_tile(
+                        size,
+                        "brightness",
+                        "Brightness",
+                        brightness_value,
+                        brightness_text.clone(),
+                        open_brightness_view.clone(),
+                        {
+                            let set_brightness = set_brightness.clone();
+                            let brightness_backend = brightness_backend.clone();
+                            move |level| {
+                                set_brightness.set(level);
+                                brightness_backend.set_level(level);
+                            }
+                        },
+                    ),
+                    Control::Volume => slider_tile(
+                        size,
+                        volume_icon,
+                        "Volume",
+                        volume_value,
+                        volume_text.clone(),
+                        open_volume_view.clone(),
+                        {
+                            let set_volume = set_volume.clone();
+                            let volume_backend = volume_backend.clone();
+                            move |level| {
+                                set_volume.set(level);
+                                volume_backend.set_level(level);
+                            }
+                        },
+                    ),
+                };
+                let edit = editor.clone();
+                Box::new(
+                    RawView::new(LayoutStyle::default())
+                        .with_context_menu(move |point| edit.open_tile(point, tile))
+                        .child(content),
+                ) as BoxedWidget
+            };
+            grid = grid.child(control_editor::positioned(
+                content,
+                tile,
+                size,
+                tile.control.label(),
             ));
         }
-        if self.tray.bluetooth.shows_in_panel() {
-            device_row = device_row.child(device_tile(
-                bluetooth_icon,
-                "Bluetooth",
-                bluetooth_name,
-                bluetooth_caption,
-                bluetooth_on,
-                toggle_bluetooth,
-                open_bluetooth_view,
+        if let Some(tile) = preview {
+            let mut tile = tile;
+            tile.width = tile.width.clamp(1, COLUMNS);
+            tile.column = tile.column.min(COLUMNS - tile.width);
+            let size = Size {
+                width: f32::from(tile.width) * (column_width + GAP) - GAP,
+                height: f32::from(tile.height) * (ROW_HEIGHT + GAP) - GAP,
+            };
+            let ghost = Flex::column()
+                .size(size.width, size.height)
+                .padding(8.0)
+                .property(StyleProp::Border(Border::new(
+                    coconut_plugin_kit::chrome::shell_accent(),
+                    2.0,
+                )))
+                .property(StyleProp::CornerRadius(ISLAND_RADIUS));
+            grid = grid.child(control_editor::positioned(
+                Box::new(ghost),
+                tile,
+                size,
+                "drop-preview",
             ));
         }
-
-        let mut status_row = Flex::row().gap(10.0);
-        if self.tray.battery.shows_in_panel() {
-            status_row = status_row.child(status_tile(
-                battery_icon,
-                "Battery",
-                battery_value,
-                battery_caption,
-                open_energy_view,
+        if rows == 0 {
+            grid = grid.child(Box::new(
+                RawView::new(LayoutStyle::default().grid_column_span(u16::from(COLUMNS))).child(
+                    Box::new(RawText::new(
+                        "No controls. Choose Edit, then Add.",
+                        shell_muted(),
+                        13.0,
+                    )),
+                ),
             ));
         }
-        status_row = status_row.child(awake_tile(awake, toggle_awake));
-
-        let brightness_card: BoxedWidget = if self.tray.brightness.shows_in_panel() {
-            Box::new(slider_container().child(fat_slider(
-                "brightness",
-                "Brightness",
-                brightness_value,
-                brightness_text,
-                SLIDER_W,
-                Some(open_brightness_view),
-                move |level| {
-                    set_brightness.set(level);
-                    brightness_backend.set_level(level);
-                },
-            )))
-        } else {
-            // Keep the same grown, styled island even with nothing to show —
-            // an unstyled `<Flex/>` collapses to zero height, leaving a gap
-            // of bare (transparent) window below the wifi/battery cards
-            // instead.
-            Box::new(slider_container())
-        };
-        let volume_card: BoxedWidget = if self.tray.volume.shows_in_panel() {
-            Box::new(slider_container().child(fat_slider(
-                volume_icon,
-                "Volume",
-                volume_value,
-                volume_text,
-                SLIDER_W,
-                Some(open_volume_view),
-                move |level| {
-                    set_volume.set(level);
-                    volume_backend.set_level(level);
-                },
-            )))
-        } else {
-            Box::new(slider_container())
-        };
-
-        Box::new(jsx! {
-            <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={16.0} gap={12.0} background={shell_card()} border={(shell_border(), 1.0)}>
-                {coconut_plugin_kit::chrome::settings_panel_header("system", "Control center", "/connectivity", None)}
-                {Box::new(device_row) as BoxedWidget}
-                {Box::new(status_row) as BoxedWidget}
-                {brightness_card}
-                {volume_card}
-            </Flex>
-        })
-    }
-}
-
-/// A single slider's own full-width card — brightness and volume each get
-/// one, rather than sharing a single box, but both still grow to fill
-/// whatever vertical space is left, split evenly between them.
-fn slider_container() -> Flex {
-    Flex::column()
-        .grow(1.0)
-        .padding(12.0)
-        .justify(creamui_widgets::layout::Justify::Center)
-        .property(StyleProp::Background(shell_panel().into()))
-        .property(StyleProp::Border(Border::new(shell_border(), 1.0)))
-        .property(StyleProp::CornerRadius(ISLAND_RADIUS))
-}
-
-fn device_tile(
-    icon: &str,
-    kicker: &str,
-    name: String,
-    caption: &str,
-    enabled: bool,
-    on_toggle: Rc<dyn Fn()>,
-    on_open: Rc<dyn Fn()>,
-) -> BoxedWidget {
-    let mut name = RawMarquee::new(name, shell_text(), 13.0, TILE_W - 20.0).bold(true);
-    name.style.layout.size.height = creamui_core::layout::Dimension::Length(18.0);
-    let name = Box::new(name) as BoxedWidget;
-    let content = Box::new(jsx! {
-        <Flex direction={FlexDirection::Column} size={(TILE_W, TILE_H)} padding={10.0} gap={7.0}>
-            <Flex direction={FlexDirection::Row} gap={8.0} align={Align::Center}>
-                {coconut_plugin_kit::chrome::icon_badge(icon, 24.0)}
-                <RawText color={shell_muted()} font_size={11.0} align={TextAlign::Start}>{kicker}</RawText>
-                <Flex grow={1.0} />
-                {compact_switch(enabled, on_toggle)}
-            </Flex>
-            {name}
-            <RawText color={shell_muted()} font_size={10.0} align={TextAlign::Start}>{caption}</RawText>
-        </Flex>
-    });
-    Box::new(RawButton::new(tile_style(), move || on_open()).child(content))
-}
-
-fn status_tile(
-    icon: &str,
-    kicker: &str,
-    value: String,
-    caption: &str,
-    on_open: Rc<dyn Fn()>,
-) -> BoxedWidget {
-    let content = Box::new(jsx! {
-        <Flex direction={FlexDirection::Column} size={(TILE_W, TILE_H)} padding={10.0} gap={6.0} justify={creamui_widgets::layout::Justify::Center}>
-            <Flex direction={FlexDirection::Row} gap={8.0} align={Align::Center}>
-                {coconut_plugin_kit::chrome::icon_badge(icon, 24.0)}
-                <RawText color={shell_muted()} font_size={11.0} align={TextAlign::Start}>{kicker}</RawText>
-            </Flex>
-            <Flex direction={FlexDirection::Row} align={Align::Center} gap={8.0}>
-                <RawText color={shell_text()} font_size={18.0} align={TextAlign::Start}>{value}</RawText>
-                <RawText color={shell_muted()} font_size={11.0} align={TextAlign::Start}>{caption}</RawText>
-            </Flex>
-        </Flex>
-    });
-    Box::new(RawButton::new(tile_style(), move || on_open()).child(content))
-}
-
-fn tile_style() -> Style {
-    Style::new()
-        .layout(LayoutStyle {
-            size: fixed(TILE_W, TILE_H),
+        let error = editor.error.get();
+        let mut header = Flex::row().align(Align::Center).gap(8.0).child(
+            coconut_plugin_kit::chrome::settings_panel_header(
+                "system",
+                "Control center",
+                "/connectivity",
+                None,
+            ),
+        );
+        if !editing {
+            header = header
+                .child(Box::new(Flex::row().grow(1.0)))
+                .child(editor.toolbar(self.layout.clone(), self.app.clone(), available.clone()));
+        }
+        let mut root = Flex::column()
+            .size(ctx.size.width, ctx.size.height)
+            .padding(16.0)
+            .gap(12.0)
+            .property(StyleProp::Background(shell_card().into()))
+            .property(StyleProp::Border(Border::new(shell_border(), 1.0)))
+            .child(Box::new(header));
+        if editing {
+            root = root
+                .child(editor.toolbar(self.layout.clone(), self.app.clone(), available.clone()))
+                .child(Box::new(RawText::new(
+                    "Drag to move · Drag the corner to resize",
+                    shell_muted(),
+                    11.0,
+                )));
+        }
+        if let Some(error) = error.as_ref() {
+            root = root.child(Box::new(RawText::new(error.clone(), shell_text(), 12.0)));
+        }
+        let viewport_height = (ctx.size.height
+            - if editing { 140.0 } else { 74.0 }
+            - if error.is_some() { 32.0 } else { 0.0 })
+        .max(0.0);
+        editor.scroll.set(
+            editor
+                .scroll
+                .peek()
+                .min((grid_height - viewport_height).max(0.0)),
+        );
+        root = root.child(Box::new(
+            RawScrollView::controlled(
+                control_editor::scroll_style(width, viewport_height),
+                editor.scroll.clone(),
+            )
+            .child(Box::new(grid)),
+        ));
+        let menu = editor.clone();
+        let mut root = RawView::new(LayoutStyle {
+            size: fixed(ctx.size.width, ctx.size.height),
             ..Default::default()
         })
-        .background(shell_panel())
-        .border(shell_border(), 1.0)
-        .corner_radius(ISLAND_RADIUS)
-        .box_shadow(coconut_plugin_kit::design::card_shadow())
-        .hover(StateStyle::new().background(shell_control_hover()))
-        .pressed(StateStyle::new().background(shell_selected()))
+        .with_context_menu(move |point| menu.open_add(point, &available))
+        .child(Box::new(root));
+        if editor.menu.is_open() {
+            let menu = creamui_reactive::with_context_scope(|| {
+                let mut theme = creamui_theme::use_theme();
+                theme.colors.surface_elevated.a = 255;
+                creamui_reactive::provide_context(creamui_theme::ThemeProvider::new(theme));
+                ContextMenu::new(&editor.menu, ctx.size)
+            });
+            root = root.child(Box::new(menu));
+        }
+        Box::new(root)
+    }
 }
 
 fn back_to_main(view: Signal<PanelView>) -> Rc<dyn Fn()> {
     Rc::new(move || view.set(PanelView::Main))
-}
-
-fn awake_tile(awake: bool, toggle_awake: Rc<dyn Fn()>) -> BoxedWidget {
-    let caption = if awake { "Holding" } else { "Idle" };
-    Box::new(jsx! {
-        <Flex direction={FlexDirection::Column} size={(TILE_W, TILE_H)} padding={10.0} gap={6.0} background={shell_panel()} border={(shell_border(), 1.0)} corner_radius={ISLAND_RADIUS} justify={creamui_widgets::layout::Justify::Center}>
-            <Flex direction={FlexDirection::Row} gap={8.0} align={Align::Center}>
-                <RawText color={shell_muted()} font_size={11.0} align={TextAlign::Start}>"Keep awake"</RawText>
-                <Flex grow={1.0} />
-                {compact_switch(awake, toggle_awake)}
-            </Flex>
-            <RawText color={shell_text()} font_size={15.0} align={TextAlign::Start}>{caption}</RawText>
-        </Flex>
-    })
 }

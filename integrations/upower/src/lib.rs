@@ -1,4 +1,4 @@
-use coconut_api::battery::BatteryIntegration;
+use coconut_api::battery::{BatteryDetails, BatteryIntegration};
 use coconut_api::{spawn_event_bridge, ChangeListener, EventBridgeGuard};
 use dbus::blocking::stdintf::org_freedesktop_dbus::{Properties, PropertiesPropertiesChanged};
 use dbus::blocking::{Connection, SyncConnection};
@@ -19,6 +19,7 @@ const BATTERY_KIND: u32 = 2;
 struct State {
     percentage: Option<u8>,
     charging: bool,
+    details: BatteryDetails,
 }
 
 pub struct UPower {
@@ -66,6 +67,12 @@ impl BatteryIntegration for UPower {
 
     fn changes(&self) -> Option<ChangeListener> {
         Some(self.changes.clone())
+    }
+    fn details(&self) -> BatteryDetails {
+        self.state
+            .lock()
+            .map(|state| state.details.clone())
+            .unwrap_or_default()
     }
 }
 
@@ -120,9 +127,44 @@ fn refresh(connection: &SyncConnection, device: &Path<'static>, state: &Arc<Mute
             .map(|value| value.round() as u8)
     });
     let raw_state = proxy.get::<u32>(DEVICE_INTERFACE, "State").unwrap_or(0);
+    let charging = matches!(raw_state, 1 | 4);
+    let remaining = proxy
+        .get::<i64>(
+            DEVICE_INTERFACE,
+            if charging {
+                "TimeToFull"
+            } else {
+                "TimeToEmpty"
+            },
+        )
+        .ok()
+        .filter(|seconds| *seconds > 0)
+        .map(|seconds| seconds as u64);
+    let details = if present {
+        BatteryDetails {
+            time_remaining_seconds: remaining,
+            health_percent: proxy
+                .get::<f64>(DEVICE_INTERFACE, "Capacity")
+                .ok()
+                .filter(|value| value.is_finite() && *value > 0.0)
+                .map(|value| value.round().clamp(0.0, 100.0) as u8),
+            power_watts: proxy
+                .get::<f64>(DEVICE_INTERFACE, "EnergyRate")
+                .ok()
+                .filter(|value| value.is_finite() && *value >= 0.0)
+                .map(|value| value as f32),
+            cycles: proxy
+                .get::<i32>(DEVICE_INTERFACE, "ChargeCycles")
+                .ok()
+                .and_then(|value| u32::try_from(value).ok()),
+        }
+    } else {
+        BatteryDetails::default()
+    };
     let next = State {
         percentage: percentage.flatten(),
-        charging: matches!(raw_state, 1 | 4),
+        charging,
+        details,
     };
     if let Ok(mut current) = state.lock() {
         *current = next;

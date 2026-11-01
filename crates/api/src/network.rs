@@ -87,6 +87,20 @@ pub trait NetworkIntegration {
     /// SSID when one exists, otherwise creates one on the fly if the
     /// network is open. A secured network with no saved profile is a no-op.
     fn connect_wifi(&self, _ssid: &str) {}
+    fn supports_password_connection(&self) -> bool {
+        false
+    }
+    fn connect_wifi_with_password(&self, _ssid: &str, _password: &str) {}
+    fn connecting_network(&self) -> Option<String> {
+        None
+    }
+    fn last_error(&self) -> Option<String> {
+        None
+    }
+    fn can_disconnect(&self) -> bool {
+        false
+    }
+    fn disconnect(&self, _interface: &str) {}
     /// Deletes the saved profile for a Wi-Fi network, if one exists.
     fn forget_wifi(&self, _ssid: &str) {}
     /// Reads the saved password for a Wi-Fi network's saved profile, if any
@@ -95,6 +109,11 @@ pub trait NetworkIntegration {
     fn wifi_password(&self, _ssid: &str) -> Option<String> {
         None
     }
+    fn request_wifi_password(&self, _ssid: &str) {}
+    fn cached_wifi_password(&self, _ssid: &str) -> Option<String> {
+        None
+    }
+    fn clear_wifi_password(&self) {}
 }
 
 pub struct Fallback;

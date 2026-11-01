@@ -491,7 +491,7 @@ pub fn list_row(
             .padding(10.0)
             .gap(10.0)
             .align(Align::Center)
-            .property(StyleProp::Width(LIST_WIDTH.into()))
+            .property(StyleProp::Width(creamui_core::LengthValue::Percent(100.0)))
             .child(icon_badge(icon, 24.0))
             .child(text_column)
             .child(trailing),
@@ -551,6 +551,65 @@ fn detail_row_inner(label: &str, value: String, action: Option<BoxedWidget>) -> 
             {action}
         </Flex>
     })
+}
+
+#[cfg(test)]
+mod row_tests {
+    use super::*;
+    use creamui_core::{Painter, Point, Rect, Renderer, Size};
+    use std::cell::Cell;
+
+    struct EmptyPainter;
+    impl Painter for EmptyPainter {
+        fn fill_rect(&mut self, _: Rect, _: Color, _: f32) {}
+        fn stroke_rect(&mut self, _: Rect, _: Color, _: f32, _: f32) {}
+        fn fill_text(&mut self, _: Rect, _: &str, _: Color, _: f32, _: TextAlign) {}
+    }
+
+    #[test]
+    fn list_row_actions_follow_the_available_width() {
+        creamui_reactive::with_context_scope(|| {
+            design::load_fonts();
+            creamui_reactive::provide_context(creamui_theme::ThemeProvider::new(
+                design::coconut_theme(creamui_theme::Theme::light()),
+            ));
+            for width in [240.0, 348.0] {
+                let clicked = Rc::new(Cell::new(false));
+                let action = clicked.clone();
+                let row = list_row(
+                    "wifi-excellent",
+                    "Network".into(),
+                    "Connected".into(),
+                    Some(Box::new(RawButton::new(
+                        Style::new().layout(LayoutStyle {
+                            size: fixed(24.0, 24.0),
+                            ..Default::default()
+                        }),
+                        move || action.set(true),
+                    ))),
+                    false,
+                    None,
+                );
+                let size = Size {
+                    width,
+                    height: 80.0,
+                };
+                let scene = Renderer::new().render(
+                    Box::new(Flex::column().size(width, 80.0).child(row)),
+                    size,
+                    &mut EmptyPainter,
+                );
+                scene
+                    .hit_test(Point {
+                        x: width - 24.0,
+                        y: 25.0,
+                    })
+                    .expect("the row action must remain inside the available width")(
+                );
+                assert!(clicked.get());
+            }
+        });
+    }
 }
 
 /// A small icon-and-label pill button, used for compact actions that read

@@ -1,4 +1,8 @@
-use coconut_api::bluetooth::{BluetoothDevice, BluetoothIntegration};
+mod agent;
+
+use coconut_api::bluetooth::{
+    BluetoothDevice, BluetoothIntegration, PairingPrompt, PairingResponse,
+};
 use coconut_api::{spawn_event_bridge, ChangeListener, EventBridgeGuard};
 use dbus::arg::{PropMap, RefArg};
 use dbus::blocking::stdintf::org_freedesktop_dbus::{
@@ -29,6 +33,11 @@ struct State {
     device_name: Option<String>,
     devices: Vec<BluetoothDevice>,
     scanning: bool,
+    busy: Option<String>,
+    error: Option<String>,
+    operation_revision: u64,
+    prompt: Option<PairingPrompt>,
+    answer: Option<PairingResponse>,
 }
 
 pub struct BlueZ {
@@ -135,50 +144,114 @@ impl BluetoothIntegration for BlueZ {
     }
 
     fn connect(&self, address: &str) {
-        let address = address.to_owned();
-        thread::spawn(move || {
-            let Ok(connection) = Connection::new_system() else {
-                return;
-            };
-            let Some(path) = device_path_for(&connection, &address) else {
-                return;
-            };
-            let proxy = connection.with_proxy(SERVICE, path, Duration::from_secs(30));
-            let _: Result<(), _> = proxy.method_call(DEVICE_INTERFACE, "Connect", ());
-        });
+        self.device_action(address, DeviceAction::Connect);
     }
-
     fn disconnect(&self, address: &str) {
-        let address = address.to_owned();
-        thread::spawn(move || {
-            let Ok(connection) = Connection::new_system() else {
-                return;
-            };
-            let Some(path) = device_path_for(&connection, &address) else {
-                return;
-            };
-            let proxy = connection.with_proxy(SERVICE, path, Duration::from_secs(10));
-            let _: Result<(), _> = proxy.method_call(DEVICE_INTERFACE, "Disconnect", ());
-        });
+        self.device_action(address, DeviceAction::Disconnect);
     }
-
     fn forget(&self, address: &str) {
+        self.device_action(address, DeviceAction::Forget);
+    }
+    fn supports_trust(&self) -> bool {
+        true
+    }
+    fn set_trusted(&self, address: &str, trusted: bool) {
+        self.device_action(address, DeviceAction::Trust(trusted));
+    }
+    fn busy_address(&self) -> Option<String> {
+        self.state.lock().ok().and_then(|state| state.busy.clone())
+    }
+    fn last_error(&self) -> Option<String> {
+        self.state.lock().ok().and_then(|state| state.error.clone())
+    }
+    fn pairing_prompt(&self) -> Option<PairingPrompt> {
+        self.state
+            .lock()
+            .ok()
+            .and_then(|state| state.prompt.clone())
+    }
+    fn respond_to_pairing(&self, id: u64, response: PairingResponse) {
+        if let Ok(mut state) = self.state.lock() {
+            if state.prompt.as_ref().is_some_and(|prompt| prompt.id == id) {
+                state.answer = Some(response);
+                state.error = None;
+                state.operation_revision += 1;
+            }
+        }
+    }
+}
+
+enum DeviceAction {
+    Connect,
+    Disconnect,
+    Forget,
+    Trust(bool),
+}
+
+impl BlueZ {
+    fn device_action(&self, address: &str, action: DeviceAction) {
+        if let Ok(mut state) = self.state.lock() {
+            if state.busy.is_some() {
+                return;
+            }
+            state.busy = Some(address.to_owned());
+            state.error = None;
+            state.operation_revision += 1;
+        }
+        let state = self.state.clone();
         let address = address.to_owned();
         thread::spawn(move || {
-            let Ok(connection) = Connection::new_system() else {
-                return;
-            };
-            let Some(objects) = managed_objects(&connection) else {
-                return;
-            };
-            let Some(adapter) = adapter_path(&objects) else {
-                return;
-            };
-            let Some(device) = device_path_for(&connection, &address) else {
-                return;
-            };
-            let proxy = connection.with_proxy(SERVICE, adapter, Duration::from_secs(10));
-            let _: Result<(), _> = proxy.method_call(ADAPTER_INTERFACE, "RemoveDevice", (device,));
+            let result = (|| -> Result<(), String> {
+                let connection = Connection::new_system().map_err(|error| error.to_string())?;
+                let path = device_path_for(&connection, &address)
+                    .ok_or("The Bluetooth device is no longer available")?;
+                let proxy = connection.with_proxy(SERVICE, &path, Duration::from_secs(30));
+                match action {
+                    DeviceAction::Connect => {
+                        if !proxy
+                            .get::<bool>(DEVICE_INTERFACE, "Paired")
+                            .unwrap_or(false)
+                        {
+                            agent::pair(&connection, &path, &address, state.clone())?;
+                        }
+                        let _: () = proxy
+                            .set(DEVICE_INTERFACE, "Trusted", true)
+                            .map_err(|error| error.to_string())?;
+                        proxy
+                            .method_call(DEVICE_INTERFACE, "Connect", ())
+                            .map_err(|error| error.to_string())
+                    }
+                    DeviceAction::Disconnect => proxy
+                        .method_call(DEVICE_INTERFACE, "Disconnect", ())
+                        .map_err(|error| error.to_string()),
+                    DeviceAction::Trust(trusted) => proxy
+                        .set(DEVICE_INTERFACE, "Trusted", trusted)
+                        .map_err(|error| error.to_string()),
+                    DeviceAction::Forget => {
+                        let objects = managed_objects(&connection)
+                            .ok_or("Could not read Bluetooth devices")?;
+                        let adapter =
+                            adapter_path(&objects).ok_or("No Bluetooth adapter is available")?;
+                        connection
+                            .with_proxy(SERVICE, adapter, Duration::from_secs(5))
+                            .method_call(ADAPTER_INTERFACE, "RemoveDevice", (path,))
+                            .map_err(|error| error.to_string())
+                    }
+                }
+            })();
+            if let Ok(connection) = SyncConnection::new_system() {
+                refresh(&connection, &state);
+            }
+            if let Err(error) = &result {
+                eprintln!("bluez: device operation failed: {error}");
+            }
+            if let Ok(mut state) = state.lock() {
+                state.busy = None;
+                state.prompt = None;
+                state.answer = None;
+                state.error = result.err();
+                state.operation_revision += 1;
+            }
         });
     }
 }
@@ -272,17 +345,20 @@ fn run_event_bridge(
 
     let removed_rule =
         ObjectManagerInterfacesRemoved::match_rule(Some(&sender), None).static_clone();
+    let removed_state = state.clone();
+    let removed_changes = changes.clone();
     let _removed_token = connection
         .add_match(
             removed_rule,
             move |_: ObjectManagerInterfacesRemoved, connection, _| {
-                refresh(connection, &state);
-                let _ = changes.try_send(());
+                refresh(connection, &removed_state);
+                let _ = removed_changes.try_send(());
                 true
             },
         )
         .map_err(|error| error.to_string())?;
 
+    let mut operation_revision = 0;
     loop {
         match shutdown.try_recv() {
             Ok(()) | Err(TryRecvError::Disconnected) => return Ok(()),
@@ -291,6 +367,14 @@ fn run_event_bridge(
         connection
             .process(Duration::from_millis(500))
             .map_err(|error| error.to_string())?;
+        let revision = state
+            .lock()
+            .map(|state| state.operation_revision)
+            .unwrap_or(operation_revision);
+        if revision != operation_revision {
+            operation_revision = revision;
+            let _ = changes.try_send(());
+        }
     }
 }
 
@@ -386,14 +470,11 @@ fn refresh(connection: &SyncConnection, state: &Arc<Mutex<State>>) {
         .find(|device| device.connected)
         .map(|device| device.name.clone());
 
-    let next = State {
-        powered,
-        device_name,
-        devices,
-        scanning,
-    };
     if let Ok(mut current) = state.lock() {
-        *current = next;
+        current.powered = powered;
+        current.device_name = device_name;
+        current.devices = devices;
+        current.scanning = scanning;
     }
 }
 

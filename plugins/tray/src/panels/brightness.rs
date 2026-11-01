@@ -1,18 +1,13 @@
 use crate::shared::BrightnessLevel;
 use coconut_api::brightness::{BrightnessIntegration, Fallback as BrightnessFallback};
-use coconut_plugin_kit::chrome::{
-    fat_slider, hero_card, settings_panel_header, shell_border, shell_card,
-};
+use coconut_plugin_kit::chrome::settings_panel_header;
 use coconut_plugin_kit::{Panel, PanelRenderContext, SharedState};
-use creamui_core::layout::FlexDirection;
 use creamui_core::{BoxedWidget, Size};
-use creamui_macros::jsx;
 use creamui_reactive::Signal;
 use std::rc::Rc;
 
 pub const WIDTH: u32 = 380;
 pub const HEIGHT: u32 = 620;
-const SLIDER_W: f32 = WIDTH as f32 - 32.0;
 
 /// The device panel wrapper opened directly by the `"tray.brightness"`
 /// island (individual tray mode) or by `PanelHost` for any other caller.
@@ -43,34 +38,106 @@ impl Panel for BrightnessPanel {
     }
 
     fn build(&self, ctx: &PanelRenderContext) -> BoxedWidget {
-        build_content(&ctx.shared, None)
+        build_content(&ctx.shared, &ctx.scratch, ctx.size, None)
     }
 }
 
-/// The brightness panel's actual content, shared between [`BrightnessPanel`]
-/// and [`crate::panels::control_center::ControlCenterPanel`]'s embedded
-/// Brightness view. Ported from
-/// `desktop/shell/src/panels/brightness/mod.rs::build`.
-pub fn build_content(shared: &SharedState, on_back: Option<Rc<dyn Fn()>>) -> BoxedWidget {
+#[derive(Clone)]
+struct BrightnessScroll(creamui_widgets::ScrollController);
+
+pub fn build_content(
+    shared: &SharedState,
+    scratch: &SharedState,
+    size: Size,
+    on_back: Option<Rc<dyn Fn()>>,
+) -> BoxedWidget {
+    use super::detail;
+    use creamui_widgets::{
+        layout::{Flex, Wrap},
+        Button, ButtonSize, ButtonState, ButtonVariant,
+    };
     let brightness = shared
         .get::<Rc<dyn BrightnessIntegration>>()
         .unwrap_or_else(|| Rc::new(BrightnessFallback));
-    let brightness_level = shared
+    let level = shared
         .get::<BrightnessLevel>()
         .unwrap_or_else(|| BrightnessLevel(Signal::new(brightness.level())))
         .0;
-    let value = brightness_level.get();
-    let value_text = format!("{}%", (value * 100.0).round());
-    let set_brightness = brightness_level.clone();
-
-    Box::new(jsx! {
-        <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={16.0} gap={12.0} background={shell_card()} border={(shell_border(), 1.0)}>
-            {settings_panel_header("brightness", "Brightness", "/hardware/displays", on_back)}
-            {hero_card("brightness", value_text.clone(), "Display".to_owned())}
-            {fat_slider("brightness", "Brightness", value, value_text, SLIDER_W, None, move |level| {
-                set_brightness.set(level);
-                brightness.set_level(level);
-            })}
-        </Flex>
-    })
+    let value = level.get();
+    let scroll = scratch
+        .get_or_insert_with(|| BrightnessScroll(creamui_widgets::ScrollController::new(0.0)))
+        .0;
+    let mut body = Flex::column().gap(12.0);
+    if let Some(error) = brightness.last_error() {
+        body = body.child(detail::error(error));
+    }
+    if brightness.available() {
+        let backend = brightness.clone();
+        let write = level.clone();
+        body = body.child(super::control_tiles::slider_tile(
+            Size {
+                width: (size.width - 42.0).max(80.0),
+                height: 210.0,
+            },
+            "brightness",
+            "Brightness",
+            value,
+            format!("{}%", (value * 100.0).round()),
+            Rc::new(|| coconut_plugin_kit::open_settings("/hardware/displays")),
+            move |value| {
+                write.set(value);
+                backend.set_level(value);
+            },
+        ));
+        let mut presets = Flex::row().gap(6.0).wrap(Wrap::Wrap);
+        for percent in [10, 25, 50, 75, 100] {
+            let backend = brightness.clone();
+            let level = level.clone();
+            presets = presets.child(Box::new(Button::styled(
+                if (value * 100.0 - percent as f32).abs() < 1.0 {
+                    ButtonVariant::Primary
+                } else {
+                    ButtonVariant::Secondary
+                },
+                ButtonSize::Sm,
+                format!("{percent}%"),
+                ButtonState::Normal,
+                move || {
+                    let value = percent as f32 / 100.0;
+                    level.set(value);
+                    backend.set_level(value);
+                },
+            )));
+        }
+        body = body
+            .child(detail::text("Quick levels", false, 12.0))
+            .child(Box::new(presets));
+    } else {
+        body = body.child(detail::card(detail::text(
+            "No controllable backlight was found. External displays need DDC/CI support.",
+            false,
+            13.0,
+        )));
+    }
+    if let (Some(awake), Some(toggle)) = (
+        shared.get::<crate::KeepAwakeState>(),
+        shared.get::<crate::ToggleKeepAwake>(),
+    ) {
+        body = body.child(detail::card(Box::new(
+            Flex::column()
+                .gap(8.0)
+                .child(detail::toggle("Keep awake", awake.0.get(), toggle.0))
+                .child(detail::text(
+                    "Prevent automatic sleep while you need the display.",
+                    false,
+                    12.0,
+                )),
+        )));
+    }
+    detail::panel(
+        size,
+        settings_panel_header("brightness", "Display", "/hardware/displays", on_back),
+        scroll,
+        Box::new(body),
+    )
 }

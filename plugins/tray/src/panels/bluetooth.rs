@@ -4,16 +4,15 @@ use coconut_api::bluetooth::{
 };
 use coconut_plugin_kit::chrome::{
     action_button, compact_switch, detail_row, icon_button, list_row, section_label,
-    settings_panel_header, shell_border, shell_card, shell_muted, shell_panel, shell_text,
-    ISLAND_RADIUS, LIST_WIDTH,
+    settings_panel_header, shell_muted, shell_text,
 };
 use coconut_plugin_kit::{pixel_icon, Panel, PanelRenderContext, SharedState};
-use creamui_core::layout::{Dimension, FlexDirection, Style as LayoutStyle};
-use creamui_core::{BoxedWidget, Size, Styled, TextAlign};
+use creamui_core::layout::FlexDirection;
+use creamui_core::{BoxedWidget, Size, TextAlign};
 use creamui_macros::jsx;
 use creamui_reactive::Signal;
 use creamui_widgets::layout::{Align, Flex, Justify};
-use creamui_widgets::{ScrollController, ScrollView};
+use creamui_widgets::ScrollController;
 use std::rc::Rc;
 
 pub const WIDTH: u32 = 380;
@@ -51,7 +50,7 @@ impl Panel for BluetoothPanel {
     }
 
     fn build(&self, ctx: &PanelRenderContext) -> BoxedWidget {
-        build_content(&ctx.shared, &ctx.scratch, None)
+        build_content(&ctx.shared, &ctx.scratch, None, ctx.size)
     }
 }
 
@@ -63,6 +62,7 @@ pub fn build_content(
     shared: &SharedState,
     scratch: &SharedState,
     on_back: Option<Rc<dyn Fn()>>,
+    size: Size,
 ) -> BoxedWidget {
     let bluetooth = shared
         .get::<Rc<dyn BluetoothIntegration>>()
@@ -97,7 +97,18 @@ pub fn build_content(
                 let view = view.clone();
                 Rc::new(move || view.set(None))
             };
-            return build_detail(device, bluetooth.clone(), back);
+            return super::bluetooth_pairing::overlay(
+                build_detail(
+                    device,
+                    bluetooth.clone(),
+                    back,
+                    size,
+                    super::detail::scroll_for(scratch, format!("bluetooth:{}", device.address)),
+                ),
+                bluetooth,
+                scratch,
+                size,
+            );
         }
     }
 
@@ -113,7 +124,30 @@ pub fn build_content(
 
     let scanning = bluetooth.scanning();
 
-    let mut list = Flex::column().gap(8.0);
+    let mut list = Flex::column().gap(10.0);
+    if let Some(error) = bluetooth.last_error() {
+        list = list.child(super::detail::error(error));
+    }
+    if let Some(address) = bluetooth.busy_address() {
+        let name = devices
+            .iter()
+            .find(|device| device.address == address)
+            .map(|device| device.name.as_str())
+            .unwrap_or(&address);
+        list = list.child(Box::new(
+            Flex::row()
+                .align(Align::Center)
+                .gap(8.0)
+                .child(Box::new(
+                    creamui_widgets::RawSpinner::new(shell_muted()).size(16.0),
+                ))
+                .child(super::detail::text(
+                    format!("Working with {name}…"),
+                    false,
+                    12.0,
+                )),
+        ));
+    }
     let on_toggle_scan = {
         let bluetooth = bluetooth.clone();
         Rc::new(move || {
@@ -153,25 +187,23 @@ pub fn build_content(
         if !discovered.is_empty() {
             list = list.child(section_label("AVAILABLE"));
             for device in discovered {
-                list = list.child(discovered_device_row(device, bluetooth.clone()));
+                list = list.child(discovered_device_row(device, bluetooth.clone(), &view));
             }
         }
     }
 
-    let scroll_view = Box::new(
-        ScrollView::controlled(scroll_style(), scroll)
-            .background(shell_panel())
-            .border(shell_border(), 1.0)
-            .corner_radius(ISLAND_RADIUS)
-            .child(Box::new(list)),
-    ) as BoxedWidget;
-
-    Box::new(jsx! {
-        <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={16.0} gap={12.0} background={shell_card()} border={(shell_border(), 1.0)}>
-            {settings_panel_header("bluetooth-on", "Bluetooth", "/connectivity/bluetooth", on_back)}
-            {scroll_view}
-        </Flex>
-    })
+    let content = super::detail::panel(
+        size,
+        settings_panel_header(
+            "bluetooth-on",
+            "Bluetooth",
+            "/connectivity/bluetooth",
+            on_back,
+        ),
+        scroll,
+        Box::new(list),
+    );
+    super::bluetooth_pairing::overlay(content, bluetooth, scratch, size)
 }
 
 /// A paired device's row: tapping it opens its detail view. Connect,
@@ -205,6 +237,7 @@ fn paired_device_row(device: &BluetoothDevice, view: &Signal<Option<String>>) ->
 fn discovered_device_row(
     device: &BluetoothDevice,
     bluetooth: Rc<dyn BluetoothIntegration>,
+    view: &Signal<Option<String>>,
 ) -> BoxedWidget {
     let icon = device_row_icon(device);
     let address = device.address.clone();
@@ -213,13 +246,15 @@ fn discovered_device_row(
         22.0,
         Rc::new(move || bluetooth.connect(&address)),
     );
+    let view = view.clone();
+    let address = device.address.clone();
     list_row(
         icon,
         device.name.clone(),
-        "Available".to_owned(),
+        "Available to pair".to_owned(),
         Some(connect),
         false,
-        None,
+        Some(Rc::new(move || view.set(Some(address.clone())))),
     )
 }
 
@@ -286,6 +321,8 @@ fn build_detail(
     device: &BluetoothDevice,
     bluetooth: Rc<dyn BluetoothIntegration>,
     on_back: Rc<dyn Fn()>,
+    size: Size,
+    scroll: ScrollController,
 ) -> BoxedWidget {
     let mut rows = Flex::column()
         .gap(8.0)
@@ -317,24 +354,60 @@ fn build_detail(
         }
     });
     let forget_address = device.address.clone();
-    let forget_action = Rc::new(move || bluetooth.forget(&forget_address));
+    let forget_backend = bluetooth.clone();
+    let back = on_back.clone();
+    let forget_action = Rc::new(move || {
+        forget_backend.forget(&forget_address);
+        back();
+    });
+    if bluetooth.supports_trust() && device.paired {
+        let backend = bluetooth.clone();
+        let address = device.address.clone();
+        let trusted = device.trusted;
+        rows = rows.child(super::detail::toggle(
+            "Allow automatic connections",
+            trusted,
+            Rc::new(move || backend.set_trusted(&address, !trusted)),
+        ));
+    }
+    if let Some(error) = bluetooth.last_error() {
+        rows = rows.child(super::detail::error(error));
+    }
+    if bluetooth.busy_address().as_deref() == Some(device.address.as_str()) {
+        rows = rows.child(super::detail::text("Applying changes…", false, 12.0));
+    }
 
     let actions = Flex::row()
         .gap(8.0)
         .child(action_button(
             if connected { "close" } else { "bluetooth-on" },
-            if connected { "Disconnect" } else { "Connect" },
+            if connected {
+                "Disconnect"
+            } else if device.paired {
+                "Connect"
+            } else {
+                "Pair & connect"
+            },
             toggle_action,
         ))
         .child(action_button("trash", "Forget", forget_action));
 
-    Box::new(jsx! {
-        <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={16.0} gap={12.0} background={shell_card()} border={(shell_border(), 1.0)}>
-            {settings_panel_header("bluetooth-on", &device.name, "/connectivity/bluetooth", Some(on_back))}
-            {Box::new(rows) as BoxedWidget}
-            {Box::new(actions) as BoxedWidget}
-        </Flex>
-    })
+    super::detail::panel(
+        size,
+        settings_panel_header(
+            "bluetooth-on",
+            &device.name,
+            "/connectivity/bluetooth",
+            Some(on_back),
+        ),
+        scroll,
+        Box::new(
+            Flex::column()
+                .gap(12.0)
+                .child(super::detail::card(Box::new(rows)))
+                .child(Box::new(actions)),
+        ),
+    )
 }
 
 fn devices_section_header(
@@ -366,17 +439,4 @@ fn empty_row(message: &str) -> BoxedWidget {
             <RawText color={shell_muted()} font_size={12.0}>{message.to_owned()}</RawText>
         </Flex>
     })
-}
-
-/// A fixed width, but no fixed height: `flex_grow` lets the list fill
-/// whatever vertical space is left in the panel below the header.
-fn scroll_style() -> LayoutStyle {
-    LayoutStyle {
-        size: creamui_core::layout::Size {
-            width: Dimension::Length(LIST_WIDTH),
-            height: Dimension::Auto,
-        },
-        flex_grow: 1.0,
-        ..Default::default()
-    }
 }

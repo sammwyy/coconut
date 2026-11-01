@@ -19,6 +19,8 @@ const INTERFACE: &str = "net.hadess.PowerProfiles";
 #[derive(Default)]
 struct State {
     profiles: Vec<PowerProfile>,
+    error: Option<String>,
+    operation_revision: u64,
 }
 
 pub struct PowerProfilesDaemon {
@@ -63,13 +65,26 @@ impl PowerProfileIntegration for PowerProfilesDaemon {
 
     fn set_profile(&self, id: &str) {
         let id = id.to_owned();
+        let state = self.state.clone();
         thread::spawn(move || {
-            let Ok(connection) = Connection::new_system() else {
-                return;
-            };
-            let proxy = connection.with_proxy(SERVICE, PATH, Duration::from_secs(2));
-            let _: Result<(), _> = proxy.set(INTERFACE, "ActiveProfile", id);
+            let result = (|| -> Result<(), String> {
+                let connection = Connection::new_system().map_err(|error| error.to_string())?;
+                let proxy = connection.with_proxy(SERVICE, PATH, Duration::from_secs(2));
+                proxy
+                    .set(INTERFACE, "ActiveProfile", id)
+                    .map_err(|error| error.to_string())
+            })();
+            if let Err(error) = &result {
+                eprintln!("power profiles: {error}");
+            }
+            if let Ok(mut state) = state.lock() {
+                state.error = result.err();
+                state.operation_revision += 1;
+            }
         });
+    }
+    fn last_error(&self) -> Option<String> {
+        self.state.lock().ok().and_then(|state| state.error.clone())
     }
 
     fn changes(&self) -> Option<ChangeListener> {
@@ -87,17 +102,20 @@ fn run_event_bridge(
 
     let sender = dbus::strings::BusName::new(SERVICE).map_err(|error| error.clone())?;
     let rule = PropertiesPropertiesChanged::match_rule(Some(&sender), None).static_clone();
+    let signal_state = state.clone();
+    let signal_changes = changes.clone();
     let _token = connection
         .add_match(
             rule,
             move |_: PropertiesPropertiesChanged, connection, _| {
-                refresh(connection, &state);
-                let _ = changes.try_send(());
+                refresh(connection, &signal_state);
+                let _ = signal_changes.try_send(());
                 true
             },
         )
         .map_err(|error| error.to_string())?;
 
+    let mut operation_revision = 0;
     loop {
         match shutdown.try_recv() {
             Ok(()) | Err(TryRecvError::Disconnected) => return Ok(()),
@@ -106,6 +124,14 @@ fn run_event_bridge(
         connection
             .process(Duration::from_millis(500))
             .map_err(|error| error.to_string())?;
+        let revision = state
+            .lock()
+            .map(|state| state.operation_revision)
+            .unwrap_or(operation_revision);
+        if revision != operation_revision {
+            operation_revision = revision;
+            let _ = changes.try_send(());
+        }
     }
 }
 

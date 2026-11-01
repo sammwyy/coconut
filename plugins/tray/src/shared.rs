@@ -119,7 +119,6 @@ pub struct NetworkDetailView(pub Signal<Option<String>>);
 #[derive(Clone)]
 pub struct BluetoothDetailView(pub Signal<Option<String>>);
 
-/// Per-open "revealed Wi-Fi password" state for the network panel's detail
-/// view — `None` shows the masked placeholder. See [`NetworkDetailView`].
+/// The SSID whose cached password is visible; `None` keeps passwords masked.
 #[derive(Clone)]
 pub struct NetworkPasswordReveal(pub Signal<Option<String>>);

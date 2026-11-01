@@ -8,11 +8,13 @@
 //! (Phase 4d) must provide.
 
 mod config;
+mod control_layout;
 mod islands;
 mod panels;
 mod shared;
 
 pub use config::{TrayConfig, TrayMode, TrayVisibility};
+pub use control_layout::{Control, ControlLayout, ControlTile};
 pub use islands::grouped::ControlCenterIsland;
 pub use panels::bluetooth::BluetoothPanel;
 pub use panels::brightness::BrightnessPanel;
@@ -56,7 +58,7 @@ impl Plugin for TrayPlugin {
     fn panels(&self, ctx: &PluginInitContext) -> Vec<Rc<dyn Panel>> {
         let tray: TrayConfig = ctx.module_config("tray");
         vec![
-            Rc::new(ControlCenterPanel::new(tray)) as Rc<dyn Panel>,
+            Rc::new(ControlCenterPanel::new(tray).with_app(ctx.app.clone())) as Rc<dyn Panel>,
             Rc::new(NetworkPanel),
             Rc::new(BluetoothPanel),
             Rc::new(EnergyPanel),

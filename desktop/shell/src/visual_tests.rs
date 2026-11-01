@@ -114,7 +114,7 @@ fn every_popup_renders_in_both_variants_without_client_corner_clipping() {
                 if panel.id() == "control_center" {
                     let wifi = shared.get::<WifiEnabled>().unwrap().0;
                     scene
-                        .hit_test(Point { x: 155.0, y: 78.0 })
+                        .hit_test(Point { x: 145.0, y: 86.0 })
                         .expect("Wi-Fi switch remains clickable")();
                     assert!(
                         !wifi.peek(),

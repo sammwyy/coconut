@@ -13,6 +13,9 @@ pub trait PowerProfileIntegration {
         Vec::new()
     }
     fn set_profile(&self, _id: &str) {}
+    fn last_error(&self) -> Option<String> {
+        None
+    }
     /// A listener that wakes whenever this integration's native hook (a
     /// D-Bus signal) observes a change. `None` when the backend has no such
     /// hook, so callers fall back to polling.

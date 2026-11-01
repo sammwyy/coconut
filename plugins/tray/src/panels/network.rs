@@ -5,21 +5,30 @@ use coconut_api::network::{
     Fallback as NetworkFallback, NetworkDevice, NetworkDeviceKind, NetworkIntegration, WifiNetwork,
 };
 use coconut_plugin_kit::chrome::{
-    action_button, compact_switch, connection_card, detail_row, detail_row_with_action,
-    icon_button, list_row, section_label, settings_panel_header, shell_border, shell_card,
-    shell_muted, shell_panel, shell_text, wifi_strength_icon, ISLAND_RADIUS, LIST_WIDTH,
+    action_button, detail_row, detail_row_with_action, icon_button, list_row,
+    settings_panel_header, shell_muted, shell_text, wifi_strength_icon,
 };
 use coconut_plugin_kit::{pixel_icon, Panel, PanelRenderContext, SharedState};
-use creamui_core::layout::{Dimension, FlexDirection, Style as LayoutStyle};
-use creamui_core::{BoxedWidget, Size, Styled, TextAlign};
-use creamui_macros::jsx;
+use creamui_core::layout::Style as LayoutStyle;
+use creamui_core::{BoxedWidget, Size};
 use creamui_reactive::Signal;
 use creamui_widgets::layout::{Align, Flex};
-use creamui_widgets::{RawSpinner, ScrollController, ScrollView};
+use creamui_widgets::{RawSpinner, ScrollController};
 use std::rc::Rc;
 
 pub const WIDTH: u32 = 380;
 pub const HEIGHT: u32 = 620;
+
+#[derive(Clone)]
+struct NetworkSecrets {
+    _lease: Rc<SecretLease>,
+}
+struct SecretLease(Rc<dyn NetworkIntegration>);
+impl Drop for SecretLease {
+    fn drop(&mut self) {
+        self.0.clear_wifi_password();
+    }
+}
 
 /// The device panel wrapper opened directly by the `"tray.wifi"` island
 /// (individual tray mode) or by `PanelHost` for any other caller. Delegates
@@ -57,7 +66,7 @@ impl Panel for NetworkPanel {
     }
 
     fn build(&self, ctx: &PanelRenderContext) -> BoxedWidget {
-        build_content(&ctx.shared, &ctx.scratch, None)
+        build_content(&ctx.shared, &ctx.scratch, None, ctx.size)
     }
 }
 
@@ -71,10 +80,14 @@ pub fn build_content(
     shared: &SharedState,
     scratch: &SharedState,
     on_back: Option<Rc<dyn Fn()>>,
+    size: Size,
 ) -> BoxedWidget {
     let network = shared
         .get::<Rc<dyn NetworkIntegration>>()
         .unwrap_or_else(|| Rc::new(NetworkFallback));
+    scratch.get_or_insert_with(|| NetworkSecrets {
+        _lease: Rc::new(SecretLease(network.clone())),
+    });
     let wifi_enabled = shared
         .get::<WifiEnabled>()
         .unwrap_or_else(|| WifiEnabled(Signal::new(false)))
@@ -104,134 +117,249 @@ pub fn build_content(
                 .and_then(|networks| networks.into_iter().find(|network| network.active));
             let back = {
                 let view = view.clone();
-                Rc::new(move || view.set(None))
+                let backend = network.clone();
+                let password = password.clone();
+                Rc::new(move || {
+                    backend.clear_wifi_password();
+                    password.set(None);
+                    view.set(None);
+                })
             };
-            return build_detail(device, wifi.as_ref(), network.clone(), password, back);
+            return build_detail(
+                device,
+                wifi.as_ref(),
+                network.clone(),
+                password,
+                back,
+                size,
+                super::detail::scroll_for(scratch, format!("network:{}", device.interface)),
+            );
         }
     }
 
     let wifi_on = wifi_enabled.get();
-
     let toggle_wifi = {
-        let network = network.clone();
-        let wifi_enabled = wifi_enabled.clone();
+        let backend = network.clone();
+        let enabled = wifi_enabled.clone();
         Rc::new(move || {
-            let next = !wifi_enabled.get();
-            wifi_enabled.set(next);
-            network.set_enabled(next);
+            let next = !enabled.get();
+            enabled.set(next);
+            backend.set_enabled(next);
         })
     };
-
-    // Only LAN/VPN get cards here (greyed out when idle); Wi-Fi has its own
-    // section below instead.
-    let wifi_interface = devices
-        .iter()
-        .find(|device| device.kind == NetworkDeviceKind::Wifi)
-        .map(|device| device.interface.clone());
-    let connections_row = Box::new(jsx! {
-        <Flex direction={FlexDirection::Column} gap={6.0}>
-            {section_label("CONNECTIONS")}
-            <Flex direction={FlexDirection::Row} gap={8.0}>
-                {connection_card_for_kind(&devices, NetworkDeviceKind::Ethernet, "ethernet", "LAN", &view)}
-                {connection_card_for_kind(&devices, NetworkDeviceKind::Vpn, "vpn", "VPN", &view)}
-            </Flex>
-        </Flex>
-    }) as BoxedWidget;
-
-    let has_wifi_adapter = network.has_wifi_adapter();
-    let wifi_networks = if wifi_on {
+    let join = scratch.get_or_insert_with(super::network_join::WifiJoin::new);
+    let tab = scratch.get_or_insert_with(|| NetworkTab(Signal::new(0))).0;
+    let saved = network.saved_wifi_networks();
+    let networks = if wifi_on {
         network.wifi_networks()
     } else {
-        Vec::new()
+        vec![]
     };
-    let scanning = network.scanning();
-
-    let mut list = Flex::column().gap(8.0);
-    if has_wifi_adapter {
-        let rescan = {
-            let network = network.clone();
-            Rc::new(move || network.rescan())
-        };
-        list = list.child(wifi_section_header(wifi_on, scanning, toggle_wifi, rescan));
-        if !wifi_on {
-            list = list.child(empty_row("Wi-Fi is off"));
-        } else if wifi_networks.is_empty() {
-            list = list.child(empty_row(if scanning {
-                "Scanning…"
+    let mut content = Flex::column().gap(12.0);
+    if let Some(error) = network.last_error() {
+        content = content.child(super::detail::error(error));
+    }
+    let mut status =
+        Flex::column()
+            .gap(10.0)
+            .child(super::detail::toggle("Wi-Fi", wifi_on, toggle_wifi));
+    if let Some(ssid) = network.connecting_network() {
+        status = status.child(Box::new(
+            Flex::row()
+                .gap(8.0)
+                .align(Align::Center)
+                .child(Box::new(RawSpinner::new(shell_muted()).size(16.0)))
+                .child(super::detail::text(
+                    format!("Connecting to {ssid}…"),
+                    false,
+                    12.0,
+                )),
+        ));
+    } else {
+        status = status.child(super::detail::text(
+            if wifi_on {
+                network
+                    .network_name()
+                    .unwrap_or_else(|| "Choose a network below".into())
             } else {
-                "No networks found"
-            }));
-        } else {
-            for wifi_network in &wifi_networks {
-                let on_click: Rc<dyn Fn()> = if wifi_network.active {
-                    match wifi_interface.clone() {
-                        Some(interface) => {
-                            let view = view.clone();
-                            Rc::new(move || view.set(Some(interface.clone())))
-                        }
-                        None => Rc::new(|| {}),
-                    }
+                "Wireless is turned off".into()
+            },
+            false,
+            12.0,
+        ));
+    }
+    content = content.child(super::detail::card(Box::new(status)));
+    let change = tab.clone();
+    let reset = scroll.clone();
+    content = content.child(Box::new(
+        creamui_widgets::SegmentedControl::new(tab.get(), move |index| {
+            reset.set(0.0);
+            change.set(index);
+        })
+        .option("Nearby")
+        .option("Saved"),
+    ));
+    if wifi_on && network.has_wifi_adapter() {
+        let backend = network.clone();
+        let mut heading = Flex::row()
+            .align(Align::Center)
+            .gap(8.0)
+            .child(super::detail::text(
+                if tab.get() == 0 {
+                    "Available networks"
                 } else {
-                    let ssid = wifi_network.ssid.clone();
-                    let backend = network.clone();
-                    Rc::new(move || backend.connect_wifi(&ssid))
-                };
-                list = list.child(wifi_row(wifi_network, on_click));
+                    "Saved networks"
+                },
+                false,
+                12.0,
+            ))
+            .child(Box::new(Flex::row().grow(1.0)));
+        heading = if network.scanning() {
+            heading.child(Box::new(RawSpinner::new(shell_muted()).size(16.0)))
+        } else {
+            heading.child(action_button(
+                "scan",
+                "Scan",
+                Rc::new(move || backend.rescan()),
+            ))
+        };
+        content = content.child(Box::new(heading));
+        let shown: Vec<_> = if tab.get() == 0 {
+            networks.clone()
+        } else {
+            networks
+                .iter()
+                .filter(|wifi| saved.contains(&wifi.ssid))
+                .cloned()
+                .collect()
+        };
+        for wifi in &shown {
+            let backend = network.clone();
+            let selected = wifi.clone();
+            let view = view.clone();
+            let interface = devices
+                .iter()
+                .find(|device| device.kind == NetworkDeviceKind::Wifi)
+                .map(|device| device.interface.clone());
+            let join = join.clone();
+            let remembered = saved.contains(&wifi.ssid) && network.last_error().is_none();
+            let on_click: Rc<dyn Fn()> = Rc::new(move || {
+                if backend.connecting_network().is_some() {
+                    return;
+                }
+                if selected.active {
+                    if let Some(interface) = &interface {
+                        view.set(Some(interface.clone()));
+                    }
+                } else if selected.secured && selected.security != "Enhanced Open" && !remembered {
+                    join.open(selected.clone());
+                } else {
+                    backend.connect_wifi(&selected.ssid);
+                }
+            });
+            content = content.child(wifi_row(wifi, on_click));
+        }
+        if tab.get() == 1 {
+            for ssid in saved
+                .iter()
+                .filter(|ssid| !shown.iter().any(|wifi| wifi.ssid == **ssid))
+            {
+                let name = ssid.clone();
+                let backend = network.clone();
+                content = content.child(list_row(
+                    "wifi-slash",
+                    ssid.clone(),
+                    "Out of range".into(),
+                    Some(icon_button(
+                        "trash",
+                        24.0,
+                        Rc::new(move || backend.forget_wifi(&name)),
+                    )),
+                    false,
+                    None,
+                ));
             }
         }
-    } else {
-        list = list.child(empty_row("No wireless adapter found"));
+        if shown.is_empty() && (tab.get() == 0 || saved.is_empty()) {
+            content = content.child(super::detail::card(super::detail::text(
+                if network.scanning() {
+                    "Scanning for networks…"
+                } else if tab.get() == 0 {
+                    "No networks found. Try scanning again."
+                } else {
+                    "No saved networks."
+                },
+                false,
+                13.0,
+            )));
+        }
+    } else if !network.has_wifi_adapter() {
+        content = content.child(super::detail::text(
+            "No wireless adapter found.",
+            false,
+            13.0,
+        ));
     }
-
-    let scroll_view = Box::new(
-        ScrollView::controlled(scroll_style(), scroll)
-            .background(shell_panel())
-            .border(shell_border(), 1.0)
-            .corner_radius(ISLAND_RADIUS)
-            .child(Box::new(list)),
-    ) as BoxedWidget;
-
-    Box::new(jsx! {
-        <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={16.0} gap={12.0} background={shell_card()} border={(shell_border(), 1.0)}>
-            {settings_panel_header("wifi-excellent", "Wi-Fi", "/connectivity/wifi/nearby", on_back)}
-            {connections_row}
-            {scroll_view}
-        </Flex>
-    })
-}
-
-/// Renders the active device of `kind`, or a greyed-out `fallback_label`
-/// placeholder if there isn't one; the active card opens its detail view.
-fn connection_card_for_kind(
-    devices: &[NetworkDevice],
-    kind: NetworkDeviceKind,
-    icon: &str,
-    fallback_label: &str,
-    view: &Signal<Option<String>>,
-) -> BoxedWidget {
-    match devices
+    let interfaces: Vec<_> = devices
         .iter()
-        .find(|device| device.kind == kind && device.active)
-    {
-        Some(device) => {
-            let title = device
+        .filter(|device| {
+            matches!(
+                device.kind,
+                NetworkDeviceKind::Ethernet | NetworkDeviceKind::Vpn
+            )
+        })
+        .collect();
+    if !interfaces.is_empty() {
+        content = content.child(super::detail::text("Other connections", false, 12.0));
+    }
+    for device in interfaces {
+        let interface = device.interface.clone();
+        let open = view.clone();
+        content = content.child(list_row(
+            if device.kind == NetworkDeviceKind::Vpn {
+                "vpn"
+            } else {
+                "ethernet"
+            },
+            device
                 .connection_name
                 .clone()
-                .unwrap_or_else(|| device.interface.clone());
-            let interface = device.interface.clone();
-            let view = view.clone();
-            let on_click = Rc::new(move || view.set(Some(interface.clone())));
-            connection_card(icon, title, "Connected".to_owned(), true, Some(on_click))
-        }
-        None => connection_card(
-            icon,
-            fallback_label.to_owned(),
-            "Not connected".to_owned(),
-            false,
+                .unwrap_or_else(|| device.interface.clone()),
+            if device.active {
+                "Connected"
+            } else {
+                "Not connected"
+            }
+            .into(),
             None,
-        ),
+            device.active,
+            Some(Rc::new(move || open.set(Some(interface.clone())))),
+        ));
     }
+    let content = super::detail::panel(
+        size,
+        settings_panel_header(
+            "wifi-excellent",
+            "Network",
+            "/connectivity/wifi/nearby",
+            on_back,
+        ),
+        scroll,
+        Box::new(content),
+    );
+    let mut root = creamui_widgets::RawView::new(LayoutStyle {
+        size: creamui_widgets::layout::fixed(size.width, size.height),
+        ..Default::default()
+    })
+    .child(content);
+    if let Some(dialog) = join.dialog(network, size) {
+        root = root.child(dialog);
+    }
+    Box::new(root)
 }
+
+#[derive(Clone)]
+struct NetworkTab(Signal<usize>);
 
 /// The detail screen for one connected interface: address/mask/gateway/DNS,
 /// plus Wi-Fi-specific rows (signal, band, security, password) and a
@@ -242,6 +370,8 @@ fn build_detail(
     network: Rc<dyn NetworkIntegration>,
     password: Signal<Option<String>>,
     on_back: Rc<dyn Fn()>,
+    size: Size,
+    scroll: ScrollController,
 ) -> BoxedWidget {
     let title = device
         .connection_name
@@ -292,6 +422,19 @@ fn build_detail(
     }
 
     let mut actions = Flex::row().gap(8.0);
+    if device.active && network.can_disconnect() {
+        let backend = network.clone();
+        let interface = device.interface.clone();
+        let back = on_back.clone();
+        actions = actions.child(action_button(
+            "close",
+            "Disconnect",
+            Rc::new(move || {
+                backend.disconnect(&interface);
+                back();
+            }),
+        ));
+    }
     if let Some(wifi) = wifi {
         let ssid = wifi.ssid.clone();
         let backend = network.clone();
@@ -303,35 +446,55 @@ fn build_detail(
         actions = actions.child(action_button("trash", "Forget", forget));
     }
 
-    Box::new(jsx! {
-        <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={16.0} gap={12.0} background={shell_card()} border={(shell_border(), 1.0)}>
-            {settings_panel_header("wifi-excellent", &title, "/connectivity/wifi/nearby", Some(on_back))}
-            {Box::new(rows) as BoxedWidget}
-            {Box::new(actions) as BoxedWidget}
-        </Flex>
-    })
+    super::detail::panel(
+        size,
+        settings_panel_header(
+            "wifi-excellent",
+            &title,
+            "/connectivity/wifi/nearby",
+            Some(on_back),
+        ),
+        scroll,
+        Box::new(
+            Flex::column()
+                .gap(12.0)
+                .child(super::detail::card(Box::new(rows)))
+                .child(Box::new(actions)),
+        ),
+    )
 }
 
-/// Masked until the eye button fetches the saved secret (a quick blocking
-/// D-Bus call — fine for this rare, explicit action); tap again to hide.
 fn password_row(
     ssid: &str,
     network: Rc<dyn NetworkIntegration>,
     password: Signal<Option<String>>,
 ) -> BoxedWidget {
-    let revealed = password.get();
-    let value = revealed.clone().unwrap_or_else(|| "••••••••".to_owned());
-    let toggle: BoxedWidget = if revealed.is_some() {
-        let password = password.clone();
-        icon_button("eye-off", 18.0, Rc::new(move || password.set(None)))
+    let revealed = password.get().as_deref() == Some(ssid);
+    let value = if revealed {
+        network.cached_wifi_password(ssid).unwrap_or_else(|| {
+            if network.last_error().is_some() {
+                "Unavailable".into()
+            } else {
+                "Loading…".into()
+            }
+        })
     } else {
-        let ssid = ssid.to_owned();
-        icon_button(
-            "eye",
-            18.0,
-            Rc::new(move || password.set(network.wifi_password(&ssid))),
-        )
+        "••••••••".into()
     };
+    let ssid = ssid.to_owned();
+    let toggle = icon_button(
+        if revealed { "eye-off" } else { "eye" },
+        20.0,
+        Rc::new(move || {
+            if revealed {
+                network.clear_wifi_password();
+                password.set(None);
+            } else {
+                network.request_wifi_password(&ssid);
+                password.set(Some(ssid.clone()));
+            }
+        }),
+    );
     detail_row_with_action("Password", value, toggle)
 }
 
@@ -360,49 +523,4 @@ fn wifi_row(network: &WifiNetwork, on_click: Rc<dyn Fn()>) -> BoxedWidget {
         network.active,
         Some(on_click),
     )
-}
-
-fn wifi_section_header(
-    wifi_on: bool,
-    scanning: bool,
-    on_toggle: Rc<dyn Fn()>,
-    on_rescan: Rc<dyn Fn()>,
-) -> BoxedWidget {
-    let action: BoxedWidget = if !wifi_on {
-        Box::new(jsx! { <Flex/> })
-    } else if scanning {
-        Box::new(RawSpinner::new(shell_muted()).size(14.0))
-    } else {
-        icon_button("scan", 22.0, on_rescan)
-    };
-    Box::new(jsx! {
-        <Flex direction={FlexDirection::Row} align={Align::Center} gap={8.0} padding={4.0}>
-            <RawText color={shell_muted()} font_size={11.0} align={TextAlign::Start}>"WI-FI NETWORKS"</RawText>
-            {compact_switch(wifi_on, on_toggle)}
-            <Flex grow={1.0} />
-            {action}
-        </Flex>
-    })
-}
-
-fn empty_row(message: &str) -> BoxedWidget {
-    Box::new(jsx! {
-        <Flex padding={10.0} align={Align::Center} justify={creamui_widgets::layout::Justify::Center}>
-            <RawText color={shell_muted()} font_size={12.0}>{message.to_owned()}</RawText>
-        </Flex>
-    })
-}
-
-/// A fixed width, but no fixed height: `flex_grow` lets the list fill
-/// whatever vertical space is left in the panel once the fixed-height
-/// content above it (header, connection cards) is accounted for.
-fn scroll_style() -> LayoutStyle {
-    LayoutStyle {
-        size: creamui_core::layout::Size {
-            width: Dimension::Length(LIST_WIDTH),
-            height: Dimension::Auto,
-        },
-        flex_grow: 1.0,
-        ..Default::default()
-    }
 }

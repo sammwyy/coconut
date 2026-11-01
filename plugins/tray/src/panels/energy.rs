@@ -4,13 +4,10 @@ use coconut_api::power_profile::{
     Fallback as PowerProfileFallback, PowerProfile, PowerProfileIntegration,
 };
 use coconut_plugin_kit::chrome::{
-    compact_hero_card, list_row, section_label, settings_panel_header, shell_border, shell_card,
-    shell_text, toggle_row,
+    compact_hero_card, list_row, section_label, settings_panel_header, shell_text,
 };
 use coconut_plugin_kit::{pixel_icon, Panel, PanelRenderContext, SharedState};
-use creamui_core::layout::FlexDirection;
 use creamui_core::{BoxedWidget, Size};
-use creamui_macros::jsx;
 use creamui_reactive::Signal;
 use creamui_widgets::layout::Flex;
 use std::rc::Rc;
@@ -48,14 +45,19 @@ impl Panel for EnergyPanel {
     }
 
     fn build(&self, ctx: &PanelRenderContext) -> BoxedWidget {
-        build_content(&ctx.shared, None)
+        build_content(&ctx.shared, &ctx.scratch, ctx.size, None)
     }
 }
 
 /// The energy panel's actual content, shared between [`EnergyPanel`] and
 /// [`crate::panels::control_center::ControlCenterPanel`]'s embedded Energy
 /// view. Ported from `desktop/shell/src/panels/energy/mod.rs::build`.
-pub fn build_content(shared: &SharedState, on_back: Option<Rc<dyn Fn()>>) -> BoxedWidget {
+pub fn build_content(
+    shared: &SharedState,
+    scratch: &SharedState,
+    size: Size,
+    on_back: Option<Rc<dyn Fn()>>,
+) -> BoxedWidget {
     let battery = shared
         .get::<Rc<dyn BatteryIntegration>>()
         .unwrap_or_else(|| Rc::new(BatteryFallback));
@@ -97,7 +99,9 @@ pub fn build_content(shared: &SharedState, on_back: Option<Rc<dyn Fn()>>) -> Box
         let value = battery_percent
             .map(|percent| format!("{percent}%"))
             .unwrap_or_else(|| "--".into());
-        let caption = if battery.charging() {
+        let caption = if battery.charging() && battery_percent == Some(100) {
+            "Fully charged"
+        } else if battery.charging() {
             "Charging"
         } else {
             "On battery"
@@ -123,14 +127,87 @@ pub fn build_content(shared: &SharedState, on_back: Option<Rc<dyn Fn()>>) -> Box
         }
     }
 
-    Box::new(jsx! {
-        <Flex direction={FlexDirection::Column} size={(WIDTH as f32, HEIGHT as f32)} padding={16.0} gap={12.0} background={shell_card()} border={(shell_border(), 1.0)}>
-            {settings_panel_header("battery-full", "Power", "/hardware", on_back)}
-            {compact_hero_card(hero_icon, hero_title, hero_caption)}
-            {toggle_row("Keep awake", awake, toggle_awake)}
-            {Box::new(profiles_section) as BoxedWidget}
-        </Flex>
-    })
+    let scroll = scratch
+        .get_or_insert_with(|| PowerScroll(creamui_widgets::ScrollController::new(0.0)))
+        .0;
+    let mut content = Flex::column()
+        .gap(12.0)
+        .child(compact_hero_card(hero_icon, hero_title, hero_caption))
+        .child(super::detail::card(Box::new(
+            Flex::column()
+                .gap(8.0)
+                .child(super::detail::toggle("Keep awake", awake, toggle_awake))
+                .child(super::detail::text(
+                    if awake {
+                        "Automatic sleep is inhibited."
+                    } else {
+                        "Automatic sleep is allowed."
+                    },
+                    false,
+                    12.0,
+                )),
+        )))
+        .child(Box::new(profiles_section));
+    if profiles.is_empty() {
+        content = content.child(super::detail::text(
+            "No power profile service is available.",
+            false,
+            12.0,
+        ));
+    }
+    if let Some(error) = power_profile.last_error() {
+        content = content.child(super::detail::error(error));
+    }
+    if has_battery {
+        let details = battery.details();
+        let mut readings = Flex::column().gap(8.0);
+        if let Some(seconds) = details.time_remaining_seconds {
+            let minutes = seconds / 60;
+            readings = readings.child(coconut_plugin_kit::chrome::detail_row(
+                if battery.charging() {
+                    "Until charged"
+                } else {
+                    "Time remaining"
+                },
+                format!("{} h {} min", minutes / 60, minutes % 60),
+            ));
+        }
+        if let Some(health) = details.health_percent {
+            readings = readings.child(coconut_plugin_kit::chrome::detail_row(
+                "Battery health",
+                format!("{health}%"),
+            ));
+        }
+        if let Some(watts) = details.power_watts {
+            readings = readings.child(coconut_plugin_kit::chrome::detail_row(
+                if battery.charging() {
+                    "Charge rate"
+                } else {
+                    "Discharge rate"
+                },
+                format!("{watts:.1} W"),
+            ));
+        }
+        if let Some(cycles) = details.cycles {
+            readings = readings.child(coconut_plugin_kit::chrome::detail_row(
+                "Charge cycles",
+                cycles.to_string(),
+            ));
+        }
+        if details.time_remaining_seconds.is_some()
+            || details.health_percent.is_some()
+            || details.power_watts.is_some()
+            || details.cycles.is_some()
+        {
+            content = content.child(super::detail::card(Box::new(readings)));
+        }
+    }
+    super::detail::panel(
+        size,
+        settings_panel_header("battery-full", "Power", "/hardware", on_back),
+        scroll,
+        Box::new(content),
+    )
 }
 
 fn profile_row(
@@ -176,3 +253,6 @@ fn profile_description(id: &str) -> &str {
         _ => "",
     }
 }
+
+#[derive(Clone)]
+struct PowerScroll(creamui_widgets::ScrollController);

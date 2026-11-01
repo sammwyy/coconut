@@ -4,6 +4,7 @@ use std::ffi::CString;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, SyncSender, TryRecvError};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -18,6 +19,9 @@ enum Backend {
 pub struct BrightnessCtl {
     backend: Backend,
     level: Arc<Mutex<f32>>,
+    writes: Arc<Writes>,
+    error: Arc<Mutex<Option<String>>>,
+    notifications: Arc<Mutex<Option<SyncSender<()>>>>,
     changes: Option<ChangeListener>,
     _bridge: Option<EventBridgeGuard>,
 }
@@ -36,12 +40,18 @@ impl BrightnessCtl {
 
     fn new(backend: Backend) -> Self {
         let level = Arc::new(Mutex::new(level_for(&backend).unwrap_or(1.0)));
+        let writes = Arc::new(Writes::default());
+        let error = Arc::new(Mutex::new(None));
+        let notifications = Arc::new(Mutex::new(None));
         let sysfs_path = matches!(backend, Backend::BrightnessCtl).then(backlight_sysfs_path);
         let Some(Some(path)) = sysfs_path else {
             spawn_poll(level.clone(), backend.clone());
             return Self {
                 backend,
                 level,
+                writes,
+                error,
+                notifications,
                 changes: None,
                 _bridge: None,
             };
@@ -51,7 +61,11 @@ impl BrightnessCtl {
         // inotify watch on that file is a genuine hardware-level hook rather
         // than a timer guessing when to re-read it.
         let cache = level.clone();
+        let command_notifications = notifications.clone();
         let (changes, bridge) = spawn_event_bridge(move |change_tx, shutdown_rx| {
+            if let Ok(mut slot) = command_notifications.lock() {
+                *slot = Some(change_tx.clone());
+            }
             if let Err(error) = watch_backlight(&path, &cache, &change_tx, &shutdown_rx) {
                 eprintln!("brightness: {error}");
             }
@@ -59,6 +73,9 @@ impl BrightnessCtl {
         Self {
             backend,
             level,
+            writes,
+            error,
+            notifications,
             changes: Some(changes),
             _bridge: Some(bridge),
         }
@@ -81,32 +98,93 @@ impl BrightnessIntegration for BrightnessCtl {
     }
 
     fn set_level(&self, level: f32) {
+        if !level.is_finite() {
+            return;
+        }
         let level = level.clamp(0.0, 1.0);
         if let Ok(mut current) = self.level.lock() {
             *current = level;
         }
+        if !self.writes.push(level) {
+            return;
+        }
+        let writes = self.writes.clone();
         let backend = self.backend.clone();
-        thread::spawn(move || match backend {
-            Backend::BrightnessCtl => {
-                let _ = output(
-                    "brightnessctl",
-                    &["set", &format!("{}%", (level * 100.0).round())],
-                );
-            }
-            Backend::Ddc => {
-                if let Some((_, max)) = Self::ddc_value() {
-                    let _ = output(
-                        "ddcutil",
-                        &["setvcp", "10", &((level * max).round() as u32).to_string()],
-                    );
+        let error = self.error.clone();
+        let notifications = self.notifications.clone();
+        let cache = self.level.clone();
+        thread::spawn(move || {
+            while let Some(level) = writes.take() {
+                let result = set_for(&backend, level);
+                if let Err(message) = &result {
+                    eprintln!("brightness: {message}");
+                    if let Some(actual) = level_for(&backend) {
+                        if let Ok(mut current) = cache.lock() {
+                            *current = actual;
+                        }
+                    }
+                }
+                if let Ok(mut last_error) = error.lock() {
+                    *last_error = result.err();
+                }
+                if let Ok(slot) = notifications.lock() {
+                    if let Some(sender) = slot.as_ref() {
+                        let _ = sender.try_send(());
+                    }
                 }
             }
         });
+    }
+    fn last_error(&self) -> Option<String> {
+        self.error.lock().ok().and_then(|error| error.clone())
     }
 
     fn changes(&self) -> Option<ChangeListener> {
         self.changes.clone()
     }
+}
+
+#[derive(Default)]
+struct Writes {
+    pending: Mutex<Option<f32>>,
+    running: AtomicBool,
+}
+impl Writes {
+    fn push(&self, level: f32) -> bool {
+        let Ok(mut pending) = self.pending.lock() else {
+            return false;
+        };
+        *pending = Some(level);
+        !self.running.swap(true, Ordering::AcqRel)
+    }
+    fn take(&self) -> Option<f32> {
+        let mut pending = self.pending.lock().ok()?;
+        let value = pending.take();
+        if value.is_none() {
+            self.running.store(false, Ordering::Release);
+        }
+        value
+    }
+}
+
+fn set_for(backend: &Backend, level: f32) -> Result<(), String> {
+    let result = match backend {
+        Backend::BrightnessCtl => output(
+            "brightnessctl",
+            &["set", &format!("{}%", (level * 100.0).round())],
+        ),
+        Backend::Ddc => {
+            let (_, max) =
+                BrightnessCtl::ddc_value().ok_or("The monitor is not responding to DDC/CI")?;
+            output(
+                "ddcutil",
+                &["setvcp", "10", &((level * max).round() as u32).to_string()],
+            )
+        }
+    };
+    result
+        .map(|_| ())
+        .ok_or_else(|| "Could not set brightness. Check device access and permissions.".into())
 }
 
 fn spawn_poll(level: Arc<Mutex<f32>>, backend: Backend) {
@@ -191,7 +269,10 @@ fn level_for(backend: &Backend) -> Option<f32> {
         Backend::BrightnessCtl => {
             let current = output("brightnessctl", &["get"]).and_then(|v| v.parse::<f32>().ok());
             let maximum = output("brightnessctl", &["max"]).and_then(|v| v.parse::<f32>().ok());
-            current.zip(maximum).map(|(current, max)| current / max)
+            current
+                .zip(maximum)
+                .filter(|(current, max)| current.is_finite() && max.is_finite() && *max > 0.0)
+                .map(|(current, max)| current / max)
         }
         Backend::Ddc => BrightnessCtl::ddc_value().map(|(current, max)| current / max),
     }
@@ -214,6 +295,19 @@ mod tests {
     use std::process::Command;
     use std::thread::sleep;
     use std::time::Duration;
+
+    #[test]
+    fn slider_writes_keep_the_latest_level_and_restart_after_draining() {
+        let writes = super::Writes::default();
+        assert!(writes.push(0.1));
+        for step in 0..1000 {
+            assert!(!writes.push(step as f32 / 1000.0));
+        }
+        assert_eq!(writes.take(), Some(0.999));
+        assert_eq!(writes.take(), None);
+        assert!(writes.push(0.5));
+        assert_eq!(writes.take(), Some(0.5));
+    }
 
     #[test]
     #[ignore = "requires a kernel-backlight device controlled by brightnessctl"]

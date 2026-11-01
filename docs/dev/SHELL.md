@@ -347,3 +347,16 @@ Keep bar operations independent of widgets in `coconut-core::BarEdit`. Shared
 catalog metadata, menu composition and background persistence live in
 `coconut-plugin-kit::bar_editor`; shell hit routing and Settings presentation
 remain in their respective consumers.
+
+## Control center layout editing
+
+The tray's Control center supports a four-column grid of small cells with independently sized
+cards, circular/vertical/horizontal level controls, contextual menus, drag/drop,
+resizing, addition and removal. Wi-Fi and Bluetooth default to 2×1 cards across
+the first row. Device views provide audio mixing/default devices, protected
+Wi-Fi connection, scoped Bluetooth pairing, brightness presets and power details. Layout edits
+apply on Done and persist independently of bar/tray visibility settings. Keep
+the layout model, editor and device-card presentation in `plugins/tray`; see
+its [README](../../plugins/tray/README.md) for interaction, configuration and
+scene-test details. Typed module configuration saves use the core atomic-write
+helper, preserving the previous file when replacement fails.

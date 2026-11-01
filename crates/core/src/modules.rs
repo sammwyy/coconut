@@ -20,7 +20,7 @@ pub fn save_module<T: Serialize>(id: &str, value: &T) -> std::io::Result<()> {
     }
     let contents =
         toml::to_string_pretty(value).map_err(|error| std::io::Error::other(error.to_string()))?;
-    std::fs::write(path, contents)
+    super::atomic_write_config(&path, contents.as_bytes())
 }
 
 /// Schema-free variant used by Settings' generic per-module editor, which

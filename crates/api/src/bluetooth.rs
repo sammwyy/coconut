@@ -21,6 +21,30 @@ pub struct BluetoothDevice {
     pub class: Option<u32>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PairingKind {
+    Confirmation,
+    Authorization,
+    Pin,
+    Passkey,
+    Display,
+}
+
+#[derive(Clone, Debug)]
+pub struct PairingPrompt {
+    pub id: u64,
+    pub address: String,
+    pub kind: PairingKind,
+    pub code: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+pub enum PairingResponse {
+    Accept,
+    Reject,
+    Code(String),
+}
+
 pub trait BluetoothIntegration {
     fn powered(&self) -> bool;
     fn connected(&self) -> bool;
@@ -49,6 +73,20 @@ pub trait BluetoothIntegration {
     fn disconnect(&self, _address: &str) {}
     /// Unpairs a device and removes it from the adapter's known-device list.
     fn forget(&self, _address: &str) {}
+    fn supports_trust(&self) -> bool {
+        false
+    }
+    fn set_trusted(&self, _address: &str, _trusted: bool) {}
+    fn busy_address(&self) -> Option<String> {
+        None
+    }
+    fn last_error(&self) -> Option<String> {
+        None
+    }
+    fn pairing_prompt(&self) -> Option<PairingPrompt> {
+        None
+    }
+    fn respond_to_pairing(&self, _id: u64, _response: PairingResponse) {}
 }
 
 pub struct Fallback;

@@ -5,7 +5,7 @@
   `.github/patches/delib-mimeapps.patch` application and packaging checksum assertion.
 
 - Implement the desktop-readiness milestones in [ROADMAP.md](ROADMAP.md), starting
-  with protected Wi-Fi, session authorization, and component supervision;
+  with enterprise Wi-Fi, session authorization, and component supervision;
   coordinate XWayland and multi-monitor dependencies with Blair.
 
 - Resolve the pre-existing strict Clippy `implicit_clone` diagnostic in
@@ -35,11 +35,20 @@
   handling). The Windows backend does not place panel-role windows at all
   yet (pre-existing gap, not specific to the top/bottom option), so the bar
   position setting has no visible effect there.
+- Validate Control center device changes and pairing against physical Bluetooth
+  adapters, protected access points and multiple audio devices in an isolated
+  desktop session. Scene/mocked workflows, the private D-Bus agent fixture and
+  read-only live audio inventory have automated coverage.
+
+- Add native Enterprise/EAP and WEP credential forms to the Control center;
+  the panel currently handles Open, OWE and WPA/WPA2/WPA3 Personal connections
+  and hands advanced security setup to Network settings.
+
 - Network, Bluetooth, and battery panels react to native D-Bus signals
   (NetworkManager, BlueZ, UPower); kernel-backlight brightness reacts to an
   inotify watch on its sysfs node; volume reacts to a direct libpipewire
-  connection (FFI, linked via `pipewire-devel`) subscribed to the default
-  sink's param changes and the session's default-sink metadata. None of
+  connection (FFI, linked via `pipewire-devel`) subscribed to playback/capture
+  nodes, application streams and default-device metadata. None of
   these poll.
 - DDC-controlled external-monitor brightness (`ddcutil`) has no push
   notifications to hook into, so it still polls every 2 seconds — inherent

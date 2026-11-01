@@ -53,6 +53,11 @@ struct State {
     saved_wifi_networks: Vec<String>,
     ap_paths: HashMap<String, Path<'static>>,
     scanning: bool,
+    connecting: Option<String>,
+    error: Option<String>,
+    operation_revision: u64,
+    revealed_password: Option<(String, String)>,
+    password_revision: u64,
 }
 
 pub struct NetworkManager {
@@ -84,6 +89,32 @@ impl NetworkManager {
             changes,
             _bridge: bridge,
         }
+    }
+}
+
+impl NetworkManager {
+    fn start_connection(&self, ssid: &str, password: Option<String>) {
+        if let Ok(mut current) = self.state.lock() {
+            if current.connecting.is_some() {
+                return;
+            }
+            current.connecting = Some(ssid.to_owned());
+            current.error = None;
+            current.operation_revision += 1;
+        }
+        let state = self.state.clone();
+        let ssid = ssid.to_owned();
+        thread::spawn(move || {
+            let result = connect_to_wifi(&state, &ssid, password.as_deref());
+            if let Err(error) = &result {
+                eprintln!("network manager: connection failed: {error}");
+            }
+            if let Ok(mut current) = state.lock() {
+                current.connecting = None;
+                current.error = result.err();
+                current.operation_revision += 1;
+            }
+        });
     }
 }
 
@@ -200,38 +231,134 @@ impl NetworkIntegration for NetworkManager {
     }
 
     fn connect_wifi(&self, ssid: &str) {
-        let state = self.state.clone();
-        let ssid = ssid.to_owned();
-        thread::spawn(move || connect_to_wifi(&state, &ssid));
+        self.start_connection(ssid, None);
     }
 
-    fn forget_wifi(&self, ssid: &str) {
-        let ssid = ssid.to_owned();
+    fn supports_password_connection(&self) -> bool {
+        true
+    }
+    fn connect_wifi_with_password(&self, ssid: &str, password: &str) {
+        self.start_connection(ssid, Some(password.to_owned()));
+    }
+    fn connecting_network(&self) -> Option<String> {
+        self.state
+            .lock()
+            .ok()
+            .and_then(|state| state.connecting.clone())
+    }
+    fn last_error(&self) -> Option<String> {
+        self.state.lock().ok().and_then(|state| state.error.clone())
+    }
+    fn can_disconnect(&self) -> bool {
+        true
+    }
+    fn disconnect(&self, interface: &str) {
+        let interface = interface.to_owned();
+        let state = self.state.clone();
         thread::spawn(move || {
-            let Ok(connection) = Connection::new_system() else {
-                return;
-            };
-            if let Some(path) = find_saved_wifi_connection(&connection, &ssid) {
-                let profile = connection.with_proxy(SERVICE, &path, Duration::from_secs(5));
-                let _: Result<(), _> = profile.method_call(CONNECTION_INTERFACE, "Delete", ());
+            let result = disconnect_interface(&interface);
+            if let Ok(mut state) = state.lock() {
+                state.error = result.err();
+                state.operation_revision += 1;
             }
         });
     }
 
-    fn wifi_password(&self, ssid: &str) -> Option<String> {
-        let connection = Connection::new_system().ok()?;
-        let path = find_saved_wifi_connection(&connection, ssid)?;
-        let profile = connection.with_proxy(SERVICE, &path, Duration::from_secs(5));
-        let (secrets,): (HashMap<String, PropMap>,) = profile
-            .method_call(
-                CONNECTION_INTERFACE,
-                "GetSecrets",
-                ("802-11-wireless-security",),
-            )
-            .ok()?;
-        let psk = secrets.get("802-11-wireless-security")?.get("psk")?;
-        dbus::arg::cast::<String>(psk.0.as_ref()).cloned()
+    fn forget_wifi(&self, ssid: &str) {
+        let ssid = ssid.to_owned();
+        let state = self.state.clone();
+        thread::spawn(move || {
+            let result = (|| -> Result<(), String> {
+                let connection = Connection::new_system().map_err(|error| error.to_string())?;
+                if let Some(path) = find_saved_wifi_connection(&connection, &ssid) {
+                    connection
+                        .with_proxy(SERVICE, &path, Duration::from_secs(5))
+                        .method_call::<(), _, _, _>(CONNECTION_INTERFACE, "Delete", ())
+                        .map_err(|error| error.to_string())?;
+                }
+                Ok(())
+            })();
+            if let Err(error) = &result {
+                eprintln!("network manager: could not forget network: {error}");
+            }
+            if let Ok(mut state) = state.lock() {
+                if result.is_ok() {
+                    state.saved_wifi_networks.retain(|name| name != &ssid);
+                }
+                state.revealed_password = None;
+                state.password_revision += 1;
+                state.error = result.err();
+                state.operation_revision += 1;
+            }
+        });
     }
+
+    fn request_wifi_password(&self, ssid: &str) {
+        let revision = if let Ok(mut state) = self.state.lock() {
+            state.password_revision += 1;
+            state.revealed_password = None;
+            state.password_revision
+        } else {
+            return;
+        };
+        let state = self.state.clone();
+        let ssid = ssid.to_owned();
+        thread::spawn(move || {
+            let result = read_wifi_password(&ssid);
+            if let Ok(mut state) = state.lock() {
+                if state.password_revision != revision {
+                    return;
+                }
+                match result {
+                    Ok(password) => {
+                        state.revealed_password = Some((ssid, password));
+                    }
+                    Err(error) => {
+                        state.error = Some(error);
+                    }
+                }
+                state.operation_revision += 1;
+            }
+        });
+    }
+    fn cached_wifi_password(&self, ssid: &str) -> Option<String> {
+        self.state.lock().ok().and_then(|state| {
+            state
+                .revealed_password
+                .as_ref()
+                .filter(|(name, _)| name == ssid)
+                .map(|(_, password)| password.clone())
+        })
+    }
+    fn clear_wifi_password(&self) {
+        if let Ok(mut state) = self.state.lock() {
+            state.revealed_password = None;
+            state.password_revision += 1;
+        }
+    }
+    fn wifi_password(&self, ssid: &str) -> Option<String> {
+        read_wifi_password(ssid).ok()
+    }
+}
+
+fn read_wifi_password(ssid: &str) -> Result<String, String> {
+    let connection = Connection::new_system().map_err(|error| error.to_string())?;
+    let path =
+        find_saved_wifi_connection(&connection, ssid).ok_or("No saved profile was found.")?;
+    let profile = connection.with_proxy(SERVICE, &path, Duration::from_secs(5));
+    let (secrets,): (HashMap<String, PropMap>,) = profile
+        .method_call(
+            CONNECTION_INTERFACE,
+            "GetSecrets",
+            ("802-11-wireless-security",),
+        )
+        .map_err(|error| error.to_string())?;
+    secrets
+        .get("802-11-wireless-security")
+        .and_then(|properties| properties.get("psk"))
+        .and_then(|value| dbus::arg::cast::<String>(value.0.as_ref()))
+        .cloned()
+        .ok_or_else(|| "The saved password is unavailable.".into())
 }
 
 fn run_event_bridge(
@@ -245,17 +372,20 @@ fn run_event_bridge(
 
     let sender = dbus::strings::BusName::new(SERVICE).map_err(|error| error.clone())?;
     let rule = PropertiesPropertiesChanged::match_rule(Some(&sender), None).static_clone();
+    let signal_state = state.clone();
+    let signal_changes = changes.clone();
     let _token = connection
         .add_match(
             rule,
             move |_: PropertiesPropertiesChanged, connection, _| {
-                refresh(connection, &state);
-                let _ = changes.try_send(());
+                refresh(connection, &signal_state);
+                let _ = signal_changes.try_send(());
                 true
             },
         )
         .map_err(|error| error.to_string())?;
 
+    let mut operation_revision = 0;
     loop {
         match shutdown.try_recv() {
             Ok(()) | Err(TryRecvError::Disconnected) => return Ok(()),
@@ -264,6 +394,14 @@ fn run_event_bridge(
         connection
             .process(Duration::from_millis(500))
             .map_err(|error| error.to_string())?;
+        let revision = state
+            .lock()
+            .map(|state| state.operation_revision)
+            .unwrap_or(operation_revision);
+        if revision != operation_revision {
+            operation_revision = revision;
+            let _ = changes.try_send(());
+        }
     }
 }
 
@@ -357,7 +495,7 @@ fn refresh(connection: &SyncConnection, state: &Arc<Mutex<State>>) {
         .lock()
         .map(|current| current.scanning)
         .unwrap_or(false);
-    let next = State {
+    let mut next = State {
         connected: raw_state >= NM_STATE_CONNECTED_LOCAL,
         enabled,
         name,
@@ -368,8 +506,14 @@ fn refresh(connection: &SyncConnection, state: &Arc<Mutex<State>>) {
         saved_wifi_networks: saved_wifi_names(connection),
         ap_paths,
         scanning,
+        ..Default::default()
     };
     if let Ok(mut current) = state.lock() {
+        next.connecting = current.connecting.clone();
+        next.error = current.error.clone();
+        next.operation_revision = current.operation_revision;
+        next.revealed_password = current.revealed_password.take();
+        next.password_revision = current.password_revision;
         *current = next;
     }
 }
@@ -668,57 +812,139 @@ fn find_saved_wifi_connection(connection: &Connection, ssid: &str) -> Option<Pat
     })
 }
 
-/// Activates a visible Wi-Fi network on a background thread: reuses a saved
-/// connection profile for the SSID when one exists, or creates a minimal one
-/// on the fly for an open network. A secured network with no saved profile
-/// is left alone, since NetworkManager has no secrets to complete it with.
-fn connect_to_wifi(state: &Arc<Mutex<State>>, ssid: &str) {
-    let Ok(connection) = Connection::new_system() else {
-        return;
-    };
-    let Some((device_path, ap_path)) = state.lock().ok().and_then(|current| {
-        Some((
-            current.wifi_device.clone()?,
-            current.ap_paths.get(ssid).cloned()?,
-        ))
-    }) else {
-        return;
-    };
-
-    let root = connection.with_proxy(SERVICE, ROOT_PATH, Duration::from_secs(10));
-    if let Some(saved) = find_saved_wifi_connection(&connection, ssid) {
-        let _: Result<(Path<'static>,), _> =
-            root.method_call(SERVICE, "ActivateConnection", (saved, device_path, ap_path));
-        return;
-    }
-
-    let secured = state
+fn connect_to_wifi(
+    state: &Arc<Mutex<State>>,
+    ssid: &str,
+    password: Option<&str>,
+) -> Result<(), String> {
+    let connection = Connection::new_system().map_err(|error| error.to_string())?;
+    let (device_path, ap_path, security) = state
         .lock()
         .ok()
         .and_then(|current| {
-            current
-                .wifi_networks
-                .iter()
-                .find(|network| network.ssid == ssid)
-                .map(|network| network.secured)
+            Some((
+                current.wifi_device.clone()?,
+                current.ap_paths.get(ssid).cloned()?,
+                current
+                    .wifi_networks
+                    .iter()
+                    .find(|network| network.ssid == ssid)?
+                    .security
+                    .clone(),
+            ))
         })
-        .unwrap_or(true);
-    if secured {
-        return;
+        .ok_or("This network is no longer available. Scan and try again.")?;
+    let root = connection.with_proxy(SERVICE, ROOT_PATH, Duration::from_secs(10));
+    let active = if let Some(saved) = find_saved_wifi_connection(&connection, ssid) {
+        if let Some(password) = password {
+            let proxy = connection.with_proxy(SERVICE, &saved, Duration::from_secs(5));
+            let (mut settings,): (HashMap<String, PropMap>,) = proxy
+                .method_call(CONNECTION_INTERFACE, "GetSettings", ())
+                .map_err(|error| error.to_string())?;
+            let security = personal_security(&security, password)?;
+            settings.insert("802-11-wireless-security".into(), security);
+            let _: () = proxy
+                .method_call(CONNECTION_INTERFACE, "Update", (settings,))
+                .map_err(|error| error.to_string())?;
+        }
+        let (active,): (Path<'static>,) = root
+            .method_call(SERVICE, "ActivateConnection", (saved, device_path, ap_path))
+            .map_err(|error| error.to_string())?;
+        active
+    } else {
+        let settings = wifi_settings(ssid, &security, password)?;
+        let (_, active): (Path<'static>, Path<'static>) = root
+            .method_call(
+                SERVICE,
+                "AddAndActivateConnection",
+                (settings, device_path, ap_path),
+            )
+            .map_err(|error| error.to_string())?;
+        active
+    };
+    let deadline = std::time::Instant::now() + Duration::from_secs(20);
+    let proxy = connection.with_proxy(SERVICE, &active, Duration::from_secs(2));
+    while std::time::Instant::now() < deadline {
+        match proxy.get::<u32>(ACTIVE_CONNECTION_INTERFACE, "State") {
+            Ok(2) => return Ok(()),
+            Ok(3 | 4) | Err(_) => {
+                return Err("Could not connect. Check the password and try again.".into())
+            }
+            _ => thread::sleep(Duration::from_millis(150)),
+        }
     }
+    Err("The connection timed out. Check the password and try again.".into())
+}
 
-    let mut wireless: PropMap = HashMap::new();
-    wireless.insert(
-        "ssid".to_owned(),
-        Variant(Box::new(ssid.as_bytes().to_vec()) as Box<dyn RefArg>),
+fn personal_security(security: &str, password: &str) -> Result<PropMap, String> {
+    let key_management = match security {
+        "WPA3 Personal" => "sae",
+        "WPA2 Personal" | "WPA Personal" => "wpa-psk",
+        _ => return Err("Configure this security type in Network settings.".into()),
+    };
+    let valid = if key_management == "sae" {
+        !password.is_empty()
+    } else {
+        (8..=63).contains(&password.len())
+            || (password.len() == 64 && password.bytes().all(|byte| byte.is_ascii_hexdigit()))
+    };
+    if !valid {
+        return Err("Enter a valid Wi-Fi password (8–63 characters for WPA/WPA2).".into());
+    }
+    let mut result = PropMap::new();
+    result.insert(
+        "key-mgmt".into(),
+        Variant(Box::new(key_management.to_owned())),
     );
-    let mut settings_map: HashMap<String, PropMap> = HashMap::new();
-    settings_map.insert("802-11-wireless".to_owned(), wireless);
-    let _: Result<(Path<'static>, Path<'static>), _> = root.method_call(
-        SERVICE,
-        "AddAndActivateConnection",
-        (settings_map, device_path, ap_path),
-    );
+    result.insert("psk".into(), Variant(Box::new(password.to_owned())));
+    Ok(result)
+}
+
+fn wifi_settings(
+    ssid: &str,
+    security: &str,
+    password: Option<&str>,
+) -> Result<HashMap<String, PropMap>, String> {
+    let mut wireless = PropMap::new();
+    wireless.insert("ssid".into(), Variant(Box::new(ssid.as_bytes().to_vec())));
+    let mut settings = HashMap::from([("802-11-wireless".into(), wireless)]);
+    if security == "Enhanced Open" {
+        settings.insert(
+            "802-11-wireless-security".into(),
+            HashMap::from([(
+                "key-mgmt".into(),
+                Variant(Box::new("owe".to_owned()) as Box<dyn RefArg>),
+            )]),
+        );
+    } else if security != "Open" {
+        settings.insert(
+            "802-11-wireless-security".into(),
+            personal_security(security, password.ok_or("This network needs a password.")?)?,
+        );
+    }
+    Ok(settings)
+}
+
+fn disconnect_interface(interface: &str) -> Result<(), String> {
+    let connection = Connection::new_system().map_err(|error| error.to_string())?;
+    let root = connection.with_proxy(SERVICE, ROOT_PATH, Duration::from_secs(3));
+    let paths: Vec<Path<'static>> = root
+        .get(SERVICE, "Devices")
+        .map_err(|error| error.to_string())?;
+    for path in paths {
+        let device = connection.with_proxy(SERVICE, path, Duration::from_secs(3));
+        if device
+            .get::<String>(DEVICE_INTERFACE, "Interface")
+            .ok()
+            .as_deref()
+            == Some(interface)
+        {
+            return device
+                .method_call(DEVICE_INTERFACE, "Disconnect", ())
+                .map_err(|error| error.to_string());
+        }
+    }
+    Err("This network interface is no longer available.".into())
 }
 
 fn connection_ssid(settings: &HashMap<String, PropMap>) -> Option<String> {
@@ -733,6 +959,41 @@ mod tests {
     use super::{NetworkIntegration, NetworkManager};
     use std::thread::sleep;
     use std::time::Duration;
+
+    #[test]
+    fn personal_network_settings_preserve_ssid_bytes_and_security_type() {
+        let settings =
+            super::wifi_settings("Café 日本語", "WPA2 Personal", Some("fixture password")).unwrap();
+        let wireless = settings.get("802-11-wireless").unwrap();
+        let bytes = dbus::arg::cast::<Vec<u8>>(wireless["ssid"].0.as_ref()).unwrap();
+        assert_eq!(bytes, "Café 日本語".as_bytes());
+        assert_eq!(
+            settings["802-11-wireless-security"]["key-mgmt"].0.as_str(),
+            Some("wpa-psk")
+        );
+        let sae = super::wifi_settings("Test", "WPA3 Personal", Some("x")).unwrap();
+        assert_eq!(
+            sae["802-11-wireless-security"]["key-mgmt"].0.as_str(),
+            Some("sae")
+        );
+    }
+
+    #[test]
+    fn unsupported_security_and_invalid_passwords_fail_before_activation() {
+        assert!(super::wifi_settings("Test", "WPA2 Personal", Some("short")).is_err());
+        assert!(super::wifi_settings("Test", "WPA Enterprise", Some("fixture password")).is_err());
+        assert!(super::wifi_settings("Test", "WPA2 Personal", Some(&"a".repeat(64))).is_ok());
+        assert!(!super::wifi_settings("Test", "Open", None)
+            .unwrap()
+            .contains_key("802-11-wireless-security"));
+        assert_eq!(
+            super::wifi_settings("Test", "Enhanced Open", None).unwrap()
+                ["802-11-wireless-security"]["key-mgmt"]
+                .0
+                .as_str(),
+            Some("owe")
+        );
+    }
 
     #[test]
     #[ignore = "requires a running NetworkManager system service"]

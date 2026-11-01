@@ -15,8 +15,13 @@ creamui-core = { workspace = true }
 creamui-jsx = { workspace = true }
 creamui-macros = { workspace = true }
 creamui-reactive = { workspace = true }
+creamui-render = { workspace = true }
+creamui-theme.workspace = true
 creamui-widgets = { workspace = true }
 serde.workspace = true
+
+[dev-dependencies]
+toml.workspace = true
 
 [lints]
 workspace = true

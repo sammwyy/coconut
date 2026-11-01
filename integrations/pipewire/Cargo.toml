@@ -9,6 +9,7 @@ repository.workspace = true
 [dependencies]
 coconut-api = { workspace = true }
 pipewire.workspace = true
+serde_json.workspace = true
 
 [lints]
 workspace = true

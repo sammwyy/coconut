@@ -1016,6 +1016,7 @@ version = "0.1.0"
 dependencies = [
  "coconut-api",
  "pipewire",
+ "serde_json",
 ]
 
 [[package]]
@@ -1240,8 +1241,11 @@ dependencies = [
  "creamui-jsx",
  "creamui-macros",
  "creamui-reactive",
+ "creamui-render",
+ "creamui-theme",
  "creamui-widgets",
  "serde",
+ "toml 0.9.12+spec-1.1.0",
 ]
 
 [[package]]
