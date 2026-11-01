@@ -1,4 +1,5 @@
 pub mod editing;
+pub mod quick;
 
 use coconut_core::{
     ordered_islands, BackgroundSource, DesktopColor, DockAlign, DockConfig, DockPosition,
@@ -94,6 +95,11 @@ pub(super) fn build_dock_with_lookup(
     shared: &SharedState,
     open_panel: &Rc<dyn Fn(&'static str, Point)>,
 ) -> BoxedWidget {
+    if let Some(context) = creamui_reactive::try_use_context::<editing::Context>() {
+        if context.quick.is_active() {
+            return quick::build(viewport, dock, lookup, shared, open_panel, &context);
+        }
+    }
     if dock.position.is_vertical() {
         build_vertical_dock(viewport, dock, lookup, shared, open_panel)
     } else {

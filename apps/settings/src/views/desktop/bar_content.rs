@@ -23,6 +23,7 @@ struct Catalog {
 #[derive(Clone)]
 pub struct State {
     pub editor: BarEditor,
+    pub appearance: bar_editor::controls::AppearanceControls,
     selected: Signal<usize>,
     catalog: Signal<Option<Catalog>>,
     search: CommandPaletteController,
@@ -37,6 +38,7 @@ impl Default for State {
     fn default() -> Self {
         Self {
             editor: BarEditor::default(),
+            appearance: Default::default(),
             selected: Signal::new(0),
             catalog: Signal::new(None),
             search: CommandPaletteController::new(),

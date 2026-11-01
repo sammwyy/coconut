@@ -8,6 +8,8 @@ use creamui_widgets::{
 };
 use std::rc::Rc;
 
+pub mod controls;
+
 pub struct BarItem {
     pub id: &'static str,
     pub label: &'static str,
@@ -118,7 +120,7 @@ pub fn item_label(id: &str) -> &str {
         .map_or(id, |item| item.label)
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Target {
     Bar,
     Group(usize),
@@ -241,9 +243,22 @@ impl BarEditor {
         }
     }
 
+    pub fn draft_editor(&self) -> Self {
+        Self {
+            undo: self.undo.clone(),
+            busy: self.busy.clone(),
+            ..Self::default()
+        }
+    }
+
     pub fn report_error(&self, error: String) {
         self.status.set(error.clone());
         self.error.set(Some(error));
+    }
+
+    pub fn dismiss_transients(&self) {
+        self.menu.close();
+        self.error.set(None);
     }
 
     pub fn handler(
@@ -293,13 +308,43 @@ impl BarEditor {
         edit: BarEdit,
         saved: Rc<dyn Fn(ShellConfig)>,
     ) {
+        let restoring = matches!(edit, BarEdit::Restore(_));
+        self.persist(window, kind, expected, edit, saved, restoring);
+    }
+
+    pub fn save_draft(
+        &self,
+        window: &WindowHandle,
+        kind: BarKind,
+        expected: DockConfig,
+        draft: DockConfig,
+        saved: Rc<dyn Fn(ShellConfig)>,
+    ) {
+        self.persist(
+            window,
+            kind,
+            expected,
+            BarEdit::Restore(draft),
+            saved,
+            false,
+        );
+    }
+
+    fn persist(
+        &self,
+        window: &WindowHandle,
+        kind: BarKind,
+        expected: DockConfig,
+        edit: BarEdit,
+        saved: Rc<dyn Fn(ShellConfig)>,
+        restoring: bool,
+    ) {
         if self.busy.peek() {
             return;
         }
         self.busy.set(true);
         self.status.set("Saving changes…".into());
         let editor = self.clone();
-        let restoring = matches!(edit, BarEdit::Restore(_));
         let parent = window.clone();
         window.app().spawn_background(
             move || {

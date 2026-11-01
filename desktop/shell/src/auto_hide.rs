@@ -39,6 +39,7 @@ pub struct AutoHide {
     panels: Rc<PanelHost>,
     menu: creamui_render::ContextMenuHost,
     pending: Cell<bool>,
+    hold_open: Rc<dyn Fn() -> bool>,
 }
 
 impl AutoHide {
@@ -49,6 +50,7 @@ impl AutoHide {
         app: AppHandle,
         panels: Rc<PanelHost>,
         menu: creamui_render::ContextMenuHost,
+        hold_open: Rc<dyn Fn() -> bool>,
     ) -> Rc<Self> {
         Rc::new(Self {
             expanded: Signal::new(!enabled),
@@ -62,6 +64,7 @@ impl AutoHide {
             panels,
             menu,
             pending: Cell::new(false),
+            hold_open,
         })
     }
 
@@ -103,7 +106,7 @@ impl AutoHide {
     }
 
     fn refresh(self: &Rc<Self>) {
-        let panel_open = self.panels.has_open_panel() || self.menu.is_open();
+        let panel_open = self.panels.has_open_panel() || self.menu.is_open() || (self.hold_open)();
         if self.timer.borrow().inside || panel_open {
             self.timer.borrow_mut().cancel();
             self.pending.set(false);
@@ -126,11 +129,10 @@ impl AutoHide {
                 let Some(state) = weak.upgrade() else {
                     return;
                 };
-                if state
-                    .timer
-                    .borrow()
-                    .can_hide(token, state.panels.has_open_panel() || state.menu.is_open())
-                {
+                if state.timer.borrow().can_hide(
+                    token,
+                    state.panels.has_open_panel() || state.menu.is_open() || (state.hold_open)(),
+                ) {
                     state.pending.set(false);
                     if let Some(window) = state
                         .window

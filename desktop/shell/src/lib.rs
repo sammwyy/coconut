@@ -73,9 +73,11 @@ pub fn run() {
     let desktop_work_area = Signal::new(integrations.desktop.work_area());
 
     let shared = SharedState::default();
-    shared.insert(bar::editing::Editors(std::array::from_fn(|_| {
-        coconut_plugin_kit::bar_editor::BarEditor::for_shell()
-    })));
+    let bar_editors =
+        std::array::from_fn(|_| coconut_plugin_kit::bar_editor::BarEditor::for_shell());
+    let quick_editors =
+        std::array::from_fn(|index| bar::quick::State::with_editor(&bar_editors[index]));
+    shared.insert(bar::editing::Editors(bar_editors, quick_editors));
     shared.insert(bar::ModuleConfigRevision(Signal::new(0)));
     shared.insert(WindowIconResolver(Signal::new(
         coconut_plugin_kit::ApplicationIconResolver::new(
@@ -449,7 +451,23 @@ fn append_bars(
                 coconut_core::BarKind::Dockbar
             },
             bar: dock.clone(),
+            quick: shared
+                .get::<bar::editing::Editors>()
+                .expect("bar editors")
+                .1[index]
+                .clone(),
+            available: Rc::new(
+                registry
+                    .known_island_ids()
+                    .map(|id| (*id).to_owned())
+                    .filter(|id| id != "logo")
+                    .collect(),
+            ),
         };
+        let quick_keys = editing.quick.clone();
+        let keys_available = editing.available.clone();
+        let quick_hold = editing.quick.clone();
+        let quick_blur = editing.quick.clone();
         let editing_window = editing.window.clone();
         let visibility = auto_hide::AutoHide::new(
             dock.auto_hide,
@@ -458,6 +476,7 @@ fn append_bars(
             app.clone(),
             panel_host.clone(),
             editor.menu.clone(),
+            Rc::new(move || quick_hold.is_active()),
         );
         let visibility_ready = visibility.clone();
         let (initial_width, initial_height) = visibility.initial_size();
@@ -490,11 +509,18 @@ fn append_bars(
                 *editing_window.borrow_mut() = Some(window.clone());
                 let keys = editor.clone();
                 window.on_keyboard_input(move |event, modifiers| {
-                    coconut_plugin_kit::bar_editor::key_input(&event.key, modifiers)
-                        .is_some_and(|input| keys.handle_key(&input.key, event.pressed))
+                    coconut_plugin_kit::bar_editor::key_input(&event.key, modifiers).is_some_and(
+                        |input| {
+                            quick_keys.handle_key(input, event.pressed, &keys_available)
+                                || keys.handle_key(&input.key, event.pressed)
+                        },
+                    )
                 });
                 let blur = editor.clone();
-                window.on_focus_lost(move || blur.menu.parent_focus_lost());
+                window.on_focus_lost(move || {
+                    blur.menu.parent_focus_lost();
+                    quick_blur.focus_lost();
+                });
                 ready_backend.prepare_window(&window);
                 themed_windows.borrow_mut().push(window.clone());
                 dock_windows.borrow_mut().push(window.clone());
@@ -511,7 +537,11 @@ fn append_bars(
                     }));
                 }
                 creamui_reactive::provide_context(editing.clone());
-                let bar = build_dock(viewport, &dock, &registry, &shared, &open_panel);
+                let preview = editing.quick.preview(&dock);
+                editing
+                    .quick
+                    .resize_bar(&editing.window, viewport, &preview);
+                let bar = build_dock(viewport, &preview, &registry, &shared, &open_panel);
                 bar::editing::root(bar, viewport, &editing)
             },
         );

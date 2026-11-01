@@ -125,3 +125,9 @@
 - Investigate Blair's `wayland-backend` `InvalidId` panic observed when an
   installed compositor lost a client with an active grabbed context popup;
   normal popup dismissal before client shutdown completed successfully.
+
+- Restore the Settings connectivity scene's compact back-button hit target;
+  `connectivity_layout_matches_reference` also fails with the original Settings
+  views because the window drag region wins at `(306, 28)`.
+- Resolve the existing `clippy::implicit_clone` warning in
+  `apps/settings/src/services/settings.rs` when propagating appearance-load errors.

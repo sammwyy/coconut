@@ -27,13 +27,28 @@ Open Desktop → Statusbar or Desktop → Dockbar. Both pages start on Contents:
   screen inset, end padding and group spacing. Style controls bar and
   island backgrounds/borders and whether each group shares a single surface.
 
-Right-clicking the running bar opens a short contextual menu: bar settings on
-empty space, Edit group / Remove group on group space, or Item settings / Remove
-item / Bar settings on a widget. Editing a group opens its selected group in the
-Contents editor. Undo last edit appears only when there is an edit to reverse.
-Ordering, insertion, spacing and the catalog stay in Settings; there are no
-nested contextual submenus. Menus use CreamUI's `ContextMenuHost` with a native
-Wayland popup or an overlay fallback. Auto-hide waits while a menu is open.
+Right-click either running bar and choose **Quick Edit** to arrange widgets on
+that bar. Visible outlines mark item hitboxes and section boundaries; drag an
+item to insert it before/after another item or into another section, and drag a
+section grip to reorder sections. Hidden sections and temporarily unavailable
+widgets remain editable. Each section has Add item and removal controls; only
+empty sections can be removed here. Long sections scroll with the wheel.
+
+The floating Quick Edit window has Layout, Style and Sections tabs, a searchable
+item catalog and Add section. Layout previews thickness, alignment, fill, screen
+inset and gaps. Style previews shared/separate island surfaces, borders, theme
+or custom colors and independent opacity for bars and islands. The same Style
+controls are available in Settings. Section spacing supports pixels, percentages,
+between and evenly distributed items. Auto-hide stays expanded during editing.
+
+**Save** commits the draft; **Discard**, Escape or closing the editor restores
+the saved bar. Escape first cancels an active drag, picker, catalog or error.
+Dropping outside the bar and losing focus cancel the drag. Alt + Up/Down on an
+item reorders it, Alt + Left/Right transfers it, and Delete removes it. Alt +
+arrows on a section grip reorder that section. Contextual menus retain
+**Bar settings…** / **Dock settings…**, widget settings and Undo last edit;
+while editing they also offer Save and Discard. Menus use CreamUI native
+Wayland popups with an overlay fallback.
 
 The catalog includes clipboard history on Linux, application launching, open
 windows, workspaces, clock, weather, media controls and the configured tray
@@ -42,13 +57,14 @@ them available. Changes to tray mode still require a new session, as documented
 on Status icons. Now playing may be absent from the running bar while no media
 is playing; its placement remains visible in the editor.
 
-Content edits read the latest configuration and save in a background task. A
-changed bar snapshot prevents a stale menu from editing a different placement.
+Settings content edits and Quick Edit saves read the latest configuration and
+save in a background task. A changed bar snapshot prevents a stale menu from editing a different placement.
 An atomic replacement preserves the previous file if writing fails. Other bar
 settings and inline item overrides survive moves. Settings follows shell config
 notifications, including edits made through the bar's context menu. Unsaved
-content changes are never displayed as successfully applied; failures show an
-error and leave Undo unchanged.
+Settings content changes are never displayed as successfully applied; failures
+show an error and leave Undo unchanged. Quick Edit retains its draft on save failure; an
+external change to the same bar is rejected instead of overwritten.
 
 The Islands page manages shared widget settings and links to both content editors.
 It does not implicitly insert items into the first group or remove every copy.
@@ -87,3 +103,11 @@ The drag scene tests drive the actual handle callbacks across reactive rebuilds
 in light/dark and normal/compact windows. They cover item ordering, transfer to
 another group, group ordering, cancellation and keyboard movement. Drag previews
 are included in `COCONUT_BAR_SNAPSHOTS` output.
+
+Render and exercise the running-bar editor, including all four screen edges,
+real widgets, overflow, empty sections, keyboard editing, catalog filtering,
+discard and save errors:
+
+```bash
+COCONUT_QUICK_EDIT_SNAPSHOTS=/tmp/coconut-quick cargo test -p coconut-shell --lib bar::quick
+```

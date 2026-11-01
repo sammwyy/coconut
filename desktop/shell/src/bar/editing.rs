@@ -6,7 +6,7 @@ use creamui_widgets::{layout::Flex, RawView};
 use std::{cell::RefCell, rc::Rc};
 
 #[derive(Clone)]
-pub struct Editors(pub [BarEditor; 2]);
+pub struct Editors(pub [BarEditor; 2], pub [super::quick::State; 2]);
 
 #[derive(Clone)]
 pub struct Context {
@@ -14,28 +14,109 @@ pub struct Context {
     pub window: Rc<RefCell<Option<WindowHandle>>>,
     pub kind: BarKind,
     pub bar: DockConfig,
+    pub quick: super::quick::State,
+    pub available: Rc<Vec<String>>,
 }
 
 impl Context {
-    fn open(&self, point: Point, target: Target) {
+    pub(super) fn open(&self, point: Point, target: Target) {
         let Some(window) = self.window.borrow().clone() else {
             return;
         };
-        let apply =
-            self.editor
-                .handler(window.clone(), self.kind, self.bar.clone(), Rc::new(|_| {}));
-        let mut items = bar_editor::content_menu(
-            self.kind,
-            &self.bar,
-            target,
-            apply,
-            Rc::new(coconut_plugin_kit::open_settings),
+        let mut items = Vec::new();
+        let bar = self.quick.preview(&self.bar);
+        if let Target::Item { group, item } = target {
+            if let Some(entry) = bar.sections.get(group).and_then(|section| {
+                coconut_core::ordered_islands(&section.islands)
+                    .get(item)
+                    .copied()
+            }) {
+                if let Some(route) = bar_editor::item_settings_route(&entry.id) {
+                    items.push(creamui_widgets::ContextMenuItem::new(
+                        "item-settings",
+                        "Configure widget…",
+                        move || coconut_plugin_kit::open_settings(route),
+                    ));
+                }
+            }
+            if self.quick.is_active() {
+                let quick = self.quick.clone();
+                items.push(creamui_widgets::ContextMenuItem::new(
+                    "remove-item",
+                    "Remove item",
+                    move || quick.apply(coconut_core::BarEdit::RemoveItem { group, item }),
+                ));
+            }
+        }
+        if let Target::Group(group) = target {
+            if self.quick.is_active() {
+                let quick = self.quick.clone();
+                items.push(creamui_widgets::ContextMenuItem::new(
+                    "add-item",
+                    "Add item…",
+                    move || quick.open_catalog(group),
+                ));
+                let quick = self.quick.clone();
+                items.push(
+                    creamui_widgets::ContextMenuItem::new(
+                        "remove-group",
+                        "Remove empty section",
+                        move || quick.apply(coconut_core::BarEdit::RemoveGroup(group)),
+                    )
+                    .enabled(
+                        bar.sections
+                            .get(group)
+                            .is_some_and(|section| section.islands.is_empty()),
+                    ),
+                );
+            }
+        }
+        let route = self.kind.route().to_owned();
+        items.push(creamui_widgets::ContextMenuItem::new(
+            "settings",
+            if self.kind == BarKind::Statusbar {
+                "Bar settings…"
+            } else {
+                "Dock settings…"
+            },
+            move || coconut_plugin_kit::open_settings(route.clone()),
+        ));
+        let quick = self.quick.clone();
+        let quick_window = window.clone();
+        let bar = self.bar.clone();
+        let kind = self.kind;
+        let available = self.available.clone();
+        items.insert(
+            0,
+            creamui_widgets::ContextMenuItem::new("quick-edit", "Quick Edit", move || {
+                quick.open(quick_window.clone(), kind, bar.clone(), available.clone())
+            }),
         );
+        if self.quick.is_active() {
+            let quick = self.quick.clone();
+            let parent = window.clone();
+            let kind = self.kind;
+            items.insert(
+                1,
+                creamui_widgets::ContextMenuItem::new("save", "Save quick edits", move || {
+                    quick.save(&parent, kind)
+                }),
+            );
+            let quick = self.quick.clone();
+            items.insert(
+                2,
+                creamui_widgets::ContextMenuItem::new(
+                    "discard",
+                    "Discard quick edits",
+                    move || quick.discard(),
+                ),
+            );
+        }
         let editor = self.editor.clone();
         let kind = self.kind;
         let bar = self.bar.clone();
         let undo_window = window.clone();
-        if self.editor.can_undo(self.kind, &self.bar) {
+        if !self.quick.is_active() && self.editor.can_undo(self.kind, &self.bar) {
             items.push(creamui_widgets::ContextMenuItem::new(
                 "undo",
                 "Undo last edit",
@@ -50,6 +131,9 @@ pub fn wrap(widget: BoxedWidget, target: Target) -> BoxedWidget {
     let Some(context) = creamui_reactive::try_use_context::<Context>() else {
         return widget;
     };
+    if context.quick.is_active() && !matches!(target, Target::Bar) {
+        return widget;
+    }
     Box::new(
         RawView::new(creamui_core::Style::new())
             .with_context_menu(move |point| context.open(point, target))
@@ -151,6 +235,8 @@ mod tests {
                     window: Rc::new(RefCell::new(None)),
                     kind: BarKind::Statusbar,
                     bar: bar.clone(),
+                    quick: super::super::quick::State::default(),
+                    available: Rc::new(Vec::new()),
                 };
                 creamui_reactive::provide_context(context.clone());
                 let widget = super::super::build_dock_with_lookup(

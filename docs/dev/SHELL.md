@@ -338,15 +338,22 @@ File creation and rename use the same themed input dialogs on both surfaces.
 The Statusbar and Dockbar Contents pages provide group selection, a searchable
 item catalog, ordering, visibility, spacing, placement-specific removal and Undo.
 Drag handles in Settings to arrange items, move them between groups, or reorder
-groups. Right-click the running bar for a short menu with settings and removal;
-layout controls and the item catalog stay in Settings. Content edits apply live and Settings
-follows changes made from the shell. See [Settings](../../apps/settings/README.md)
-for routes, persistence behavior and scene tests.
+groups. Right-click either running bar for Quick Edit or its Settings page.
+Quick Edit exposes item hitboxes, section grips, insertion previews, addition
+and removal directly on the bar, with a floating window for layout, style and
+section controls. It previews a draft until Save; Discard, Escape or closing the
+editor restore the saved layout. Only empty sections can be deleted in this
+mode. Auto-hide stays expanded and long sections support wheel scrolling.
+Settings content edits continue to apply live. See [Settings](../../apps/settings/README.md)
+for keyboard controls, persistence behavior and scene tests.
 
 Keep bar operations independent of widgets in `coconut-core::BarEdit`. Shared
-catalog metadata, menu composition and background persistence live in
-`coconut-plugin-kit::bar_editor`; shell hit routing and Settings presentation
-remain in their respective consumers.
+catalog metadata, menu composition, appearance controls and background
+persistence live in `coconut-plugin-kit::bar_editor`; shell hit routing, draft
+previews and Settings presentation remain in their respective consumers. Both
+editors use checked background saves and share shell Undo history. Quick Edit
+must cancel a drag without applying it when focus is lost, its source snapshot
+changes or the release is outside the bar.
 
 ## Control center layout editing
 

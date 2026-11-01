@@ -282,37 +282,15 @@ fn number_choice(
 }
 
 fn appearance_card(config: &Signal<ShellConfig>, kind: BarKind, bar: &DockConfig) -> BoxedWidget {
-    let toggle = |label, value, change: fn(&mut DockConfig)| -> BoxedWidget {
-        let apply = config.clone();
-        row(
-            label,
-            Box::new(Switch::new(value, move || {
-                update_config(&apply, |c| change(kind.get_mut(c)))
-            })),
-        )
-    };
+    let context = creamui_reactive::use_context::<crate::views::context::ViewContext>();
+    let config = config.clone();
+    let change: coconut_plugin_kit::bar_editor::controls::Change = std::rc::Rc::new(move |edit| {
+        update_config(&config, |config| edit(kind.get_mut(config)));
+    });
     section(
         "Appearance",
-        "Choose a continuous bar background or isolated island groups.",
-        vec![group(vec![
-            toggle("Bar background", bar.show_background, |bar| {
-                bar.show_background = !bar.show_background
-            }),
-            toggle("Bar border", bar.show_border, |bar| {
-                bar.show_border = !bar.show_border
-            }),
-            toggle("Island backgrounds", bar.show_island_background, |bar| {
-                bar.show_island_background = !bar.show_island_background
-            }),
-            toggle("Island borders", bar.show_island_border, |bar| {
-                bar.show_island_border = !bar.show_island_border
-            }),
-            toggle(
-                "Join each island group",
-                bar.unify_island_background,
-                |bar| bar.unify_island_background = !bar.unify_island_background,
-            ),
-        ])],
+        "Choose backgrounds, colors and transparency for the bar and its islands.",
+        vec![group(context.bar_content.appearance.build(bar, &change))],
     )
 }
 
