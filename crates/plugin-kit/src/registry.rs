@@ -1,4 +1,4 @@
-use crate::{Island, Panel, Plugin, PluginInitContext};
+use crate::{Island, Panel, Plugin, PluginEvent, PluginEventHandler, PluginInitContext};
 use coconut_core::DockConfig;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -11,6 +11,7 @@ use std::rc::Rc;
 /// `open_panel(id, ...)` calls.
 pub struct PluginRegistry {
     islands: HashMap<&'static str, Rc<dyn Island>>,
+    handlers: Vec<PluginEventHandler>,
     panels: HashMap<&'static str, Rc<dyn Panel>>,
 }
 
@@ -24,10 +25,12 @@ impl PluginRegistry {
     pub fn build(plugins: &[Box<dyn Plugin>], ctx: &PluginInitContext) -> Self {
         let mut registry = Self {
             islands: HashMap::new(),
+            handlers: Vec::new(),
             panels: HashMap::new(),
         };
         for plugin in plugins {
             registry.register(plugin.islands(ctx), plugin.panels(ctx));
+            registry.handlers.extend(plugin.event_handler(ctx));
         }
         registry
     }
@@ -44,6 +47,12 @@ impl PluginRegistry {
         }
         for panel in panels {
             self.panels.insert(panel.id(), panel);
+        }
+    }
+
+    pub fn dispatch(&self, event: &PluginEvent) {
+        for handler in &self.handlers {
+            handler(event);
         }
     }
 
@@ -148,6 +157,7 @@ mod tests {
     fn empty_registry() -> PluginRegistry {
         PluginRegistry {
             islands: HashMap::new(),
+            handlers: Vec::new(),
             panels: HashMap::new(),
         }
     }
@@ -156,6 +166,22 @@ mod tests {
         ids.iter()
             .map(|id| Rc::new(FakeIsland(id)) as Rc<dyn Island>)
             .collect()
+    }
+
+    #[test]
+    fn plugin_events_dispatch_without_resolving_domain_state() {
+        let received = Rc::new(std::cell::RefCell::new(Vec::new()));
+        let events = received.clone();
+        let mut registry = empty_registry();
+        registry.handlers.push(Rc::new(move |event| {
+            events.borrow_mut().push(format!("{event:?}"))
+        }));
+        registry.dispatch(&PluginEvent::IconThemeChanged("Example".into()));
+        registry.dispatch(&PluginEvent::ModuleConfigChanged);
+        assert_eq!(
+            *received.borrow(),
+            vec!["IconThemeChanged(\"Example\")", "ModuleConfigChanged"]
+        );
     }
 
     #[test]

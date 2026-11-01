@@ -367,3 +367,40 @@ the layout model, editor and device-card presentation in `plugins/tray`; see
 its [README](../../plugins/tray/README.md) for interaction, configuration and
 scene-test details. Typed module configuration saves use the core atomic-write
 helper, preserving the previous file when replacement fails.
+
+## Plugin interactions and pinned applications
+
+`coconut-plugin-kit::Interactive` wraps plugin content with independent primary
+clicks, runtime context-menu builders, native file drag sources and filtered file
+drop targets. Both bar windows and `PanelHost` provide an `InteractionHost` in
+the reactive context. Menus use CreamUI's native popup host, with an overlay
+fallback, and respect keyboard dismissal and parent focus changes.
+
+```rust,ignore
+Interactive::new(content)
+    .on_click(move |point| open_details(point))
+    .context_menu(move |point| build_actions(point))
+    .on_drop_files(FileDropFilter::extensions(["desktop"]), move |paths| import(paths))
+    .drag_files(desktop_files)
+```
+
+Menu builders run on each secondary click and return normal `ContextMenuItem`
+values, including submenus, callbacks and enabled states. Child widgets own their
+menus; bar editing handles uncovered regions. Primary actions remain separate.
+`Interactive` provides Enter/Space activation when it owns the primary action.
+
+File drop targets are CreamUI widget interaction hooks, hit-tested against the
+current scene, visible clips, modal barriers and paint order. Native-runtime
+nodes expose the same target through `EventState`. Rejected files are filtered
+before callbacks, and a widget target takes precedence over a window-wide file
+handler. Native file drags carry actual percent-encoded `text/uri-list` payloads
+and use Copy. Wayland receives and sends pipe data outside the UI thread, retains
+the original drop position, and preserves dismissed source popups until a
+transfer finishes. Unsupported backends return a native drag error.
+
+Plugins receive generic `PluginEvent` values through registered event handlers.
+Icon-theme changes and module-config invalidation do not require the shell to
+import a plugin's state types. The drawer and pinned-app plugin share the
+application catalog in plugin-kit; pin persistence belongs to coconut-core.
+See [Pinned apps](../../plugins/pinned_apps/README.md) for the widget, shared file
+format and validation commands. The shell has no pin/unpin dispatcher.

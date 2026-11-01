@@ -21,7 +21,6 @@ use coconut_core::{
     ipc::RuntimeEvent, DockConfig, DockPosition, ShellConfig, ShortcutAction, ShortcutConfig,
     UserProfile,
 };
-use coconut_plugin_app_drawer::AppCatalog;
 use coconut_plugin_app_launcher::{LauncherOpenSignal, WindowIconResolver, WindowListState};
 use coconut_plugin_clock::{ClockConfig, ClockText};
 use coconut_plugin_current_playing::{
@@ -466,6 +465,9 @@ fn append_bars(
         };
         let quick_keys = editing.quick.clone();
         let keys_available = editing.available.clone();
+        let interactions = coconut_plugin_kit::InteractionHost::new();
+        let interaction_hold = interactions.clone();
+        let interaction_ready = interactions.clone();
         let quick_hold = editing.quick.clone();
         let quick_blur = editing.quick.clone();
         let editing_window = editing.window.clone();
@@ -476,7 +478,11 @@ fn append_bars(
             app.clone(),
             panel_host.clone(),
             editor.menu.clone(),
-            Rc::new(move || quick_hold.is_active()),
+            Rc::new(move || {
+                quick_hold.is_active()
+                    || interaction_hold.menu_open()
+                    || interaction_hold.is_dragging()
+            }),
         );
         let visibility_ready = visibility.clone();
         let (initial_width, initial_height) = visibility.initial_size();
@@ -506,18 +512,27 @@ fn append_bars(
             Color::rgba(0, 0, 0, 0),
             move |window: WindowHandle| {
                 visibility_ready.install(window.clone());
+                interaction_ready.install(window.clone());
+                let interaction_keys = interaction_ready.downgrade();
                 *editing_window.borrow_mut() = Some(window.clone());
                 let keys = editor.clone();
                 window.on_keyboard_input(move |event, modifiers| {
                     coconut_plugin_kit::bar_editor::key_input(&event.key, modifiers).is_some_and(
                         |input| {
-                            quick_keys.handle_key(input, event.pressed, &keys_available)
+                            interaction_keys
+                                .upgrade()
+                                .is_some_and(|host| host.handle_key(&input.key, event.pressed))
+                                || quick_keys.handle_key(input, event.pressed, &keys_available)
                                 || keys.handle_key(&input.key, event.pressed)
                         },
                     )
                 });
                 let blur = editor.clone();
+                let interaction_blur = interaction_ready.downgrade();
                 window.on_focus_lost(move || {
+                    if let Some(host) = interaction_blur.upgrade() {
+                        host.parent_focus_lost();
+                    }
                     blur.menu.parent_focus_lost();
                     quick_blur.focus_lost();
                 });
@@ -537,12 +552,13 @@ fn append_bars(
                     }));
                 }
                 creamui_reactive::provide_context(editing.clone());
+                creamui_reactive::provide_context(interactions.clone());
                 let preview = editing.quick.preview(&dock);
                 editing
                     .quick
                     .resize_bar(&editing.window, viewport, &preview);
                 let bar = build_dock(viewport, &preview, &registry, &shared, &open_panel);
-                bar::editing::root(bar, viewport, &editing)
+                interactions.root(bar::editing::root(bar, viewport, &editing), viewport)
             },
         );
     }
@@ -620,9 +636,9 @@ fn schedule_runtime_events(
                                         icon_theme.clone(),
                                     ));
                             }
-                            if let Some(catalog) = shared.get::<AppCatalog>() {
-                                catalog.start_loading(&app, icon_theme.clone());
-                            }
+                            registry.dispatch(&coconut_plugin_kit::PluginEvent::IconThemeChanged(
+                                icon_theme.clone(),
+                            ));
                             desktop_state.start_loading(&app, icon_theme);
                         }
                         if !weather_was_enabled
@@ -651,6 +667,7 @@ fn schedule_runtime_events(
                         }
                     }
                     RuntimeEvent::ModuleConfigChanged => {
+                        registry.dispatch(&coconut_plugin_kit::PluginEvent::ModuleConfigChanged);
                         if let Some(revision) = shared.get::<bar::ModuleConfigRevision>() {
                             revision.0.update(|value| *value = value.wrapping_add(1));
                         }

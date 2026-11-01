@@ -19,6 +19,7 @@ pub fn all_plugins() -> Vec<Box<dyn Plugin>> {
         Box::new(coconut_plugin_current_playing::CurrentPlayingPlugin),
         Box::new(coconut_plugin_app_launcher::AppLauncherPlugin),
         Box::new(coconut_plugin_app_drawer::AppDrawerPlugin),
+        Box::new(coconut_plugin_pinned_apps::PinnedAppsPlugin),
         Box::new(coconut_plugin_tray::TrayPlugin),
     ]
 }

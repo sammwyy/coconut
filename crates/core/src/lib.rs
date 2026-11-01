@@ -6,6 +6,7 @@ mod dock;
 pub mod geo;
 pub mod ipc;
 pub mod modules;
+mod pinned_apps;
 mod popups;
 mod process;
 mod profile;
@@ -22,6 +23,7 @@ pub use dock::{
     ordered_islands, BackgroundSource, DockAlign, DockConfig, DockDirection, DockPosition,
     IslandEntry, SectionConfig, DEFAULT_THICKNESS,
 };
+pub use pinned_apps::{PinnedApplication, PinnedApplications, PinnedAppsStore};
 pub use popups::{PopupAlign, PopupConfig, PopupEdge};
 pub use process::{files_command, spawn_detached, terminal_command};
 pub use profile::UserProfile;
@@ -255,6 +257,8 @@ island_background_opacity = 1.0
 gap = "10px"
 [[dockbar.section.island]]
 id = "app_launcher"
+[[dockbar.section.island]]
+id = "pinned_apps"
 [[dockbar.section.island]]
 id = "open_windows"
 

@@ -794,6 +794,7 @@ dependencies = [
  "delib",
  "serde",
  "serde_json",
+ "tempfile",
  "toml 0.9.12+spec-1.1.0",
 ]
 
@@ -1228,6 +1229,21 @@ dependencies = [
  "creamui-widgets",
  "delib",
  "serde",
+ "url",
+]
+
+[[package]]
+name = "coconut-plugin-pinned-apps"
+version = "0.1.0"
+dependencies = [
+ "coconut-core",
+ "coconut-plugin-kit",
+ "creamui-core",
+ "creamui-image",
+ "creamui-reactive",
+ "creamui-render",
+ "creamui-theme",
+ "creamui-widgets",
 ]
 
 [[package]]
@@ -1382,6 +1398,7 @@ dependencies = [
  "coconut-plugin-clock",
  "coconut-plugin-current-playing",
  "coconut-plugin-kit",
+ "coconut-plugin-pinned-apps",
  "coconut-plugin-tray",
  "coconut-plugin-weather",
  "coconut-plugin-workspaces",

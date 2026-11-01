@@ -61,6 +61,7 @@ coconut-integration-power-profiles-daemon = { path = "integrations/power-profile
 coconut-integration-system = { path = "integrations/system" }
 coconut-integration-upower = { path = "integrations/upower" }
 coconut-integration-windows = { path = "integrations/windows" }
+coconut-plugin-pinned-apps = { path = "plugins/pinned_apps" }
 coconut-plugin-app-drawer = { path = "plugins/app_drawer" }
 coconut-plugin-app-launcher = { path = "plugins/app_launcher" }
 coconut-plugin-clock = { path = "plugins/clock" }

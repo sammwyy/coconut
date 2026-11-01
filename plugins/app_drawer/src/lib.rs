@@ -1,19 +1,9 @@
-//! `coconut-plugin-app-drawer`: the searchable/categorized app grid popup
-//! opened by the paired `coconut-plugin-app-launcher` crate's
-//! `AppLauncherIsland`. Contributes only a `Panel`, no `Island` (Phase 4b of
-//! the dock/island/panel refactor,
-//! `~/.claude/plans/luminous-prancing-wombat.md`).
-//!
-//! See `panel.rs`'s module doc comment for how `AppCatalog` (the
-//! background app scan/icon cache, which needs a live `AppHandle` and the
-//! configured icon theme) is built once here at plugin-init time and handed
-//! to `Panel::build` via `SharedState`.
-
 mod panel;
 
-pub use panel::{AppCatalog, AppDrawerPanel, DrawerState};
+pub use coconut_plugin_kit::AppCatalog;
+pub use panel::{AppDrawerPanel, DrawerState};
 
-use coconut_plugin_kit::{Panel, Plugin, PluginInitContext};
+use coconut_plugin_kit::{Panel, Plugin, PluginEvent, PluginEventHandler, PluginInitContext};
 use std::rc::Rc;
 
 pub struct AppDrawerPlugin;
@@ -24,19 +14,19 @@ impl Plugin for AppDrawerPlugin {
     }
 
     fn panels(&self, ctx: &PluginInitContext) -> Vec<Rc<dyn Panel>> {
-        let catalog = AppCatalog::new();
-        // The icon theme lives in `shell.toml`'s `[appearance]` table, not a
-        // per-plugin `modules/<id>.toml` (so `ctx.module_config` doesn't
-        // apply here) — read it the same way `desktop/shell/src/lib.rs` used to
-        // read `initial_config.appearance.icon_theme` before `AppBuilder`
-        // even started.
-        let icon_theme = coconut_core::ShellConfig::load().appearance.icon_theme;
-        catalog.start_loading(&ctx.app, icon_theme);
-        // Stashed so `Panel::build` (and, later, Phase 4d's config-reload
-        // handling) can fetch this exact instance back out — see panel.rs's
-        // module doc comment.
-        ctx.shared.insert(catalog);
+        AppCatalog::ensure(ctx);
+        coconut_plugin_kit::pins::Pins::ensure(ctx);
         vec![Rc::new(AppDrawerPanel)]
+    }
+
+    fn event_handler(&self, ctx: &PluginInitContext) -> Option<PluginEventHandler> {
+        let catalog = AppCatalog::ensure(ctx);
+        let app = ctx.app.clone();
+        Some(Rc::new(move |event| {
+            if let PluginEvent::IconThemeChanged(theme) = event {
+                catalog.set_icon_theme(&app, theme.clone());
+            }
+        }))
     }
 }
 

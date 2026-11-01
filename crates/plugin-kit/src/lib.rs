@@ -10,6 +10,7 @@
 //! workspace depends on this crate yet — `plugins/<id>` crates and
 //! `desktop/shell`'s engine rewrite (Phase 4) are the first consumers.
 
+pub mod applications;
 pub mod bar_editor;
 pub mod chrome;
 mod config;
@@ -17,9 +18,11 @@ pub mod design;
 mod gap;
 mod icon_theme;
 mod icons;
+pub mod interactions;
 mod island;
 mod panel;
 mod panel_host;
+pub mod pins;
 mod plugin;
 mod registry;
 mod schema;
@@ -39,8 +42,11 @@ pub use icons::pixel_icon;
 pub use island::{Island, IslandRenderContext};
 pub use panel::{Panel, PanelRenderContext};
 pub use panel_host::PanelHost;
-pub use plugin::{Plugin, PluginInitContext};
+pub use plugin::{Plugin, PluginEvent, PluginEventHandler, PluginInitContext};
 pub use registry::{warn_unknown_islands, PluginRegistry};
 pub use schema::{ConfigField, FieldKind, NumberPresentation, NumberRange};
 pub use settings::{open_settings, settings_program};
 pub use state::SharedState;
+
+pub use applications::{app_categories, app_matches, launch_app, AppCatalog, AppEntry};
+pub use interactions::{file_drag_data, FileDropFilter, InteractionHost, Interactive};

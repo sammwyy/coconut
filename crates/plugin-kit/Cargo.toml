@@ -22,6 +22,7 @@ creamui-render = { workspace = true, default-features = true, features = ["conte
 creamui-theme = { workspace = true }
 creamui-widgets = { workspace = true }
 serde.workspace = true
+url.workspace = true
 
 [lints]
 workspace = true

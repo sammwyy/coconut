@@ -32,12 +32,6 @@ const DOUBLE_CLICK: Duration = Duration::from_millis(400);
 /// Rasterizes SVG icons bigger than any configured icon size, so scaling
 /// down (rather than up) is what `ImageFit::Contain` ends up doing.
 const ICON_RASTER_SIZE: u32 = 160;
-/// Identifies a desktop-icon drag to whatever it's dropped on. Not consumed
-/// by anything yet (nothing accepts drops today) — offered so a real drop
-/// target can eventually recognize the drag without renegotiating the
-/// protocol from scratch.
-const DESKTOP_ICON_MIME: &str = "application/x.coconut.desktop-icon";
-
 // Ratios lifted from the original hardcoded layout (58px icon box, 8px
 // gaps), used to scale the tile, gaps and label together whenever the icon
 // size changes.
@@ -390,6 +384,7 @@ fn desktop_icon(
     let drag_start_grab = grab.clone();
     let drag_start_window = state.desktop_window.clone();
     let drag_start_icon = entry.icon.clone();
+    let drag_source = entry.path.clone();
     let drag_state = state.clone();
     let drop_state = state.clone();
     Box::new(
@@ -438,7 +433,14 @@ fn desktop_icon(
                     width: data.width(),
                     height: data.height(),
                 });
-                let _ = window.start_drag(&[DESKTOP_ICON_MIME.to_owned()], icon);
+                match coconut_plugin_kit::file_drag_data(std::slice::from_ref(&drag_source))
+                    .and_then(|data| window.start_drag_with_data(&data, icon))
+                {
+                    Ok(()) => {}
+                    Err(error) => {
+                        eprintln!("desktop: cannot drag {}: {error}", drag_source.display())
+                    }
+                }
             }
         })
         .with_drag(move |local, rect| {

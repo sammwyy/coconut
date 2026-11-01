@@ -108,7 +108,9 @@ Alphin daemons.
 The workflow checks out CreamUI, Blair, Alphin, and delib beside Coconut at pinned
 commits. Update their `ref` values deliberately when changing sibling APIs and
 commit the resulting `Cargo.lock` changes. `scripts/build.sh --locked` prevents
-the release build from silently resolving a different dependency graph.
+the release build from silently resolving a different dependency graph. The
+CreamUI pin includes widget file-drop targets and native MIME drag payloads,
+which the shell and pinned-app widget require.
 
 The pinned delib commit does not yet expose `MimeApps::applications_for`, which
 Coconut's file menus already require. The workflow applies

@@ -1,0 +1,21 @@
+[package]
+name = "coconut-plugin-pinned-apps"
+version.workspace = true
+edition.workspace = true
+description = "Pinned application island and grouped application picker"
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+coconut-core.workspace = true
+coconut-plugin-kit.workspace = true
+creamui-core.workspace = true
+creamui-image.workspace = true
+creamui-reactive.workspace = true
+creamui-render.workspace = true
+creamui-theme.workspace = true
+creamui-widgets.workspace = true
+
+[lints]
+workspace = true

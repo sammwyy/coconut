@@ -171,6 +171,7 @@ impl Default for DockConfig {
                 gap: default_gap(),
                 islands: vec![
                     IslandEntry::with_id("app_launcher"),
+                    IslandEntry::with_id("pinned_apps"),
                     IslandEntry::with_id("open_windows"),
                 ],
             }],
@@ -309,13 +310,16 @@ mod tests {
     }
 
     #[test]
-    fn default_dock_has_launcher_and_windows() {
+    fn default_dock_has_launcher_pins_and_windows() {
         let dock = DockConfig::default();
         assert_eq!(dock.position, DockPosition::Bottom);
         assert_eq!(dock.sections.len(), 1);
         fn ids(section: &SectionConfig) -> Vec<&str> {
             section.islands.iter().map(|i| i.id.as_str()).collect()
         }
-        assert_eq!(ids(&dock.sections[0]), vec!["app_launcher", "open_windows"]);
+        assert_eq!(
+            ids(&dock.sections[0]),
+            vec!["app_launcher", "pinned_apps", "open_windows"]
+        );
     }
 }

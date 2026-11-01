@@ -33,7 +33,19 @@ pub trait Plugin {
         Vec::new()
     }
 
+    fn event_handler(&self, _ctx: &PluginInitContext) -> Option<PluginEventHandler> {
+        None
+    }
+
     fn panels(&self, _ctx: &PluginInitContext) -> Vec<Rc<dyn Panel>> {
         Vec::new()
     }
 }
+
+#[derive(Clone, Debug)]
+pub enum PluginEvent {
+    IconThemeChanged(String),
+    ModuleConfigChanged,
+}
+
+pub type PluginEventHandler = Rc<dyn Fn(&PluginEvent)>;

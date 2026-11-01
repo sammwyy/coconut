@@ -206,13 +206,14 @@ mod tests {
         BarEdit::AddGroup.apply(&mut bar).unwrap();
         BarEdit::MoveItem {
             group: 0,
-            item: 1,
+            item: 2,
             to_group: 1,
             at: 0,
         }
         .apply(&mut bar)
         .unwrap();
-        assert_eq!(bar.sections[0].islands[0].id, "open_windows");
+        assert_eq!(bar.sections[0].islands[0].id, "pinned_apps");
+        assert_eq!(bar.sections[0].islands[1].id, "open_windows");
         assert_eq!(bar.sections[1].islands[0].id, "app_launcher");
         assert_eq!(
             bar.sections[1].islands[0].config["label"].as_str(),
@@ -252,7 +253,12 @@ mod tests {
                 .iter()
                 .map(|e| e.id.as_str())
                 .collect::<Vec<_>>(),
-            ["open_windows", "app_launcher", "app_launcher"]
+            [
+                "pinned_apps",
+                "app_launcher",
+                "app_launcher",
+                "open_windows"
+            ]
         );
         let before = bar.clone();
         assert!(BarEdit::MoveItem {

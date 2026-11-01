@@ -27,6 +27,13 @@ pub const BAR_ITEMS: &[BarItem] = &[
         description: "Browse and search your applications",
     },
     BarItem {
+        id: "pinned_apps",
+        settings_route: "/desktop/widgets/pinned_apps",
+        category: "Applications",
+        label: "Pinned apps",
+        description: "Launch favorites and pin applications",
+    },
+    BarItem {
         id: "open_windows",
         settings_route: "/desktop/widgets/open_windows",
         category: "Applications",

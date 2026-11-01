@@ -33,6 +33,7 @@ coconut-plugin-clock = { workspace = true }
 coconut-plugin-weather = { workspace = true }
 coconut-plugin-current-playing = { workspace = true }
 coconut-plugin-app-launcher = { workspace = true }
+coconut-plugin-pinned-apps.workspace = true
 coconut-plugin-app-drawer = { workspace = true }
 coconut-plugin-tray = { workspace = true }
 chrono.workspace = true

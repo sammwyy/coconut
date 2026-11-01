@@ -17,6 +17,8 @@ stay calm, responsive, and consistent.
 - Island groups for visually separated widget sections
 - A centered running-app dockbar with active-window feedback
 - Application browsing, category navigation, and search
+- A reusable [Pinned apps](plugins/pinned_apps/README.md) widget with contextual
+  pinning and `.desktop` file drag and drop
 - Now-playing information with playback controls
 - Clock and weather widgets
 - A permission-controlled clipboard history service and optional history widget

@@ -1,66 +1,25 @@
-//! `app_drawer`'s `Panel` implementation, moved from
-//! `desktop/shell/src/panels/app_drawer/mod.rs` (Phase 4b of the dock/island/
-//! panel refactor, `~/.claude/plans/luminous-prancing-wombat.md`). Opened by
-//! the paired `coconut-plugin-app-launcher` crate's `AppLauncherIsland` via
-//! `(ctx.open_panel)("app_drawer", at)`.
-//!
-//! **`AppCatalog`/`AppHandle`/icon-theme design note:** `AppCatalog::start_loading`
-//! needs a live `creamui_render::AppHandle` (to run the filesystem scan and
-//! icon resolution as background work) and the current icon-theme string —
-//! neither of which [`PanelRenderContext`] carries (a popup's `build` only
-//! gets `size`/`shared`/`scratch`/`open_panel`/`close`). Both are available,
-//! however, at [`crate::AppDrawerPlugin::panels`] time: `PluginInitContext`
-//! carries `app: AppHandle`, and the icon theme is read directly from
-//! `coconut_core::ShellConfig::load()` there (mirroring how
-//! `desktop/shell/src/lib.rs` read `initial_config.appearance.icon_theme`
-//! before `AppBuilder::run` even started). So the catalog is built and its
-//! initial scan kicked off exactly once, at plugin-init time, then stashed
-//! in the app-wide `SharedState` (not `scratch`, since it must survive
-//! across popup opens/closes) so `Panel::build` can fetch the same instance
-//! back out by type. This also gives Phase 4d's config-reload handling
-//! (re-running `start_loading` when `appearance.icon_theme` changes, as
-//! `desktop/shell/src/lib.rs`'s `schedule_runtime_events` used to) a way to
-//! reach the very same `AppCatalog` — `ctx.shared.get::<AppCatalog>()` —
-//! without this crate needing to expose anything beyond the `Plugin`/`Panel`
-//! traits.
-//!
-//! `DrawerState` (the search query, selected category, and scroll
-//! positions) is exactly the kind of fresh-per-open UI state
-//! `PanelRenderContext::scratch` exists for, so it's seeded there via
-//! `get_or_insert_with` instead.
-
 use coconut_plugin_kit::chrome::{
     shell_accent, shell_border, shell_card, shell_control, shell_control_hover, shell_muted,
     shell_on_accent, shell_panel, shell_selected, shell_text, ISLAND_RADIUS,
 };
 use coconut_plugin_kit::{
-    installed_applications, open_settings, settings_program, DesktopEntry, IconRequest,
-    IconResolver, XdgPaths,
+    app_categories, app_matches, launch_app, open_settings, settings_program, AppCatalog, AppEntry,
 };
 use coconut_plugin_kit::{Panel, PanelRenderContext};
 use creamui_core::layout::{AlignItems, FlexDirection, JustifyContent, Style as LayoutStyle};
 use creamui_core::{BoxedWidget, Size, StateStyle, Style, Styled};
-use creamui_image::{Image, ImageData, ImageFit};
+use creamui_image::{Image, ImageFit};
 use creamui_macros::jsx;
 use creamui_reactive::Signal;
-use creamui_render::AppHandle;
 use creamui_widgets::layout::{fixed, Align, Flex, Justify, Wrap};
 use creamui_widgets::RawButton;
 use creamui_widgets::{Icon, ScrollController, ScrollView, Symbol, TextController, TextInput};
-use std::collections::BTreeSet;
-use std::process::Command;
 use std::rc::Rc;
-use std::thread;
 
 const WIDTH: u32 = 600;
 const HEIGHT: u32 = 530;
 const TILE: f32 = 132.0;
 const TILE_H: f32 = 104.0;
-
-#[derive(Clone)]
-pub struct AppCatalog {
-    entries: Signal<Vec<AppEntry>>,
-}
 
 #[derive(Clone)]
 pub struct DrawerState {
@@ -83,47 +42,6 @@ impl Default for DrawerState {
             category: Signal::new("All".into()),
             scroll,
         }
-    }
-}
-
-#[derive(Clone)]
-struct AppEntry {
-    name: String,
-    exec: Vec<String>,
-    terminal: bool,
-    category: String,
-    icon_name: Option<String>,
-    icon: Option<ImageData>,
-}
-
-impl AppCatalog {
-    pub fn new() -> Self {
-        Self {
-            entries: Signal::new(Vec::new()),
-        }
-    }
-
-    pub fn start_loading(&self, app: &AppHandle, icon_theme: String) {
-        let after_scan = self.entries.clone();
-        let icon_app = app.clone();
-        app.spawn_background(load_apps, move |apps: Vec<AppEntry>| {
-            after_scan.set(apps.clone());
-            let after_icons = after_scan.clone();
-            icon_app.spawn_background(
-                move || resolve_icons(apps, &icon_theme),
-                move |resolved| after_icons.set(resolved),
-            );
-        });
-    }
-
-    fn apps(&self) -> Vec<AppEntry> {
-        self.entries.get()
-    }
-}
-
-impl Default for AppCatalog {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -160,22 +78,65 @@ impl Panel for AppDrawerPanel {
             AppCatalog::new()
         });
         let state = ctx.scratch.get_or_insert_with(DrawerState::default);
-        build_drawer(catalog, state, ctx.close.clone())
+        build_drawer(
+            catalog,
+            state,
+            ctx.close.clone(),
+            ctx.shared.get::<coconut_plugin_kit::pins::Pins>(),
+        )
     }
 }
 
-fn build_drawer(catalog: AppCatalog, state: DrawerState, on_launch: Rc<dyn Fn()>) -> BoxedWidget {
+fn build_drawer(
+    catalog: AppCatalog,
+    state: DrawerState,
+    on_launch: Rc<dyn Fn()>,
+    pins: Option<coconut_plugin_kit::pins::Pins>,
+) -> BoxedWidget {
+    let pin_error = pins
+        .as_ref()
+        .and_then(|pins| pins.error())
+        .map(|message| {
+            let action = pins.clone();
+            Box::new(
+                Flex::row()
+                    .gap(8.0)
+                    .align(Align::Center)
+                    .child(Box::new(creamui_widgets::RawText::new(
+                        message,
+                        shell_text(),
+                        12.0,
+                    )))
+                    .child(Box::new(
+                        RawButton::new(small_button_style(), move || {
+                            if let Some(pins) = &action {
+                                pins.dismiss_error();
+                            }
+                        })
+                        .child(Box::new(Icon::new(Symbol::Close, shell_muted()).size(14.0))),
+                    )),
+            ) as BoxedWidget
+        })
+        .unwrap_or_else(|| {
+            Box::new(creamui_widgets::RawView::new(
+                Style::new().display(creamui_core::layout::Display::None),
+            ))
+        });
     let query = state.query.value();
     let selected_category = state.category.get();
     let catalog_apps = catalog.apps();
-    let loaded = !catalog_apps.is_empty();
-    let categories = categories(&catalog_apps);
+    let loaded = catalog.loaded();
+    let categories = app_categories(&catalog_apps);
     let apps: Vec<_> = catalog_apps
         .into_iter()
         .filter(|app| app_matches(app, &query, &selected_category))
         .collect();
     let content: BoxedWidget = if apps.is_empty() {
-        let message = if loaded { "No matches" } else { "Scanning" };
+        let message = if loaded {
+            "No applications found"
+        } else {
+            "Scanning applications…"
+        };
         Box::new(jsx! {
             <Flex grow={1.0} size={(568.0, 304.0)} align={Align::Center} justify={Justify::Center}>
                 <RawText color={shell_muted()} font_size={16.0}>{message}</RawText>
@@ -190,14 +151,31 @@ fn build_drawer(catalog: AppCatalog, state: DrawerState, on_launch: Rc<dyn Fn()>
         for app in apps {
             let launch = app.clone();
             let close = on_launch.clone();
-            grid = grid.child(Box::new(
+            let button = Box::new(
                 RawButton::new(app_style(), move || {
                     launch_app(&launch);
                     close();
                 })
                 .keyboard_focus(false)
                 .child(app_card(&app)),
-            ));
+            );
+            let mut tile = coconut_plugin_kit::Interactive::new(button);
+            if let Some(path) = app.desktop_file.clone() {
+                tile = tile.drag_files(vec![path.clone()]);
+                if let Some(pins) = pins.clone() {
+                    tile = tile.context_menu(move |_| {
+                        let action = pins.clone();
+                        let target = path.clone();
+                        vec![
+                            creamui_widgets::ContextMenuItem::new("pin", "Pin", move || {
+                                action.pin(vec![target.clone()])
+                            })
+                            .enabled(pins.loaded() && !pins.busy() && !pins.contains(&path)),
+                        ]
+                    });
+                }
+            }
+            grid = grid.child(Box::new(tile));
         }
         Box::new(grid)
     };
@@ -253,6 +231,7 @@ fn build_drawer(catalog: AppCatalog, state: DrawerState, on_launch: Rc<dyn Fn()>
                 {settings}
             </Flex>
             {category_tabs}
+            {pin_error}
             <Flex grow={1.0}>
                 {scroll}
             </Flex>
@@ -321,177 +300,6 @@ fn category_tabs(state: DrawerState, categories: &[String]) -> BoxedWidget {
         ) as BoxedWidget);
     }
     Box::new(category_list)
-}
-
-fn categories(apps: &[AppEntry]) -> Vec<String> {
-    const ORDER: [&str; 13] = [
-        "All",
-        "Multimedia",
-        "Internet",
-        "Graphics",
-        "Office",
-        "Development",
-        "Education",
-        "Science",
-        "Games",
-        "Accessories",
-        "Settings",
-        "System Tools",
-        "Other",
-    ];
-    let present: BTreeSet<_> = apps.iter().map(|app| app.category.as_str()).collect();
-    ORDER
-        .into_iter()
-        .filter(|category| *category == "All" || present.contains(category))
-        .map(str::to_owned)
-        .collect()
-}
-
-fn app_matches(app: &AppEntry, query: &str, category: &str) -> bool {
-    let query = query.trim().to_ascii_lowercase();
-    let query_matches = query.is_empty()
-        || app.name.to_ascii_lowercase().contains(&query)
-        || app.category.to_ascii_lowercase().contains(&query);
-    query_matches && (category == "All" || app.category == category)
-}
-
-fn launch_app(app: &AppEntry) {
-    let Some((program, args)) = app
-        .exec
-        .split_first()
-        .map(|(program, args)| (program.clone(), args.to_vec()))
-    else {
-        return;
-    };
-    let terminal = app.terminal;
-    thread::spawn(move || {
-        let mut command = if terminal {
-            coconut_core::terminal_command(&program, &args)
-        } else {
-            let mut command = Command::new(program);
-            command.args(args);
-            command
-        };
-        let _ = coconut_core::spawn_detached(&mut command);
-    });
-}
-
-fn load_apps() -> Vec<AppEntry> {
-    #[cfg(target_os = "windows")]
-    {
-        return load_windows_apps();
-    }
-    #[cfg(not(target_os = "windows"))]
-    load_linux_apps()
-}
-
-#[cfg(not(target_os = "windows"))]
-fn load_linux_apps() -> Vec<AppEntry> {
-    let mut apps: Vec<_> = installed_applications(&XdgPaths::default())
-        .into_iter()
-        .filter_map(app_from_desktop_entry)
-        .collect();
-    apps.sort_by_key(|app| app.name.to_lowercase());
-    apps
-}
-
-#[cfg(target_os = "windows")]
-fn load_windows_apps() -> Vec<AppEntry> {
-    let script = "Get-StartApps | ForEach-Object { \"$($_.Name)`t$($_.AppID)\" }";
-    let output = Command::new("powershell.exe")
-        .args([
-            "-NoLogo",
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            script,
-        ])
-        .output()
-        .ok()
-        .filter(|output| output.status.success())
-        .map(|output| String::from_utf8_lossy(&output.stdout).to_string())
-        .unwrap_or_default();
-    let mut apps = output
-        .lines()
-        .filter_map(|line| {
-            let (name, app_id) = line.split_once('\t')?;
-            let name = name.trim();
-            let app_id = app_id.trim();
-            (!name.is_empty() && !app_id.is_empty()).then(|| AppEntry {
-                name: name.to_owned(),
-                exec: vec!["explorer.exe".into(), format!("shell:AppsFolder\\{app_id}")],
-                terminal: false,
-                category: "System Tools".into(),
-                icon_name: None,
-                icon: None,
-            })
-        })
-        .collect::<Vec<_>>();
-    apps.sort_by_key(|app| app.name.to_ascii_lowercase());
-    apps
-}
-
-fn resolve_icons(mut apps: Vec<AppEntry>, icon_theme: &str) -> Vec<AppEntry> {
-    let icons = IconResolver::new(icon_theme);
-    for app in &mut apps {
-        app.icon = app
-            .icon_name
-            .as_deref()
-            .and_then(|name| icons.load(IconRequest::named(name, 48)));
-    }
-    apps
-}
-
-#[cfg(not(target_os = "windows"))]
-fn app_from_desktop_entry(entry: DesktopEntry) -> Option<AppEntry> {
-    if !entry.is_visible_application() {
-        return None;
-    }
-    let name = entry
-        .name(std::env::var("LANG").ok().as_deref())?
-        .to_owned();
-    let exec = entry.command_for_files(&[])?;
-    Some(AppEntry {
-        name,
-        exec,
-        terminal: entry.terminal(),
-        category: category_for(&entry.categories()),
-        icon_name: entry.icon().map(str::to_owned),
-        icon: None,
-    })
-}
-
-#[cfg(not(target_os = "windows"))]
-fn category_for(categories: &[&str]) -> String {
-    if categories
-        .iter()
-        .any(|category| matches!(*category, "AudioVideo" | "Audio" | "Video"))
-    {
-        "Multimedia"
-    } else if categories.contains(&"Network") {
-        "Internet"
-    } else if categories.contains(&"Development") {
-        "Development"
-    } else if categories.contains(&"Graphics") {
-        "Graphics"
-    } else if categories.contains(&"Office") {
-        "Office"
-    } else if categories.contains(&"Education") {
-        "Education"
-    } else if categories.contains(&"Science") {
-        "Science"
-    } else if categories.contains(&"Game") {
-        "Games"
-    } else if categories.contains(&"Settings") {
-        "Settings"
-    } else if categories.contains(&"System") {
-        "System Tools"
-    } else if categories.contains(&"Utility") {
-        "Accessories"
-    } else {
-        "Other"
-    }
-    .into()
 }
 
 fn short_name(name: &str) -> String {

@@ -188,6 +188,9 @@ impl PanelHost {
         };
         let size = constrain(panel.preferred_size(&scratch));
         let requested = Cell::new(size);
+        let autofocus = panel.autofocus();
+        let interactions = crate::InteractionHost::new();
+        let interaction_ready = interactions.clone();
         let host_for_ready = Rc::clone(self);
         let host_for_close = Rc::clone(self);
         let shared = self.shared.clone();
@@ -198,17 +201,43 @@ impl PanelHost {
                 size.width as u32,
                 size.height as u32,
                 self.theme.get(),
-                panel.autofocus(),
+                autofocus,
                 self.backend,
             ),
             popup,
             Color::rgba(0, 0, 0, 0),
             move |window| {
                 window.set_always_on_top(true);
+                if autofocus {
+                    window.focus_text_input();
+                }
+                interaction_ready.install(window.clone());
+                let keys = interaction_ready.downgrade();
+                window.on_keyboard_input(move |event, modifiers| {
+                    if let (Some(keys), Some(input)) = (
+                        keys.upgrade(),
+                        crate::bar_editor::key_input(&event.key, modifiers),
+                    ) {
+                        if keys.handle_key(&input.key, event.pressed) {
+                            return true;
+                        }
+                        if event.pressed && input.key == creamui_core::Key::Escape {
+                            keys.close_window();
+                            return true;
+                        }
+                    }
+                    false
+                });
                 let host = Rc::downgrade(&host_for_ready);
-                let handle = window.clone();
+                let focus_interactions = interaction_ready.downgrade();
                 window.on_focus_lost(move || {
-                    handle.close();
+                    if let Some(interactions) = focus_interactions.upgrade() {
+                        interactions.parent_focus_lost();
+                        if interactions.native_menu_open() || interactions.is_dragging() {
+                            return;
+                        }
+                        interactions.close_window();
+                    }
                     if let Some(host) = host.upgrade() {
                         host.open_panels.borrow_mut().remove(id);
                         host.panel_revision
@@ -237,13 +266,15 @@ impl PanelHost {
                         .panel_revision
                         .update(|revision| *revision = revision.wrapping_add(1));
                 });
-                panel.build(&PanelRenderContext {
+                creamui_reactive::provide_context(interactions.clone());
+                let content = panel.build(&PanelRenderContext {
                     size: resolved_size,
                     shared: shared.clone(),
                     scratch: scratch.clone(),
                     open_panel: dispatcher.clone(),
                     close,
-                })
+                });
+                interactions.root(content, resolved_size)
             },
         );
     }

@@ -91,7 +91,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: sammwyy/creamui
-          ref: f7b4c7b23ab8cc0e6c2ae9a768503087e9a173c0
+          ref: c19af07c8cd532def102e5b268c19d84484a74c4
           path: creamui
           persist-credentials: false
       - uses: actions/checkout@v4
