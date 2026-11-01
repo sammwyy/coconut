@@ -34,7 +34,8 @@ pub struct PanelHost {
     backend: RenderBackend,
     open_panels: RefCell<HashMap<&'static str, WindowHandle>>,
     panel_revision: creamui_reactive::Signal<u64>,
-    pending_panel: Cell<bool>,
+    pending_panel: Cell<Option<&'static str>>,
+    generation: Cell<u64>,
 }
 
 /// A dock's popup-anchor window plus the position/thickness [`popup_for`]
@@ -62,7 +63,8 @@ impl PanelHost {
             backend,
             open_panels: RefCell::new(HashMap::new()),
             panel_revision: creamui_reactive::Signal::new(0),
-            pending_panel: Cell::new(false),
+            pending_panel: Cell::new(None),
+            generation: Cell::new(0),
         })
     }
 
@@ -100,7 +102,7 @@ impl PanelHost {
 
     pub fn has_open_panel(&self) -> bool {
         self.panel_revision.get();
-        self.pending_panel.get()
+        self.pending_panel.get().is_some()
             || self
                 .open_panels
                 .borrow()
@@ -121,6 +123,13 @@ impl PanelHost {
             eprintln!("plugin-kit: unknown panel id '{id}'; ignoring open request");
             return;
         };
+        let generation = self.generation.get().wrapping_add(1);
+        self.generation.set(generation);
+        if self.pending_panel.replace(None) == Some(id) {
+            self.panel_revision
+                .update(|revision| *revision = revision.wrapping_add(1));
+            return;
+        }
         let previous = self.open_panels.borrow_mut().remove(id);
         if let Some(handle) = previous {
             if handle.is_open() {
@@ -130,8 +139,6 @@ impl PanelHost {
                 return;
             }
         }
-        // A new xdg_popup must be the topmost popup; give a just-closed
-        // one time to actually reach the compositor before opening another.
         let others: Vec<WindowHandle> = self
             .open_panels
             .borrow_mut()
@@ -139,34 +146,25 @@ impl PanelHost {
             .map(|(_, window)| window)
             .filter(|window| window.is_open())
             .collect();
-        self.pending_panel.set(true);
+        self.pending_panel.set(Some(id));
         self.panel_revision
             .update(|revision| *revision = revision.wrapping_add(1));
-        if others.is_empty() {
-            self.do_open(dock_index, id, at, panel);
-            return;
-        }
         for window in others {
             window.close();
         }
-        let host = Rc::clone(self);
-        self.app.spawn_background(
-            || std::thread::sleep(std::time::Duration::from_millis(100)),
-            move |()| host.do_open(dock_index, id, at, panel),
-        );
+        self.do_open(dock_index, id, at, panel, generation);
     }
 
-    /// Builds and appends the popup for `panel`, once any previously open
-    /// panel is confirmed closed. See [`Self::open`].
     fn do_open(
         self: &Rc<Self>,
         dock_index: usize,
         id: &'static str,
         at: Point,
         panel: Rc<dyn Panel>,
+        generation: u64,
     ) {
         let Some(anchor) = self.docks.borrow().get(&dock_index).cloned() else {
-            self.pending_panel.set(false);
+            self.pending_panel.set(None);
             self.panel_revision
                 .update(|revision| *revision = revision.wrapping_add(1));
             eprintln!(
@@ -174,7 +172,25 @@ impl PanelHost {
             );
             return;
         };
-        let popup = popup_for(&anchor.window, at, anchor.position, anchor.thickness);
+        let current = Rc::downgrade(self);
+        let failed = Rc::downgrade(self);
+        let popup = popup_for(&anchor.window, at, anchor.position, anchor.thickness)
+            .while_current(move || {
+                current
+                    .upgrade()
+                    .is_some_and(|host| host.generation.get() == generation)
+            })
+            .on_error(move |error| {
+                if let Some(host) = failed
+                    .upgrade()
+                    .filter(|host| host.generation.get() == generation)
+                {
+                    host.pending_panel.set(None);
+                    host.panel_revision
+                        .update(|revision| *revision = revision.wrapping_add(1));
+                    eprintln!("plugin-kit: cannot open panel {id}: {error}");
+                }
+            });
         let scratch = SharedState::default();
         let max_height = anchor
             .window
@@ -207,6 +223,10 @@ impl PanelHost {
             popup,
             Color::rgba(0, 0, 0, 0),
             move |window| {
+                if host_for_ready.generation.get() != generation {
+                    window.close();
+                    return;
+                }
                 window.set_always_on_top(true);
                 if autofocus {
                     window.focus_text_input();
@@ -238,14 +258,17 @@ impl PanelHost {
                         }
                         interactions.close_window();
                     }
-                    if let Some(host) = host.upgrade() {
+                    if let Some(host) = host
+                        .upgrade()
+                        .filter(|host| host.generation.get() == generation)
+                    {
                         host.open_panels.borrow_mut().remove(id);
                         host.panel_revision
                             .update(|revision| *revision = revision.wrapping_add(1));
                     }
                 });
                 host_for_ready.open_panels.borrow_mut().insert(id, window);
-                host_for_ready.pending_panel.set(false);
+                host_for_ready.pending_panel.set(None);
                 host_for_ready
                     .panel_revision
                     .update(|revision| *revision = revision.wrapping_add(1));
@@ -259,6 +282,9 @@ impl PanelHost {
                 }
                 let close_host = Rc::clone(&host_for_close);
                 let close: Rc<dyn Fn()> = Rc::new(move || {
+                    if close_host.generation.get() != generation {
+                        return;
+                    }
                     if let Some(window) = close_host.open_panels.borrow_mut().remove(id) {
                         window.close();
                     }
@@ -372,6 +398,113 @@ fn popup_options(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[ignore = "requires an isolated Wayland compositor"]
+    fn native_panel_switches_cancel_queued_requests_and_ignore_stale_callbacks() {
+        use crate::{Plugin, PluginInitContext};
+        use creamui_core::{BoxedWidget, Size};
+        use creamui_widgets::layout::Flex;
+        struct TestPanel(&'static str, Rc<RefCell<Vec<&'static str>>>);
+        impl Panel for TestPanel {
+            fn id(&self) -> &'static str {
+                self.0
+            }
+            fn title(&self) -> &'static str {
+                self.0
+            }
+            fn size(&self) -> Size {
+                Size {
+                    width: 180.0,
+                    height: 100.0,
+                }
+            }
+            fn build(&self, _: &PanelRenderContext) -> BoxedWidget {
+                self.1.borrow_mut().push(self.0);
+                Box::new(Flex::row().size(180.0, 100.0))
+            }
+        }
+        struct TestPlugin(Rc<RefCell<Vec<&'static str>>>);
+        impl Plugin for TestPlugin {
+            fn id(&self) -> &'static str {
+                "test-panels"
+            }
+            fn panels(&self, _: &PluginInitContext) -> Vec<Rc<dyn Panel>> {
+                vec![
+                    Rc::new(TestPanel("first", self.0.clone())),
+                    Rc::new(TestPanel("second", self.0.clone())),
+                ]
+            }
+        }
+        let completed = Rc::new(Cell::new(false));
+        let done = completed.clone();
+        creamui_render::AppBuilder::new()
+            .keep_running()
+            .on_started(move |app| {
+                let built = Rc::new(RefCell::new(Vec::new()));
+                let shared = SharedState::default();
+                let registry = Rc::new(PluginRegistry::build(
+                    &[Box::new(TestPlugin(built.clone()))],
+                    &PluginInitContext {
+                        app: app.clone(),
+                        shared: shared.clone(),
+                    },
+                ));
+                let host = PanelHost::new(app.clone(), registry, shared, RenderBackend::Cpu);
+                let ready_app = app.clone();
+                app.append_window(
+                    WindowOptions {
+                        width: 800,
+                        height: 40,
+                        backend: RenderBackend::Cpu,
+                        ..Default::default()
+                    }
+                    .top_panel(),
+                    Color::rgb(0, 0, 0),
+                    move |window| {
+                        host.set_dock(0, window, DockPosition::Top, 40.0);
+                        let at = Point { x: 100.0, y: 20.0 };
+                        host.open(0, "first", at);
+                        host.open(0, "second", at);
+                        host.open(0, "second", at);
+                        assert!(!host.has_open_panel());
+                        host.open(0, "first", at);
+                        host.open(0, "second", at);
+                        let switch_app = ready_app.clone();
+                        ready_app.spawn_background(
+                            || std::thread::sleep(std::time::Duration::from_millis(300)),
+                            move |()| {
+                                assert!(built.borrow().iter().all(|id| *id == "second"));
+                                assert!(host
+                                    .open_panels
+                                    .borrow()
+                                    .get("second")
+                                    .is_some_and(WindowHandle::is_open));
+                                host.open(0, "first", at);
+                                let finish_app = switch_app.clone();
+                                switch_app.spawn_background(
+                                    || std::thread::sleep(std::time::Duration::from_millis(300)),
+                                    move |()| {
+                                        assert!(host.pending_panel.get().is_none());
+                                        assert_eq!(host.open_panels.borrow().len(), 1);
+                                        assert!(host
+                                            .open_panels
+                                            .borrow()
+                                            .get("first")
+                                            .is_some_and(WindowHandle::is_open));
+                                        done.set(true);
+                                        finish_app.exit();
+                                    },
+                                );
+                            },
+                        );
+                    },
+                    |_| Box::new(Flex::row().size(800.0, 40.0)) as BoxedWidget,
+                );
+            })
+            .run();
+        assert!(completed.get());
+    }
 
     #[test]
     fn glass_popups_enable_native_blur_without_client_decorations() {
