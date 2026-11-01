@@ -147,6 +147,7 @@ fn build_horizontal_dock(
             build_row_section(
                 *group_index,
                 section,
+                &dock.sections,
                 dock.fill_available_space.then_some(section_width),
                 index == 0,
                 index + 1 == sections.len(),
@@ -217,6 +218,7 @@ fn build_vertical_dock(
             build_column_section(
                 *group_index,
                 section,
+                &dock.sections,
                 dock.fill_available_space.then_some(section_height),
                 index == 0,
                 index + 1 == sections.len(),
@@ -253,6 +255,7 @@ fn build_vertical_dock(
 fn build_row_section(
     group_index: usize,
     section: &SectionConfig,
+    sections: &[SectionConfig],
     width: Option<f32>,
     is_first: bool,
     is_last: bool,
@@ -285,6 +288,7 @@ fn build_row_section(
     let islands = build_islands(
         group_index,
         section,
+        sections,
         position,
         scale,
         island_background && !unify_background,
@@ -331,6 +335,7 @@ fn build_row_section(
 fn build_column_section(
     group_index: usize,
     section: &SectionConfig,
+    sections: &[SectionConfig],
     height: Option<f32>,
     is_first: bool,
     is_last: bool,
@@ -364,6 +369,7 @@ fn build_column_section(
     let islands = build_islands(
         group_index,
         section,
+        sections,
         position,
         scale,
         island_background && !unify_background,
@@ -504,6 +510,7 @@ fn apply_gap(container: Flex, gap: Gap, length: f32) -> Flex {
 fn build_islands(
     group_index: usize,
     section: &SectionConfig,
+    sections: &[SectionConfig],
     position: DockPosition,
     scale: f32,
     island_background: bool,
@@ -522,7 +529,7 @@ fn build_islands(
         let Some(island) = lookup(&entry.id) else {
             continue;
         };
-        let config = island_config(entry);
+        let config = placement_config(entry, sections);
         let ctx = IslandRenderContext {
             shared,
             config: &config,
@@ -557,6 +564,20 @@ fn build_islands(
 /// inline `[[dock.section.island]].config` overrides layered on top.
 /// Non-scalar values (arrays, nested tables, datetimes) aren't representable
 /// as a [`ConfigValue`] and are dropped.
+fn placement_config(entry: &IslandEntry, sections: &[SectionConfig]) -> IslandConfig {
+    if entry.id == "pinned_apps" {
+        sections
+            .iter()
+            .filter(|section| section.enabled)
+            .flat_map(|section| ordered_islands(&section.islands))
+            .find(|entry| entry.id == "open_windows")
+            .map(island_config)
+            .unwrap_or_else(|| module_defaults("open_windows"))
+    } else {
+        island_config(entry)
+    }
+}
+
 fn island_config(entry: &IslandEntry) -> IslandConfig {
     let mut config = module_defaults(&entry.id);
     for (key, value) in &entry.config {
@@ -621,6 +642,7 @@ mod tests {
         let widgets = build_islands(
             0,
             &section,
+            std::slice::from_ref(&section),
             DockPosition::Bottom,
             1.0,
             true,
@@ -634,6 +656,39 @@ mod tests {
         // "a" renders twice (once per entry, a non-destructive lookup);
         // "unknown" is silently skipped.
         assert_eq!(widgets.len(), 2);
+    }
+
+    #[test]
+    fn pinned_icons_inherit_window_appearance_across_bar_sections() {
+        let mut windows = IslandEntry::with_id("open_windows");
+        windows
+            .config
+            .insert("icon_scale".into(), toml::Value::Integer(150));
+        windows
+            .config
+            .insert("show_background".into(), toml::Value::Boolean(true));
+        let pins = IslandEntry::with_id("pinned_apps");
+        let sections = vec![
+            SectionConfig {
+                islands: vec![pins.clone()],
+                ..Default::default()
+            },
+            SectionConfig {
+                islands: vec![windows.clone()],
+                ..Default::default()
+            },
+        ];
+        let pinned = placement_config(&pins, &sections);
+        let running = placement_config(&windows, &sections);
+        assert_eq!(
+            pinned.get("icon_scale").and_then(ConfigValue::as_f64),
+            Some(150.0)
+        );
+        assert_eq!(
+            pinned.get("show_background").and_then(ConfigValue::as_bool),
+            Some(true)
+        );
+        assert_eq!(pinned, running);
     }
 
     #[test]

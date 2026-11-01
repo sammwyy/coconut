@@ -9,6 +9,7 @@ repository.workspace = true
 build = "build.rs"
 
 [dependencies]
+coconut-api.workspace = true
 coconut-theme.workspace = true
 coconut-core = { workspace = true, default-features = true }
 delib = { workspace = true }

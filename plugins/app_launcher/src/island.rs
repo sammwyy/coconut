@@ -1,12 +1,12 @@
 use coconut_api::desktop::OpenWindow;
 use coconut_core::DockPosition;
 use coconut_plugin_kit::chrome::{
-    island_style, shell_control, shell_control_hover, shell_island,
-    shell_island_border as shell_border, shell_selected, shell_text,
+    shell_control, shell_control_hover, shell_island_border as shell_border, shell_selected,
+    shell_text,
 };
 use coconut_plugin_kit::{
-    design, pixel_icon, ApplicationIconResolver, ConfigField, ConfigValue, Island,
-    IslandRenderContext, NumberRange,
+    design, pixel_icon, ApplicationIconResolver, ConfigField, Island, IslandRenderContext,
+    NumberRange,
 };
 use creamui_core::layout::{FlexDirection, Style as LayoutStyle};
 use creamui_core::{BoxedWidget, Point, StateStyle, Style, Styled};
@@ -109,21 +109,7 @@ impl Island for AppLauncherIsland {
                     </Flex>
                 })),
         );
-        if window_list_state(ctx).windows.get().is_empty() {
-            launcher
-        } else {
-            Box::new(
-                Flex::row()
-                    .align(Align::Center)
-                    .gap(6.0 * s)
-                    .child(launcher)
-                    .child(Box::new(
-                        Flex::column()
-                            .size(1.0 * s, TASK_SIZE * s)
-                            .background(coconut_plugin_kit::apply_opacity(shell_text(), 0.12)),
-                    )),
-            )
-        }
+        launcher
     }
 }
 
@@ -148,118 +134,105 @@ impl Island for OpenWindowsIsland {
     }
 
     fn build(&self, ctx: &IslandRenderContext<'_>) -> BoxedWidget {
-        let icon_scale_pct = ctx
-            .config
-            .get(ICON_SCALE_KEY)
-            .and_then(ConfigValue::as_f64)
-            .unwrap_or(100.0);
-        let scale = ctx.scale * (icon_scale_pct as f32 / 100.0).max(0.1);
-        let show_background = ctx
-            .config
-            .get(SHOW_BACKGROUND_KEY)
-            .and_then(ConfigValue::as_bool)
-            .unwrap_or(false);
-        let window_state = window_list_state(ctx);
-        let windows = window_state.windows.get();
-        let compact = ctx
-            .config
-            .get("compact")
-            .and_then(ConfigValue::as_bool)
-            .unwrap_or(ctx.position == DockPosition::Top);
+        let style = coconut_plugin_kit::task_icons::TaskIconStyle::new(
+            ctx.config,
+            ctx.scale,
+            ctx.position == DockPosition::Top && !ctx.position.is_vertical(),
+        );
+        let state = window_list_state(ctx);
+        let applications = ctx
+            .shared
+            .get::<coconut_plugin_kit::AppCatalog>()
+            .map(|catalog| catalog.apps())
+            .unwrap_or_default();
         let resolver = ctx
             .shared
             .get::<WindowIconResolver>()
             .map(|resolver| resolver.0.get());
-
-        if ctx.position.is_vertical() {
-            return side_window_list(
-                windows,
-                window_state.activate,
-                window_state.refresh,
-                scale,
-                show_background,
-                resolver.as_ref(),
-            );
+        let mut strip = if ctx.position.is_vertical() {
+            Flex::column()
+        } else {
+            Flex::row()
+        };
+        strip = strip.gap(6.0 * style.scale).align(Align::Center);
+        let windows = state.windows.get();
+        for entry in windows.iter().take(MAX_TASKS) {
+            let id = entry.id.clone();
+            let activate = state.activate.clone();
+            let refresh = state.refresh.clone();
+            let menu_entry = entry.clone();
+            let shared = ctx.shared.clone();
+            let menu_activate = state.activate.clone();
+            let host = creamui_reactive::try_use_context::<coconut_plugin_kit::InteractionHost>()
+                .unwrap_or_default();
+            let icon =
+                coconut_plugin_kit::window_actions::application_for_window(&applications, entry)
+                    .map(|app| {
+                        coconut_plugin_kit::task_icons::application_icon(
+                            Some(&app),
+                            style.icon_size(),
+                        )
+                    })
+                    .unwrap_or_else(|| app_icon(entry, style.icon_size(), resolver.as_ref()));
+            strip = strip.child(Box::new(
+                coconut_plugin_kit::Interactive::new(Box::new(
+                    RawButton::new(style.style(), move || {
+                        activate(id.clone());
+                        refresh();
+                    })
+                    .child(style.content(icon, entry.active)),
+                ))
+                .context_menu(move |_| {
+                    coconut_plugin_kit::window_actions::window_menu(
+                        &menu_entry,
+                        &shared,
+                        menu_activate.clone(),
+                        &host,
+                    )
+                }),
+            ));
         }
-        window_list_widget(
-            windows,
-            window_state.activate,
-            window_state.refresh,
-            scale,
-            show_background,
-            compact,
-            resolver.as_ref(),
-        )
+        if windows.len() > MAX_TASKS {
+            let host = creamui_reactive::try_use_context::<coconut_plugin_kit::InteractionHost>()
+                .unwrap_or_default();
+            let menu: Rc<dyn Fn() -> Vec<creamui_widgets::ContextMenuItem>> = Rc::new(move || {
+                windows
+                    .iter()
+                    .skip(MAX_TASKS)
+                    .map(|window| {
+                        let id = window.id.clone();
+                        let activate = state.activate.clone();
+                        creamui_widgets::ContextMenuItem::new(
+                            id.clone(),
+                            window.title.clone(),
+                            move || activate(id.clone()),
+                        )
+                    })
+                    .collect()
+            });
+            let secondary = menu.clone();
+            strip = strip.child(Box::new(
+                coconut_plugin_kit::Interactive::new(Box::new(
+                    Flex::row()
+                        .size(style.width(), style.height())
+                        .align(Align::Center)
+                        .justify(Justify::Center)
+                        .child(Box::new(creamui_widgets::RawText::new(
+                            "…",
+                            shell_text(),
+                            18.0 * style.scale,
+                        ))),
+                ))
+                .on_click(move |at| host.open_menu(at, menu()))
+                .context_menu(move |_| secondary()),
+            ));
+        }
+        Box::new(strip)
     }
 }
 
 fn window_list_state(ctx: &IslandRenderContext<'_>) -> WindowListState {
     ctx.shared.get::<WindowListState>().unwrap_or_default()
-}
-
-fn window_list_widget(
-    windows: Vec<OpenWindow>,
-    activate_window: Rc<dyn Fn(String)>,
-    refresh_windows: Rc<dyn Fn()>,
-    scale: f32,
-    show_background: bool,
-    compact: bool,
-    resolver: Option<&ApplicationIconResolver>,
-) -> BoxedWidget {
-    let count = windows.len().min(MAX_TASKS);
-    let mut strip = Flex::row().gap(6.0 * scale).align(Align::Center);
-    for entry in windows.into_iter().take(MAX_TASKS) {
-        let id = entry.id.clone();
-        let activate = activate_window.clone();
-        let refresh = refresh_windows.clone();
-        let icon = task_icon(&entry, scale, compact, resolver);
-        strip = strip.child(Box::new(
-            RawButton::new(window_style(scale, show_background, compact), move || {
-                activate(id.clone());
-                refresh();
-            })
-            .child(icon),
-        ));
-    }
-    let width = count as f32 * if compact { 46.0 } else { TASK_SIZE } * scale
-        + count.saturating_sub(1) as f32 * 6.0 * scale;
-    let height = if compact { 32.0 } else { TASK_HEIGHT } * scale;
-    Box::new(
-        Flex::row()
-            .size(width, height)
-            .align(Align::Center)
-            .child(Box::new(strip)),
-    )
-}
-
-fn side_window_list(
-    windows: Vec<OpenWindow>,
-    activate_window: Rc<dyn Fn(String)>,
-    refresh_windows: Rc<dyn Fn()>,
-    scale: f32,
-    show_background: bool,
-    resolver: Option<&ApplicationIconResolver>,
-) -> BoxedWidget {
-    let mut column = Flex::column()
-        .padding(4.0 * scale)
-        .gap(6.0 * scale)
-        .align(Align::Center)
-        .background(shell_island())
-        .border(shell_border(), 1.0)
-        .corner_radius(16.0 * scale);
-    for entry in windows.into_iter().take(MAX_TASKS) {
-        let id = entry.id.clone();
-        let activate = activate_window.clone();
-        let refresh = refresh_windows.clone();
-        column = column.child(Box::new(
-            RawButton::new(window_style(scale, show_background, false), move || {
-                activate(id.clone());
-                refresh();
-            })
-            .child(task_icon(&entry, scale, false, resolver)),
-        ));
-    }
-    Box::new(column)
 }
 
 fn side_icon(name: &'static str, scale: f32) -> BoxedWidget {
@@ -293,35 +266,6 @@ fn side_icon_button_styled(
     )
 }
 
-fn task_icon(
-    window: &OpenWindow,
-    scale: f32,
-    compact: bool,
-    resolver: Option<&ApplicationIconResolver>,
-) -> BoxedWidget {
-    if compact {
-        return Box::new(
-            Flex::row()
-                .size(46.0 * scale, 32.0 * scale)
-                .align(Align::Center)
-                .justify(Justify::Center)
-                .child(app_icon(window, 24.0 * scale, resolver)),
-        );
-    }
-    let indicator_color = if window.active {
-        shell_text()
-    } else {
-        Color::rgba(0, 0, 0, 0)
-    };
-    let task_size = TASK_SIZE * scale;
-    Box::new(jsx! {
-        <Flex direction={FlexDirection::Column} size={(task_size, TASK_HEIGHT * scale)} gap={3.0 * scale} align={Align::Center} justify={Justify::Center}>
-            {app_icon(window, task_size, resolver)}
-            <Flex size={(2.5 * scale, 2.5 * scale)} background={indicator_color} corner_radius={1.25 * scale} />
-        </Flex>
-    })
-}
-
 fn app_icon(
     window: &OpenWindow,
     size: f32,
@@ -345,9 +289,7 @@ fn app_icon(
                 flex_shrink: 0.0,
                 ..Default::default()
             })
-            .fit(ImageFit::Contain)
-            .corner_radius(size * 0.27)
-            .box_shadow(design::card_shadow()),
+            .fit(ImageFit::Contain),
     )
 }
 
@@ -475,25 +417,6 @@ fn side_button_style(background: Color, scale: f32) -> Style {
         .corner_radius(8.0 * scale)
         .hover(StateStyle::new().background(shell_control_hover()))
         .pressed(StateStyle::new().background(shell_text()))
-}
-
-fn window_style(scale: f32, show_background: bool, compact: bool) -> Style {
-    if compact {
-        return island_style(46.0 * scale, 32.0 * scale, scale);
-    }
-    Style::new()
-        .layout(LayoutStyle {
-            size: fixed(TASK_SIZE * scale, TASK_HEIGHT * scale),
-            ..Default::default()
-        })
-        .background(if show_background {
-            shell_island()
-        } else {
-            Color::rgba(0, 0, 0, 0)
-        })
-        .corner_radius(10.0 * scale)
-        .hover(StateStyle::new().background(shell_control_hover()))
-        .pressed(StateStyle::new().background(shell_selected()))
 }
 
 #[cfg(test)]

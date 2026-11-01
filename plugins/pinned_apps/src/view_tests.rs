@@ -137,7 +137,7 @@ fn picker_renders_grouped_filtered_and_empty_scenes_in_compact_sizes() {
 }
 
 #[test]
-fn pinned_icons_are_centered_in_both_bar_orientations_and_empty_state_opens_picker() {
+fn pinned_icons_are_centered_in_both_bar_orientations_and_empty_space_has_a_context_menu() {
     creamui_reactive::with_context_scope(|| {
         design::load_fonts();
         let theme = design::coconut_theme(Theme::light());
@@ -156,33 +156,93 @@ fn pinned_icons_are_centered_in_both_bar_orientations_and_empty_state_opens_pick
                 let size = if vertical {
                     Size {
                         width: 64.0,
-                        height: 220.0,
+                        height: 260.0,
                     }
                 } else {
                     Size {
-                        width: 220.0,
+                        width: 260.0,
                         height: 64.0,
                     }
                 };
                 let mut recorder = SceneRecorder::new();
                 let mut bounds = BoundsPainter::default();
                 let scene = Renderer::new().render(
-                    build_island(entries, None, None, vertical, scale, Rc::new(|_, _| {})),
+                    build_island(
+                        entries.clone(),
+                        None,
+                        None,
+                        vertical,
+                        TaskIconStyle::new(&Default::default(), scale, false),
+                        Rc::new(|_, _| {}),
+                    ),
                     size,
                     &mut bounds,
                 );
+                if let Ok(prefix) = std::env::var("COCONUT_PINNED_SNAPSHOT") {
+                    recorder.begin(
+                        size.width as u32,
+                        size.height as u32,
+                        1.0,
+                        theme.colors.surface,
+                        theme.colors,
+                    );
+                    Renderer::new().render(
+                        build_island(
+                            entries,
+                            None,
+                            None,
+                            vertical,
+                            TaskIconStyle::new(&Default::default(), scale, false),
+                            Rc::new(|_, _| {}),
+                        ),
+                        size,
+                        &mut recorder,
+                    );
+                    let mut raster = Rasterizer::new(size.width as u32, size.height as u32);
+                    raster.render(&recorder.finish(), &Damage::Full);
+                    raster
+                        .pixmap()
+                        .save_png(format!("{prefix}-island-{vertical}-{scale}.png"))
+                        .unwrap();
+                }
                 let images = bounds.images;
                 assert_eq!(images.len(), 3);
-                for (index, bounds) in images.iter().enumerate() {
-                    let axis = (16.0 + index as f32 * 35.0) * scale;
-                    let (x, y) = if vertical {
-                        (16.0 * scale, axis)
-                    } else {
-                        (axis, 16.0 * scale)
+                for bounds in &images {
+                    let center = Point {
+                        x: bounds.x + bounds.width / 2.0,
+                        y: bounds.y + bounds.height / 2.0,
                     };
-                    assert!((bounds.x + bounds.width / 2.0 - x).abs() < 1.0);
-                    assert!((bounds.y + bounds.height / 2.0 - y).abs() < 1.0);
-                    assert!(scene.context_menu_at(Point { x, y }).is_some());
+                    let hit = scene
+                        .hit_test(center)
+                        .expect("the icon stays inside its button");
+                    for (length, horizontal) in [(size.width, true), (size.height, false)] {
+                        let pixels: Vec<_> = (0..length as u32)
+                            .filter(|value| {
+                                let at = if horizontal {
+                                    Point {
+                                        x: *value as f32 + 0.5,
+                                        y: center.y,
+                                    }
+                                } else {
+                                    Point {
+                                        x: center.x,
+                                        y: *value as f32 + 0.5,
+                                    }
+                                };
+                                scene
+                                    .hit_test(at)
+                                    .is_some_and(|candidate| Rc::ptr_eq(candidate, hit))
+                            })
+                            .collect();
+                        let button_center =
+                            (*pixels.first().unwrap() + *pixels.last().unwrap() + 1) as f32 / 2.0;
+                        let icon_center = if horizontal { center.x } else { center.y };
+                        assert!(
+                            (button_center - icon_center).abs() <= 1.0,
+                            "the icon is centered in its actual hit bounds"
+                        );
+                    }
+                    assert!(scene.context_menu_at(center).is_some());
                 }
                 let opened = Rc::new(Cell::new(None));
                 let target = opened.clone();
@@ -199,21 +259,31 @@ fn pinned_icons_are_centered_in_both_bar_orientations_and_empty_state_opens_pick
                         None,
                         None,
                         vertical,
-                        scale,
+                        TaskIconStyle::new(&Default::default(), scale, false),
                         Rc::new(move |id, at| target.set(Some((id, at)))),
                     ),
                     size,
                     &mut recorder,
                 );
-                empty
-                    .hit_test(Point {
-                        x: 16.0 * scale,
-                        y: 16.0 * scale,
-                    })
-                    .unwrap()();
-                let (id, at) = opened.get().unwrap();
-                assert_eq!(id, "pin_application");
-                assert!((at.x - 16.0 * scale).abs() < 1.0 && (at.y - 16.0 * scale).abs() < 1.0);
+                if let Ok(prefix) = std::env::var("COCONUT_PINNED_SNAPSHOT") {
+                    let mut raster = Rasterizer::new(size.width as u32, size.height as u32);
+                    raster.render(&recorder.finish(), &Damage::Full);
+                    raster
+                        .pixmap()
+                        .save_png(format!("{prefix}-empty-{vertical}-{scale}.png"))
+                        .unwrap();
+                }
+                let at = Point {
+                    x: 16.0 * scale,
+                    y: 16.0 * scale,
+                };
+                assert!(empty.hit_test(at).is_none());
+                assert!(empty.context_menu_at(at).is_some());
+                let menu = pin_menu(Rc::new(move |id, at| opened.set(Some((id, at)))), at, None);
+                let controller = creamui_widgets::ContextMenuController::new();
+                controller.open(at, menu);
+                controller.handle_key(&creamui_core::Key::Down);
+                controller.handle_key(&creamui_core::Key::Enter);
             }
         }
     });
@@ -237,10 +307,8 @@ fn many_pins_keep_every_application_accessible_through_the_overflow_menu() {
         let menu = overflow_menu(&entries[6..], None, Rc::new(|_, _| {}), Point::default());
         for (index, entry) in entries[6..].iter().enumerate() {
             assert_eq!(menu[index].label, pinned_name(entry));
-            assert!(menu[index]
-                .children
-                .iter()
-                .any(|action| action.id == "launch"));
+            assert!(menu[index].children.is_empty());
+            assert!(menu[index].enabled);
         }
         let size = Size {
             width: 280.0,
@@ -248,11 +316,18 @@ fn many_pins_keep_every_application_accessible_through_the_overflow_menu() {
         };
         let mut bounds = BoundsPainter::default();
         let scene = Renderer::new().render(
-            build_island(entries, None, None, false, 1.0, Rc::new(|_, _| {})),
+            build_island(
+                entries,
+                None,
+                None,
+                false,
+                TaskIconStyle::new(&Default::default(), 1.0, false),
+                Rc::new(|_, _| {}),
+            ),
             size,
             &mut bounds,
         );
         assert_eq!(bounds.images.len(), 6);
-        assert!(scene.hit_test(Point { x: 226.0, y: 16.0 }).is_some());
+        assert!(scene.hit_test(Point { x: 251.0, y: 16.0 }).is_some());
     });
 }

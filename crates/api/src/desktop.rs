@@ -39,11 +39,30 @@ pub struct WorkspaceCapabilities {
     pub destroy: bool,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WindowAction {
+    Restore,
+    Minimize,
+    ToggleMaximize,
+    Close,
+    ForceClose,
+}
+
 pub trait DesktopIntegration {
     fn prepare_window(&self, window: &WindowHandle);
     fn windows(&self) -> Vec<OpenWindow>;
     fn activate_window(&self, id: &str);
     fn close_window(&self, _id: &str) {}
+    fn supports_window_action(&self, action: WindowAction) -> bool {
+        matches!(action, WindowAction::Restore)
+    }
+    fn window_action(&self, id: &str, action: WindowAction) {
+        match action {
+            WindowAction::Restore => self.activate_window(id),
+            WindowAction::Close => self.close_window(id),
+            _ => {}
+        }
+    }
     fn window_changes(&self) -> Option<WindowChangeListener> {
         None
     }

@@ -1,5 +1,5 @@
 use coconut_api::desktop::{
-    DesktopIntegration, DesktopWorkArea, OpenWindow, WindowChangeListener, Workspace,
+    DesktopIntegration, DesktopWorkArea, OpenWindow, WindowAction, WindowChangeListener, Workspace,
     WorkspaceCapabilities,
 };
 use creamui_render::WindowHandle;
@@ -197,6 +197,28 @@ impl DesktopIntegration for KWinDbus {
         let id = id.to_owned();
         thread::spawn(move || {
             let _ = kdotool(&["windowclose", &id]);
+        });
+    }
+
+    fn supports_window_action(&self, action: WindowAction) -> bool {
+        matches!(
+            action,
+            WindowAction::Restore | WindowAction::Minimize | WindowAction::Close
+        )
+    }
+
+    fn window_action(&self, id: &str, action: WindowAction) {
+        let command = match action {
+            WindowAction::Restore => "windowactivate",
+            WindowAction::Minimize => "windowminimize",
+            WindowAction::Close => "windowclose",
+            _ => return,
+        };
+        let id = id.to_owned();
+        thread::spawn(move || {
+            if kdotool(&[command, &id]).is_none() {
+                eprintln!("kwin: {command} failed for window {id}");
+            }
         });
     }
 

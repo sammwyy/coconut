@@ -6,16 +6,25 @@ bars. New configurations include it between the launcher and open windows in
 the Dockbar. Existing layouts can add it through Contents or Quick Edit.
 
 - Click a pinned icon to launch its application.
-- Right-click the widget and choose **Pin application…** to open a searchable,
+- Right-click the widget and choose **Manage pinned applications…** to open a searchable,
   vertical list grouped by the same categories as the app drawer. Choosing a
-  row pins it; the list stays open and marks existing pins.
-- Right-click a pinned icon for **Unpin** or **Pin application…**.
+  row toggles its pin; the list stays open and offers Pin or Unpin on each row.
+- Right-click a pinned icon for **Unpin** or **Manage pinned applications…**.
 - Drop `.desktop` files, including drags from the app drawer, on the widget.
   Only desktop launchers are accepted. Native Wayland transfers advertise Copy;
   source launchers are never moved or removed.
-- More than six pinned icons use an overflow menu with launch and unpin actions.
-- An empty widget shows an add button. Failed writes show an error indicator;
+- More than six pinned icons use a flat overflow menu. Manage pinned applications
+  can remove any pin, including overflow entries.
+- An empty widget reserves an unmarked space between separators. Right-click it
+  to manage pins. Failed writes show an error indicator;
   the picker and app drawer display the error and keep the saved pins intact.
+
+Pinned and running icons use the same size, alignment, background and hover
+presentation. Pinned icons inherit the Open windows appearance settings, including
+inline overrides from the first Open windows placement in the same bar, even when
+it is in another section. With no such placement, they use `modules/open_windows.toml`.
+Quick Edit uses the same resolution. Running windows remain separate entries;
+pinning a launcher never removes its windows from Open windows.
 
 ## Persistence
 

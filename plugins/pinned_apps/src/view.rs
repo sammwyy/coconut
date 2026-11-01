@@ -1,19 +1,19 @@
+use coconut_plugin_kit::task_icons::{application_icon, TaskIconStyle};
 use coconut_plugin_kit::{
     app_categories, app_matches,
     chrome::{
-        island_style, shell_accent, shell_border, shell_card, shell_control_hover, shell_muted,
-        shell_selected, shell_text,
+        shell_accent, shell_border, shell_card, shell_control_hover, shell_muted, shell_selected,
+        shell_text,
     },
     launch_app,
     pins::{PinnedApp, Pins},
     AppCatalog, AppEntry, FileDropFilter, Interactive, IslandRenderContext, PanelRenderContext,
 };
 use creamui_core::{BoxedWidget, Point, StateStyle, Style, Styled};
-use creamui_image::{Image, ImageFit};
 use creamui_widgets::{
     layout::{Align, Flex, Justify},
-    Button, ButtonSize, ButtonState, ButtonVariant, ContextMenuItem, Icon, RawButton, RawText,
-    ScrollController, Symbol, TextController, TextInput, VirtualList, VirtualListState,
+    Button, ButtonSize, ButtonState, ButtonVariant, ContextMenuItem, RawButton, RawText,
+    ScrollController, TextController, TextInput, VirtualList, VirtualListState,
 };
 use std::rc::Rc;
 
@@ -49,7 +49,11 @@ pub(super) fn island(ctx: &IslandRenderContext<'_>) -> BoxedWidget {
         error,
         pins,
         ctx.position.is_vertical(),
-        ctx.scale,
+        TaskIconStyle::new(
+            ctx.config,
+            ctx.scale,
+            ctx.position == coconut_core::DockPosition::Top,
+        ),
         ctx.open_panel.clone(),
     )
 }
@@ -59,15 +63,16 @@ fn build_island(
     error: Option<String>,
     pins: Option<Pins>,
     vertical: bool,
-    scale: f32,
+    style: TaskIconStyle,
     open_panel: OpenPanel,
 ) -> BoxedWidget {
+    let scale = style.scale;
     let mut content = if vertical {
         Flex::column()
     } else {
         Flex::row()
     };
-    content = content.align(Align::Center).gap(3.0 * scale);
+    content = content.align(Align::Center).gap(6.0 * scale);
     let empty = entries.is_empty();
     let overflow = entries
         .iter()
@@ -79,7 +84,7 @@ fn build_island(
             entry,
             pins.clone(),
             open_panel.clone(),
-            scale,
+            style,
         ));
     }
     if !overflow.is_empty() {
@@ -94,35 +99,52 @@ fn build_island(
         content = content.child(Box::new(
             Interactive::new(Box::new(
                 Flex::row()
-                    .size(32.0 * scale, 32.0 * scale)
+                    .size(style.width(), style.height())
                     .align(Align::Center)
                     .justify(Justify::Center)
                     .child(Box::new(RawText::new("…", shell_text(), 18.0 * scale))),
             ))
-            .with_style(pinned_style(scale))
+            .with_style(style.style())
             .on_click(move |at| host.open_menu(at, menu(at)))
             .context_menu(move |at| secondary(at)),
         ));
     }
-    if empty || error.is_some() {
-        let label = if error.is_some() { "!" } else { "+" };
-        let open = open_panel.clone();
-        let button = Box::new(
-            Interactive::new(Box::new(
-                Flex::row()
-                    .size(32.0 * scale, 32.0 * scale)
-                    .align(Align::Center)
-                    .justify(Justify::Center)
-                    .child(Box::new(RawText::new(label, shell_text(), 20.0 * scale))),
-            ))
-            .with_style(pinned_style(scale))
-            .on_click(move |at| open("pin_application", at)),
-        );
-        content = content.child(button);
+    if empty {
+        content = content.child(Box::new(Flex::row().size(style.width(), style.height())));
     }
+    if error.is_some() {
+        content = content.child(Box::new(
+            Flex::row()
+                .size(12.0 * scale, style.height())
+                .align(Align::Center)
+                .justify(Justify::Center)
+                .child(Box::new(RawText::new("!", shell_text(), 14.0 * scale))),
+        ));
+    }
+    let separator = || {
+        Box::new(
+            Flex::row()
+                .size(
+                    if vertical { 24.0 } else { 1.0 } * scale,
+                    if vertical { 1.0 } else { 24.0 } * scale,
+                )
+                .background(coconut_plugin_kit::apply_opacity(shell_text(), 0.12)),
+        ) as BoxedWidget
+    };
+    let mut group = if vertical {
+        Flex::column()
+    } else {
+        Flex::row()
+    };
+    group = group
+        .align(Align::Center)
+        .gap(6.0 * scale)
+        .child(separator())
+        .child(Box::new(content))
+        .child(separator());
     let open = open_panel.clone();
     let menu_pins = pins.clone();
-    let mut widget = Interactive::new(Box::new(content))
+    let mut widget = Interactive::new(Box::new(group))
         .context_menu(move |at| pin_menu(open.clone(), at, menu_pins.clone()));
     if let Some(pins) = pins {
         widget = widget.on_drop_files(FileDropFilter::extensions(["desktop"]), move |paths| {
@@ -137,7 +159,7 @@ type OpenPanel = Rc<dyn Fn(&'static str, Point)>;
 fn pin_menu(open: OpenPanel, at: Point, pins: Option<Pins>) -> Vec<ContextMenuItem> {
     let mut items = vec![ContextMenuItem::new(
         "pin-application",
-        "Pin application…",
+        "Manage pinned applications…",
         move || open("pin_application", at),
     )];
     if let Some(pins) = pins {
@@ -154,22 +176,23 @@ fn pin_menu(open: OpenPanel, at: Point, pins: Option<Pins>) -> Vec<ContextMenuIt
     items
 }
 
-fn pinned_style(scale: f32) -> Style {
-    let mut style = island_style(32.0 * scale, 32.0 * scale, scale);
-    style.layout.align_items = Some(creamui_core::layout::AlignItems::Center);
-    style.layout.justify_content = Some(creamui_core::layout::JustifyContent::Center);
-    style
-}
-
-fn pinned_button(entry: PinnedApp, pins: Option<Pins>, open: OpenPanel, scale: f32) -> BoxedWidget {
+fn pinned_button(
+    entry: PinnedApp,
+    pins: Option<Pins>,
+    open: OpenPanel,
+    style: TaskIconStyle,
+) -> BoxedWidget {
     let app = entry.application.clone();
-    let button = RawButton::new(pinned_style(scale), move || {
+    let button = RawButton::new(style.style(), move || {
         if let Some(app) = &app {
             launch_app(app);
         }
     })
     .disabled(entry.application.is_none())
-    .child(application_icon(entry.application.as_ref(), 23.0 * scale));
+    .child(style.content(
+        application_icon(entry.application.as_ref(), style.icon_size()),
+        false,
+    ));
     Box::new(
         Interactive::new(Box::new(button))
             .context_menu(move |at| pinned_actions(&entry, pins.clone(), open.clone(), at)),
@@ -235,39 +258,18 @@ fn overflow_menu(
         .iter()
         .enumerate()
         .map(|(index, entry)| {
-            ContextMenuItem::submenu(
-                format!("overflow-{index}"),
-                pinned_name(entry),
-                pinned_actions(entry, pins.clone(), open.clone(), at),
-            )
+            let app = entry.application.clone();
+            ContextMenuItem::new(format!("overflow-{index}"), pinned_name(entry), move || {
+                if let Some(app) = &app {
+                    launch_app(app);
+                }
+            })
+            .enabled(entry.application.is_some())
         })
         .collect();
     items.push(ContextMenuItem::separator());
     items.extend(pin_menu(open, at, pins));
     items
-}
-
-pub(super) fn application_icon(app: Option<&AppEntry>, size: f32) -> BoxedWidget {
-    let icon: BoxedWidget = app
-        .and_then(|app| app.icon.clone())
-        .map(|data| {
-            Box::new(
-                Image::new(data)
-                    .layout(creamui_core::layout::Style {
-                        size: creamui_widgets::layout::fixed(size, size),
-                        ..Default::default()
-                    })
-                    .fit(ImageFit::Contain),
-            ) as BoxedWidget
-        })
-        .unwrap_or_else(|| Box::new(Icon::new(Symbol::Grid, shell_accent()).size(size)));
-    Box::new(
-        Flex::row()
-            .size(size, size)
-            .align(Align::Center)
-            .justify(Justify::Center)
-            .child(icon),
-    )
 }
 
 pub(super) fn picker(ctx: &PanelRenderContext) -> BoxedWidget {
@@ -326,8 +328,7 @@ pub(super) fn picker(ctx: &PanelRenderContext) -> BoxedWidget {
                 let pinned = row_pins.as_ref().is_some_and(|pins| pins.contains(&path));
                 let enabled = row_pins
                     .as_ref()
-                    .is_some_and(|pins| pins.loaded() && !pins.busy())
-                    && !pinned;
+                    .is_some_and(|pins| pins.loaded() && !pins.busy());
                 let action = row_pins.clone();
                 let row = application_row(app, pinned, width);
                 let button = RawButton::new(
@@ -339,7 +340,11 @@ pub(super) fn picker(ctx: &PanelRenderContext) -> BoxedWidget {
                         .pressed(StateStyle::new().background(shell_selected())),
                     move || {
                         if let Some(pins) = &action {
-                            pins.pin(vec![path.clone()]);
+                            if pinned {
+                                pins.unpin(path.clone());
+                            } else {
+                                pins.pin(vec![path.clone()]);
+                            }
                         }
                     },
                 )
@@ -364,7 +369,7 @@ pub(super) fn picker(ctx: &PanelRenderContext) -> BoxedWidget {
                 .align(Align::Center)
                 .gap(8.0)
                 .child(Box::new(RawText::new(
-                    "Pin application",
+                    "Pinned applications",
                     shell_text(),
                     16.0,
                 )))
@@ -430,7 +435,7 @@ fn application_row(app: &AppEntry, pinned: bool, width: f32) -> BoxedWidget {
             )),
         )));
     row = row.child(Box::new(RawText::new(
-        if pinned { "Pinned" } else { "Pin" },
+        if pinned { "Unpin" } else { "Pin" },
         if pinned {
             shell_muted()
         } else {

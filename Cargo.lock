@@ -1216,6 +1216,7 @@ dependencies = [
 name = "coconut-plugin-kit"
 version = "0.1.0"
 dependencies = [
+ "coconut-api",
  "coconut-core",
  "coconut-theme",
  "creamui-core",

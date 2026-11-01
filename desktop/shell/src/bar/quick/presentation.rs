@@ -126,7 +126,7 @@ pub fn build(
             };
         }
         for (item, entry) in ordered_islands(&section.islands).into_iter().enumerate() {
-            let config = super::super::island_config(entry);
+            let config = super::super::placement_config(entry, &dock.sections);
             let ctx = coconut_plugin_kit::IslandRenderContext {
                 shared,
                 config: &config,

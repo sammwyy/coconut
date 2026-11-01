@@ -93,6 +93,10 @@ impl InteractionHost {
         pressed && self.0.menu.handle_key(key)
     }
 
+    pub(crate) fn window(&self) -> Option<WindowHandle> {
+        self.0.window.borrow().clone()
+    }
+
     pub fn open_menu(&self, at: Point, items: Vec<ContextMenuItem>) {
         if let Some(window) = self.0.window.borrow().clone() {
             self.0.menu.open(PopupOptions::at_cursor(window, at), items);

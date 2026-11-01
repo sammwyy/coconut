@@ -5,7 +5,7 @@
 //! script or compatibility tool.
 
 use coconut_api::desktop::{
-    DesktopIntegration, DesktopWorkArea, OpenWindow, WindowChangeListener, Workspace,
+    DesktopIntegration, DesktopWorkArea, OpenWindow, WindowAction, WindowChangeListener, Workspace,
     WorkspaceCapabilities,
 };
 use creamui_render::WindowHandle;
@@ -113,6 +113,32 @@ impl DesktopIntegration for BlairDbus {
             };
             let proxy = connection.with_proxy(SERVICE, PATH, Duration::from_secs(2));
             let _: Result<(bool,), _> = proxy.method_call(INTERFACE, "CloseWindow", (id,));
+        });
+    }
+
+    fn supports_window_action(&self, _action: WindowAction) -> bool {
+        true
+    }
+
+    fn window_action(&self, id: &str, action: WindowAction) {
+        let Ok(id) = id.parse::<u64>() else { return };
+        let method = match action {
+            WindowAction::Restore => "FocusWindow",
+            WindowAction::Minimize => "MinimizeWindow",
+            WindowAction::ToggleMaximize => "ToggleMaximizeWindow",
+            WindowAction::Close => "CloseWindow",
+            WindowAction::ForceClose => "ForceCloseWindow",
+        };
+        thread::spawn(move || {
+            let result = SyncConnection::new_session().and_then(|connection| {
+                let proxy = connection.with_proxy(SERVICE, PATH, Duration::from_secs(2));
+                proxy.method_call::<(bool,), _, _, _>(INTERFACE, method, (id,))
+            });
+            match result {
+                Ok((true,)) => {}
+                Ok((false,)) => eprintln!("blair: {method} rejected for window {id}"),
+                Err(error) => eprintln!("blair: {method} failed for window {id}: {error}"),
+            }
         });
     }
 

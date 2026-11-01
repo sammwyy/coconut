@@ -84,6 +84,9 @@ pub fn run() {
         ),
     )));
 
+    shared.insert(coconut_plugin_kit::window_actions::WindowActions(
+        integrations.desktop.clone(),
+    ));
     let windows = Signal::new(integrations.desktop.windows());
     let launcher_open = Signal::new(false);
     shared.insert(LauncherOpenSignal(launcher_open.clone()));

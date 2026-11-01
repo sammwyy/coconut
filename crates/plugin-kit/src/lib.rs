@@ -28,6 +28,8 @@ mod registry;
 mod schema;
 pub mod settings;
 mod state;
+pub mod task_icons;
+pub mod window_actions;
 
 pub use chrome::{apply_opacity, with_island_chrome, IslandChrome};
 pub use config::{ConfigValue, IslandConfig};
