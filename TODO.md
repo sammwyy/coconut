@@ -1,5 +1,9 @@
 # TODO
 
+- Publish delib's existing `MimeApps::applications_for` implementation upstream,
+  then update the release workflow's delib pin and remove the temporary
+  `.github/patches/delib-mimeapps.patch` application and packaging checksum assertion.
+
 - Implement the desktop-readiness milestones in [ROADMAP.md](ROADMAP.md), starting
   with protected Wi-Fi, session authorization, and component supervision;
   coordinate XWayland and multi-monitor dependencies with Blair.

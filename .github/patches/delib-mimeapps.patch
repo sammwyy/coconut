@@ -1,0 +1,164 @@
+diff --git a/src/mimeapps.rs b/src/mimeapps.rs
+index 28f7b26..824cf4c 100644
+--- a/src/mimeapps.rs
++++ b/src/mimeapps.rs
+@@ -1,10 +1,14 @@
+ //! MIME application association lookup as specified by MIME Apps.
+ 
+ use crate::{
+-    desktop_entry::{find_application, DesktopEntry},
++    desktop_entry::{find_application, installed_applications_in, DesktopEntry},
+     xdg::XdgPaths,
+ };
+-use std::{collections::BTreeMap, fs, path::PathBuf};
++use std::{
++    collections::{BTreeMap, BTreeSet},
++    fs,
++    path::PathBuf,
++};
+ 
+ #[derive(Clone, Debug)]
+ pub struct MimeApps {
+@@ -56,6 +60,95 @@ impl MimeApps {
+         None
+     }
+ 
++    /// Lists visible handlers in association preference order, honoring user
++    /// additions, removals and desktop-file overrides.
++    pub fn applications_for(&self, mime: &str) -> Vec<DesktopEntry> {
++        let mut directories: Vec<_> = self
++            .paths
++            .config_search_paths()
++            .into_iter()
++            .map(|path| (path, false))
++            .collect();
++        directories.extend(
++            self.paths
++                .application_dirs()
++                .into_iter()
++                .map(|path| (path, true)),
++        );
++        let applications: Vec<_> = directories
++            .iter()
++            .map(|(directory, application_dir)| {
++                if *application_dir {
++                    installed_applications_in([directory.clone()])
++                } else {
++                    Vec::new()
++                }
++            })
++            .collect();
++        let mut blocked = BTreeSet::new();
++        let mut results = Vec::new();
++        for (index, (directory, application_dir)) in directories.iter().enumerate() {
++            let source = fs::read_to_string(directory.join("mimeapps.list")).unwrap_or_default();
++            let values = parse(&source);
++            let ids = |group: &str| -> Vec<String> {
++                values
++                    .get(group)
++                    .and_then(|group| group.get(mime))
++                    .map(|value| {
++                        value
++                            .split(';')
++                            .filter(|id| !id.is_empty())
++                            .map(str::to_owned)
++                            .collect()
++                    })
++                    .unwrap_or_default()
++            };
++            for id in ids("Added Associations") {
++                if !blocked.contains(&id) {
++                    if let Some(entry) = applications[index..]
++                        .iter()
++                        .flatten()
++                        .find(|entry| entry.id() == Some(id.as_str()))
++                        .filter(|entry| entry.is_visible_application())
++                    {
++                        if !results
++                            .iter()
++                            .any(|existing: &DesktopEntry| existing.id() == entry.id())
++                        {
++                            results.push(entry.clone());
++                        }
++                    }
++                }
++            }
++            blocked.extend(ids("Removed Associations"));
++            if *application_dir {
++                let local = &applications[index];
++                for entry in local {
++                    if entry.is_visible_application()
++                        && entry.mime_types().contains(&mime)
++                        && !entry.id().is_some_and(|id| blocked.contains(id))
++                        && !results.iter().any(|existing| existing.id() == entry.id())
++                    {
++                        results.push(entry.clone());
++                    }
++                }
++                blocked.extend(
++                    local
++                        .iter()
++                        .filter_map(|entry| entry.id().map(str::to_owned)),
++                );
++            }
++        }
++        if let Some(default) = self
++            .default_application(mime)
++            .filter(|entry| entry.is_visible_application())
++        {
++            results.retain(|entry| entry.id() != default.id());
++            results.insert(0, default);
++        }
++        results
++    }
++
+     /// Resolves a MIME type and prepares its default application's argv for
+     /// the supplied files. The returned command can be spawned without a shell.
+     pub fn command_for(
+@@ -117,6 +210,46 @@ fn parse(text: &str) -> BTreeMap<String, BTreeMap<String, String>> {
+ mod tests {
+     use super::*;
+     use std::fs;
++    #[test]
++    fn handlers_honor_additions_removals_and_user_desktop_overrides() {
++        let root = std::env::temp_dir().join(format!("delib-handlers-{}", std::process::id()));
++        let _ = fs::remove_dir_all(&root);
++        for path in ["config", "user/applications", "system/applications"] {
++            fs::create_dir_all(root.join(path)).unwrap();
++        }
++        for (path, mime) in [
++            ("user/applications/preferred.desktop", "text/plain"),
++            ("user/applications/override.desktop", "text/plain"),
++            ("system/applications/removed.desktop", "text/plain"),
++            ("system/applications/extra.desktop", "image/png"),
++            ("system/applications/override.desktop", "image/png"),
++        ] {
++            fs::write(root.join(path), format!("[Desktop Entry]\nType=Application\nName=Handler\nExec=handler %F\nMimeType={mime};\n")).unwrap();
++        }
++        fs::write(root.join("config/mimeapps.list"), "[Added Associations]\ntext/plain=extra.desktop;\n[Removed Associations]\ntext/plain=removed.desktop;\n").unwrap();
++        fs::write(root.join("config/coconut-mimeapps.list"), "[Default Applications]\ntext/plain=preferred.desktop;\n[Added Associations]\ntext/plain=removed.desktop;\n").unwrap();
++        fs::write(
++            root.join("system/applications/mimeapps.list"),
++            "[Removed Associations]\ntext/plain=override.desktop;\n",
++        )
++        .unwrap();
++        let paths = XdgPaths {
++            config_home: root.join("config"),
++            config_dirs: vec![],
++            data_home: root.join("user"),
++            data_dirs: vec![root.join("system")],
++        };
++        let applications = MimeApps::new(paths)
++            .with_desktops(["Coconut"])
++            .applications_for("text/plain");
++        let ids: Vec<_> = applications.iter().filter_map(DesktopEntry::id).collect();
++        assert_eq!(
++            ids,
++            vec!["preferred.desktop", "extra.desktop", "override.desktop"]
++        );
++        fs::remove_dir_all(root).unwrap();
++    }
++
+     #[test]
+     fn uses_desktop_specific_config_before_generic() {
+         let root = std::env::temp_dir().join(format!("delib-mimeapps-{}", std::process::id()));

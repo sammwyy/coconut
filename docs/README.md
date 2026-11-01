@@ -7,6 +7,8 @@
 - [Shell and session development](dev/SHELL.md): toolchain, sibling repositories,
   system dependencies, shell/background/settings launch commands, greeter previews,
   release staging, installation, and troubleshooting.
+- [Publishing releases](dev/RELEASES.md): stable/nightly tags, native Linux x86_64
+  and ARM64 builds, UPX compression, GitHub release assets, and binary installation.
 - [Application development](dev/APPS.md): implementation and design guidance for
   native Coconut apps, including shared CreamUI components and review criteria.
 - [Code style](../CODESTYLE.md): source quality, comments, and pending work.

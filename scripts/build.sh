@@ -10,11 +10,13 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="${COCONUT_BUILD_DIR:-$ROOT/.build}"
 TARGET_DIR="${CARGO_TARGET_DIR:-$ROOT/target}"
 COMPRESS=1
+CARGO_ARGS=()
 for arg in "$@"; do
     case "$arg" in
         --no-upx) COMPRESS=0 ;;
+        --locked) CARGO_ARGS+=(--locked) ;;
         -h | --help)
-            echo "Usage: ./scripts/build.sh [--no-upx]"
+            echo "Usage: ./scripts/build.sh [--no-upx] [--locked]"
             exit 0
             ;;
         *)
@@ -51,7 +53,7 @@ for entry in "${PACKAGES[@]}"; do
     pkgs+=(-p "${entry%%:*}")
 done
 
-cargo build --release --manifest-path "$ROOT/Cargo.toml" "${pkgs[@]}"
+cargo build --release --manifest-path "$ROOT/Cargo.toml" "${CARGO_ARGS[@]}" "${pkgs[@]}"
 bash "$ROOT/integrations/qt/build.sh" "$BUILD_DIR/qt"
 
 # ----------------------------------------------------------------- staging

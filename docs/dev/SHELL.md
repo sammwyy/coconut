@@ -249,6 +249,9 @@ installation:
 cargo build --release
 ```
 
+For tagged Linux x86_64 and ARM64 builds published through GitHub Actions, see
+[Publishing releases](RELEASES.md).
+
 To produce a full set of staged release binaries (compressed with `upx` when
 available) and install them, use the repository scripts:
 

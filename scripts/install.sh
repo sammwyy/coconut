@@ -193,7 +193,10 @@ for conf in blair-portals.conf coconut-portals.conf; do
     # Upgrade previously generated policies; preserve custom user selections.
     old_policy=$(printf '[preferred]\norg.freedesktop.impl.portal.FileChooser=cfiles')
     shipped_policy=$(printf '[preferred]\ndefault=gtk\norg.freedesktop.impl.portal.Settings=coconut\norg.freedesktop.impl.portal.FileChooser=cfiles;gtk')
-    current="$(cat "$CONF_DIR/$conf" 2>/dev/null)"
+    current=""
+    if [ -f "$CONF_DIR/$conf" ]; then
+        current="$(cat "$CONF_DIR/$conf")"
+    fi
     if [ ! -f "$CONF_DIR/$conf" ] || [ "$current" = "$old_policy" ] || [ "$current" = "$shipped_policy" ]; then
         cp "$ROOT/integrations/appearance/data/coconut-portals.conf" "$CONF_DIR/$conf"
     fi

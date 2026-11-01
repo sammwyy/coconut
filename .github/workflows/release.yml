@@ -1,0 +1,199 @@
+name: Publish Linux binaries
+
+on:
+  push:
+    tags:
+      - 'v[0-9]*.[0-9]*.[0-9]*'
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (v0.1.0 or v0.1.0-nightly.20261031.1)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.event.release.tag_name || inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+    working-directory: coconut
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    outputs:
+      tag: ${{ steps.metadata.outputs.tag }}
+      channel: ${{ steps.metadata.outputs.channel }}
+      commit: ${{ steps.metadata.outputs.commit }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: coconut
+          ref: ${{ github.event.release.tag_name || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate release tag
+        id: metadata
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag || github.ref_name }}
+          RELEASE_EVENT: ${{ github.event_name }}
+          RELEASE_PRERELEASE: ${{ github.event.release.prerelease }}
+        run: |
+          set -euo pipefail
+          if git show-ref --verify --quiet "refs/tags/$RELEASE_TAG"; then
+            git checkout --detach "refs/tags/$RELEASE_TAG"
+          fi
+          python3 scripts/release.py metadata "$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          if [[ "$RELEASE_EVENT" == release ]]; then
+            channel=$(python3 scripts/release.py metadata "$RELEASE_TAG")
+            if [[ "$channel" == *channel=nightly && "$RELEASE_PRERELEASE" != true ]] ||
+               [[ "$channel" == *channel=stable && "$RELEASE_PRERELEASE" == true ]]; then
+              echo 'Nightly tags must be prereleases; stable tags must be full releases.' >&2
+              exit 1
+            fi
+          fi
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+            upx_arch: amd64
+            upx_sha256: ddc2654063fe4dc80d95b420788494e4db078ebb01a650692d623b5a9906e61e
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+            upx_arch: arm64
+            upx_sha256: 100310f74eb6f67694d1d0377f1c729b6a49238ce8c4de21ea2e7d3406186f8b
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    env:
+      CARGO_INCREMENTAL: '0'
+      CARGO_PROFILE_RELEASE_DEBUG: '0'
+      CARGO_PROFILE_RELEASE_STRIP: debuginfo
+      COCONUT_BUILD_DIR: ${{ github.workspace }}/coconut/.build/release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: coconut
+          ref: ${{ needs.prepare.outputs.commit }}
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: sammwyy/creamui
+          ref: f7b4c7b23ab8cc0e6c2ae9a768503087e9a173c0
+          path: creamui
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: sammwyy/blair
+          ref: f573dd71fa8e99e3cc2293b02048026a4dbd6052
+          path: blair
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: sammwyy/alphin
+          ref: 94e3d865d13b7753e8835f2455c4d3f962600a3d
+          path: alphin
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: sammwyy/delib
+          ref: 6bd877c397ce18c8711df0143df1787b017595df
+          path: delib
+          persist-credentials: false
+      - name: Apply delib MIME association support
+        run: |
+          git -C ../delib apply --check "$PWD/.github/patches/delib-mimeapps.patch"
+          git -C ../delib apply "$PWD/.github/patches/delib-mimeapps.patch"
+      - name: Install native dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            build-essential pkg-config clang libclang-dev cmake \
+            libpipewire-0.3-dev libwayland-dev libxkbcommon-dev libdbus-1-dev \
+            libasound2-dev libudev-dev libegl1-mesa-dev libgles2-mesa-dev \
+            qt6-base-dev qt6-base-private-dev
+      - name: Install Rust
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+      - name: Install UPX
+        env:
+          UPX_ARCH: ${{ matrix.upx_arch }}
+          UPX_SHA256: ${{ matrix.upx_sha256 }}
+        run: |
+          set -euo pipefail
+          archive="upx-5.0.2-${UPX_ARCH}_linux.tar.xz"
+          curl --fail --location --retry 3 --connect-timeout 20 --max-time 180 \
+            --output "$RUNNER_TEMP/$archive" \
+            "https://github.com/upx/upx/releases/download/v5.0.2/$archive"
+          echo "$UPX_SHA256  $RUNNER_TEMP/$archive" | sha256sum --check
+          tar -xJf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/upx-5.0.2-${UPX_ARCH}_linux" >> "$GITHUB_PATH"
+      - name: Verify release packaging
+        run: |
+          cargo test --manifest-path ../delib/Cargo.toml --target-dir "$RUNNER_TEMP/delib-tests"
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_release.py -v
+      - name: Build release binaries and Qt plugin
+        run: ./scripts/build.sh --locked --no-upx
+      - name: Compress and package
+        env:
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+          RELEASE_ARCH: ${{ matrix.arch }}
+        run: python3 scripts/release.py package "$RELEASE_TAG" "$RELEASE_ARCH"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coconut-linux-${{ matrix.arch }}
+          path: coconut/.build/dist/*
+          include-hidden-files: true
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+  publish:
+    needs: [prepare, build]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: coconut-linux-*
+          path: dist
+          merge-multiple: true
+      - name: Publish release assets
+        working-directory: dist
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+          RELEASE_CHANNEL: ${{ needs.prepare.outputs.channel }}
+          RELEASE_COMMIT: ${{ needs.prepare.outputs.commit }}
+        run: |
+          set -euo pipefail
+          sha256sum --check ./*.sha256
+          sha256sum coconut-linux-*.tar.gz > SHA256SUMS
+          if [[ "$RELEASE_CHANNEL" == nightly ]]; then
+            flags=(--prerelease --latest=false)
+            draft_flags=(--prerelease)
+          else
+            flags=(--prerelease=false --latest)
+            draft_flags=()
+          fi
+          if ! gh release view "$RELEASE_TAG" --json tagName; then
+            gh release create "$RELEASE_TAG" --target "$RELEASE_COMMIT" \
+              --title "Coconut $RELEASE_TAG" --generate-notes --draft "${draft_flags[@]}"
+          fi
+          gh release upload "$RELEASE_TAG" coconut-linux-*.tar.gz SHA256SUMS
+          gh release edit "$RELEASE_TAG" --draft=false "${flags[@]}"
