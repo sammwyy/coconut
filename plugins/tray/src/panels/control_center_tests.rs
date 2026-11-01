@@ -297,6 +297,41 @@ fn edit_point(scene: &Scene) -> Point {
 }
 
 #[test]
+fn popup_height_tracks_content_editing_errors_and_device_navigation() {
+    for (variant, base) in [("light", Theme::light()), ("dark", Theme::dark())] {
+        creamui_reactive::with_context_scope(|| {
+            design::load_fonts();
+            let theme = design::coconut_theme(base);
+            creamui_reactive::provide_context(ThemeProvider::new(theme));
+            let (panel, mut ctx) = fixture(Size {
+                width: 380.0,
+                height: 620.0,
+            });
+            ctx.size = panel.preferred_size(&ctx.scratch);
+            assert_eq!(ctx.size.height, 398.0);
+            render(&panel, &ctx, theme, &format!("{variant}-fitted"));
+            let editor = ctx.scratch.get::<Editor>().unwrap();
+            editor.editing.set(true);
+            ctx.size = panel.preferred_size(&ctx.scratch);
+            assert_eq!(ctx.size.height, 464.0);
+            render(&panel, &ctx, theme, &format!("{variant}-fitted-edit"));
+            editor.layout.set(ControlLayout { tiles: vec![] });
+            ctx.size = panel.preferred_size(&ctx.scratch);
+            assert_eq!(ctx.size.height, 244.0);
+            render(&panel, &ctx, theme, &format!("{variant}-fitted-empty"));
+            editor.error.set(Some("Could not save layout".into()));
+            assert_eq!(panel.preferred_size(&ctx.scratch).height, 276.0);
+            let view = ctx.scratch.get::<Signal<PanelView>>().unwrap();
+            view.set(PanelView::Network);
+            assert_eq!(panel.preferred_size(&ctx.scratch).height, 620.0);
+            view.set(PanelView::Main);
+            editor.cancel(&panel.layout);
+            assert_eq!(panel.preferred_size(&ctx.scratch).height, 398.0);
+        });
+    }
+}
+
+#[test]
 fn renders_normal_edit_empty_and_scrolled_grids_in_both_themes() {
     for (variant, base) in [("light", Theme::light()), ("dark", Theme::dark())] {
         for (width, height) in [(380.0, 620.0), (320.0, 480.0)] {

@@ -108,6 +108,20 @@ impl ControlCenterPanel {
         self.app = Some(app);
         self
     }
+
+    fn available(&self) -> Vec<Control> {
+        Control::ALL
+            .into_iter()
+            .filter(|control| match control {
+                Control::Wifi => self.tray.wifi.shows_in_panel(),
+                Control::Bluetooth => self.tray.bluetooth.shows_in_panel(),
+                Control::Battery => self.tray.battery.shows_in_panel(),
+                Control::Brightness => self.tray.brightness.shows_in_panel(),
+                Control::Volume => self.tray.volume.shows_in_panel(),
+                Control::KeepAwake => true,
+            })
+            .collect()
+    }
 }
 
 impl Panel for ControlCenterPanel {
@@ -123,6 +137,35 @@ impl Panel for ControlCenterPanel {
         Size {
             width: WIDTH as f32,
             height: HEIGHT as f32,
+        }
+    }
+
+    fn preferred_size(&self, scratch: &coconut_plugin_kit::SharedState) -> Size {
+        let view = scratch.get_or_insert_with(|| Signal::new(PanelView::Main));
+        if view.get() != PanelView::Main {
+            return self.size();
+        }
+        let editor = scratch.get_or_insert_with(|| Editor::new(self.layout.peek()));
+        let mut visible = editor.layout.get();
+        visible
+            .tiles
+            .retain(|tile| self.available().contains(&tile.control));
+        let rows = visible.rows().max(
+            editor
+                .preview
+                .get()
+                .map_or(0, |tile| tile.row + u16::from(tile.height)),
+        );
+        let grid_height = (f32::from(rows) * (ROW_HEIGHT + GAP) - GAP).max(ROW_HEIGHT);
+        Size {
+            width: WIDTH as f32,
+            height: grid_height
+                + if editor.editing.get() { 144.0 } else { 78.0 }
+                + if editor.error.get().is_some() {
+                    32.0
+                } else {
+                    0.0
+                },
         }
     }
 
@@ -376,17 +419,7 @@ impl Panel for ControlCenterPanel {
             .get_or_insert_with(|| Editor::new(self.layout.peek()));
         let editing = editor.editing.get();
         let layout = editor.layout.get();
-        let available: Vec<_> = Control::ALL
-            .into_iter()
-            .filter(|control| match control {
-                Control::Wifi => self.tray.wifi.shows_in_panel(),
-                Control::Bluetooth => self.tray.bluetooth.shows_in_panel(),
-                Control::Battery => self.tray.battery.shows_in_panel(),
-                Control::Brightness => self.tray.brightness.shows_in_panel(),
-                Control::Volume => self.tray.volume.shows_in_panel(),
-                Control::KeepAwake => true,
-            })
-            .collect();
+        let available = self.available();
         let width = (ctx.size.width - 34.0).max(0.0);
         let grid_width = (width - 8.0).max(0.0);
         let column_width = (grid_width - GAP * f32::from(COLUMNS - 1)) / f32::from(COLUMNS);
@@ -557,7 +590,7 @@ impl Panel for ControlCenterPanel {
             root = root.child(Box::new(RawText::new(error.clone(), shell_text(), 12.0)));
         }
         let viewport_height = (ctx.size.height
-            - if editing { 140.0 } else { 74.0 }
+            - if editing { 144.0 } else { 78.0 }
             - if error.is_some() { 32.0 } else { 0.0 })
         .max(0.0);
         editor.scroll.set(

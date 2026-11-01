@@ -175,10 +175,21 @@ impl PanelHost {
             return;
         };
         let popup = popup_for(&anchor.window, at, anchor.position, anchor.thickness);
-        let size = panel.size();
+        let scratch = SharedState::default();
+        let max_height = anchor
+            .window
+            .monitor_size()
+            .map_or(800.0, |(_, h)| h as f32)
+            - anchor.thickness
+            - 24.0;
+        let constrain = move |mut size: creamui_core::Size| {
+            size.height = size.height.min(max_height.max(100.0));
+            size
+        };
+        let size = constrain(panel.preferred_size(&scratch));
+        let requested = Cell::new(size);
         let host_for_ready = Rc::clone(self);
         let host_for_close = Rc::clone(self);
-        let scratch = SharedState::default();
         let shared = self.shared.clone();
         let dispatcher = self.dispatcher_for(dock_index);
         self.app.append_popup(
@@ -211,6 +222,12 @@ impl PanelHost {
                     .update(|revision| *revision = revision.wrapping_add(1));
             },
             move |resolved_size| {
+                let preferred = constrain(panel.preferred_size(&scratch));
+                if requested.replace(preferred) != preferred {
+                    if let Some(window) = host_for_close.open_panels.borrow().get(id) {
+                        window.resize(preferred.width as u32, preferred.height as u32);
+                    }
+                }
                 let close_host = Rc::clone(&host_for_close);
                 let close: Rc<dyn Fn()> = Rc::new(move || {
                     if let Some(window) = close_host.open_panels.borrow_mut().remove(id) {
@@ -289,7 +306,9 @@ fn popup_for(
         DockPosition::Right if anchor.y > bottom_region => PopupPlacement::LeftBottom,
         DockPosition::Right => PopupPlacement::LeftCenter,
     };
-    PopupOptions::new(dock.clone(), anchor_rect).placed(placement)
+    PopupOptions::new(dock.clone(), anchor_rect)
+        .placed(placement)
+        .resize_to_fit(true)
 }
 
 /// Builds the `WindowOptions` shared by every panel popup. Moved verbatim

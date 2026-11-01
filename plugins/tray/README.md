@@ -11,6 +11,10 @@ base unit: width supports 1–4 cells and height supports 1–3 independently. T
 default places Wi-Fi and Bluetooth at 2×1 across the top, vertical brightness
 and volume controls below, and battery/keep-awake cards alongside them.
 
+The popup fits the visible grid vertically, grows for editing and device views,
+and shrinks again on return. Tall layouts scroll within the available screen
+height rather than extending beyond it.
+
 Choose **Edit** beside the panel title or right-click a card. Drag a card to move it; drag its
 bottom-right corner grip to resize it. The grip uses a diagonal resize cursor,
 and an outline previews the destination. Colliding cards move downward while
