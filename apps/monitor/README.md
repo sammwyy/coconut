@@ -52,3 +52,9 @@ cargo fmt --check
 
 `CMONITOR_PREVIEW_DIR=target/previews cargo test -p coconut-monitor -- --test-threads=1`
 rasterizes preview PNGs without a display server.
+
+Telemetry snapshots are shared between views and the sampling worker rather
+than copied on each read. Each device history retains at most 30 samples;
+disconnected devices are removed on the next sample. Reading a chart copies
+only that chart's samples. Process tables mount only the visible rows, though
+filtering and sorting still visit the full process list.

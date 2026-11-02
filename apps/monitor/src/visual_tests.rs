@@ -195,6 +195,7 @@ fn fixture() -> Snapshot {
 fn state() -> State {
     let state = State::new(fixture());
     state.histories.update(|histories| {
+        let histories = Rc::make_mut(histories);
         for (key, values) in histories.iter_mut() {
             let last = values.last().copied().unwrap_or(0.0);
             *values = (0..30)
@@ -246,6 +247,28 @@ fn top_pixels(list: &DisplayList, height: usize) -> Vec<u8> {
     let mut raster = Rasterizer::new(list.width, list.height);
     raster.render(list, &Damage::Full);
     raster.pixmap().data()[..list.width as usize * height * 4].to_vec()
+}
+
+#[test]
+fn telemetry_history_is_bounded_and_discards_disconnected_devices() {
+    let mut snapshot = fixture();
+    let state = State::new(snapshot.clone());
+    for value in 0..64 {
+        snapshot.cpu.usage = value as f32;
+        snapshot.network[0].receive_rate = value as f32;
+        state.accept(snapshot.clone());
+    }
+    assert_eq!(
+        state.series("cpu"),
+        (34..64).map(|v| v as f32).collect::<Vec<_>>()
+    );
+    assert_eq!(state.series("net:enp5s0:rx"), state.series("cpu"));
+    let retained = state.series("net:enp5s0:rx");
+    snapshot.network.remove(0);
+    state.accept(snapshot);
+    assert!(state.series("net:enp5s0:rx").is_empty());
+    assert_eq!(retained.len(), HISTORY);
+    assert_eq!(state.series("net:wlan0:rx").len(), HISTORY);
 }
 
 #[test]
@@ -771,11 +794,13 @@ fn cpu_selector_shares_the_title_row_and_sixteen_cores_fit_the_compact_default()
     creamui_reactive::with_context_scope(|| {
         let state = state();
         state.snapshot.update(|s| {
+            let s = Arc::make_mut(s);
             s.cpu.cores = 16;
             s.cpu.model = "AMD Ryzen 7 5825U with Radeon Graphics".into();
             s.cpu.per_core = vec![2.0; 16];
         });
         state.histories.update(|histories| {
+            let histories = Rc::make_mut(histories);
             let samples = histories["cpu:0"].clone();
             for index in 4..16 {
                 histories.insert(format!("cpu:{index}"), samples.clone());

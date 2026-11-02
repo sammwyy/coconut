@@ -88,8 +88,8 @@ enum Detail {
 
 #[derive(Clone)]
 struct State {
-    snapshot: Signal<Snapshot>,
-    histories: Signal<HashMap<String, Vec<f32>>>,
+    snapshot: Signal<Arc<Snapshot>>,
+    histories: Signal<Rc<HashMap<String, Vec<f32>>>>,
     paused: Signal<bool>,
     refreshing: Signal<bool>,
     app: Rc<RefCell<Option<AppHandle>>>,
@@ -119,8 +119,8 @@ impl State {
     fn new(snapshot: Snapshot) -> Self {
         let per_core = snapshot.cpu.cores <= 8;
         let state = Self {
-            snapshot: Signal::new(snapshot.clone()),
-            histories: Signal::new(HashMap::new()),
+            snapshot: Signal::new(Arc::new(snapshot)),
+            histories: Signal::new(Rc::new(HashMap::new())),
             paused: Signal::new(false),
             refreshing: Signal::new(false),
             app: Rc::new(RefCell::new(None)),
@@ -162,7 +162,7 @@ impl State {
                 Some(next.to_owned())
             });
         }
-        state.record(&snapshot);
+        state.record(&state.snapshot.peek());
         state
     }
     fn scroll(&self, key: &str) -> ScrollController {
@@ -225,6 +225,7 @@ impl State {
             points.extend([("network:rx".into(), rx), ("network:tx".into(), tx)]);
         }
         self.histories.update(|all| {
+            let all = Rc::make_mut(all);
             all.retain(|key, _| points.iter().any(|(current, _)| current == key));
             for (key, value) in points {
                 let values = all.entry(key).or_default();
@@ -238,7 +239,7 @@ impl State {
     fn accept(&self, snapshot: Snapshot) {
         batch(|| {
             self.record(&snapshot);
-            self.snapshot.set(snapshot);
+            self.snapshot.set(Arc::new(snapshot));
             self.refreshing.set(false);
         });
     }
