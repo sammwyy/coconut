@@ -104,12 +104,6 @@ impl BrowserState {
     }
 
     fn finish_directory_load(&self, request: &DirectoryRequest, results: DirectoryResults) {
-        self.previews.borrow_mut().retain(|path| {
-            !request
-                .paths
-                .iter()
-                .any(|directory| path.parent() == Some(directory.as_path()))
-        });
         self.tabs.update(|tabs| {
             let Some(tab) = tabs.iter_mut().find(|tab| {
                 Rc::ptr_eq(&tab.identity, &request.identity)
@@ -118,6 +112,12 @@ impl BrowserState {
             }) else {
                 return;
             };
+            self.previews.borrow_mut().retain(|path| {
+                !request
+                    .paths
+                    .iter()
+                    .any(|directory| path.parent() == Some(directory.as_path()))
+            });
             tab.loading = false;
             let results: Vec<_> = results
                 .into_iter()
@@ -151,6 +151,27 @@ impl BrowserState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn obsolete_directory_completion_keeps_current_previews() {
+        let browser = BrowserState::new(WindowRequest::manager(None));
+        let tab = browser.tab();
+        let request = DirectoryRequest {
+            identity: tab.identity.clone(),
+            revision: tab.load_revision,
+            paths: vec![PathBuf::from("/pictures")],
+            hidden: tab.show_hidden,
+        };
+        browser.edit(Tab::reload);
+        let path = PathBuf::from("/pictures/current.png");
+        browser.previews.borrow_mut().insert(
+            path.clone(),
+            Some(ImageData::from_rgba(1, 1, vec![255; 4]).unwrap()),
+        );
+        browser.finish_directory_load(&request, vec![Err("obsolete error".into())]);
+        assert!(browser.preview(&path).is_some());
+        assert!(browser.tab().error.is_none());
+    }
 
     #[test]
     fn navigation_coalesces_directory_loads_while_a_worker_is_running() {

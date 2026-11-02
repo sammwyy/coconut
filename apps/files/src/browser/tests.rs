@@ -4,6 +4,104 @@ use creamui_core::{Point, Rect, Renderer, Size, TitlebarMode, TitlebarState};
 use creamui_render::{Damage, Rasterizer, SceneRecorder, WindowDecorationMode};
 use creamui_theme::{Color, Theme, ThemeProvider};
 
+fn queue_preview_request(browser: &BrowserState, path: &Path) {
+    browser
+        .preview_queue
+        .borrow_mut()
+        .push_back(path.to_path_buf());
+    browser
+        .preview_pending
+        .borrow_mut()
+        .insert(path.to_path_buf());
+    browser.preview_running.set(true);
+}
+
+#[test]
+fn preview_requests_follow_navigation_refresh_and_tab_lifetimes() {
+    let browser = BrowserState::new(WindowRequest::manager(None));
+    browser.add_tab();
+    for action in 0..6 {
+        queue_preview_request(&browser, Path::new("/old/picture.png"));
+        let generation = browser.preview_generation.get();
+        match action {
+            0 => browser.navigate(Location::Home),
+            1 => browser.edit(Tab::reload),
+            2 => browser.switch(0),
+            3 => browser.switch(1),
+            4 => browser.edit(|tab| {
+                tab.view = if tab.view == DirectoryView::Grid {
+                    DirectoryView::List
+                } else {
+                    DirectoryView::Grid
+                }
+            }),
+            _ => browser.close_tab(1),
+        }
+        assert_ne!(browser.preview_generation.get(), generation);
+        assert!(browser.preview_queue.borrow().is_empty());
+        assert!(browser.preview_pending.borrow().is_empty());
+        assert!(
+            browser.preview_running.get(),
+            "the active worker must finish before another starts"
+        );
+    }
+}
+
+#[test]
+fn stale_preview_completion_does_not_consume_new_requests() {
+    let browser = BrowserState::new(WindowRequest::manager(None));
+    let path = PathBuf::from("/pictures/current.png");
+    let obsolete = browser.preview_generation.get();
+    queue_preview_request(&browser, &path);
+    browser.edit(Tab::reload);
+    queue_preview_request(&browser, &path);
+    let revision = browser.preview_revision.peek();
+    browser.finish_preview(obsolete, path.clone(), Ok(None));
+    assert!(browser.previews.borrow_mut().get(&path).is_none());
+    assert!(browser.preview_pending.borrow().contains(&path));
+    assert_eq!(browser.preview_queue.borrow().front(), Some(&path));
+    assert_eq!(browser.preview_revision.peek(), revision);
+    browser.preview_queue.borrow_mut().pop_front();
+    browser.preview_running.set(true);
+    browser.finish_preview(browser.preview_generation.get(), path.clone(), Ok(None));
+    assert!(matches!(
+        browser.previews.borrow_mut().get(&path),
+        Some(None)
+    ));
+    assert!(browser.preview_pending.borrow().is_empty());
+    assert_eq!(browser.preview_revision.peek(), revision + 1);
+}
+
+#[test]
+fn revisiting_a_tab_rejects_work_from_its_previous_visit() {
+    let browser = BrowserState::new(WindowRequest::manager(None));
+    let path = PathBuf::from("/pictures/current.png");
+    let obsolete = browser.preview_generation.get();
+    queue_preview_request(&browser, &path);
+    browser.add_tab();
+    browser.switch(0);
+    browser.finish_preview(obsolete, path.clone(), Ok(None));
+    assert!(browser.previews.borrow_mut().get(&path).is_none());
+    assert!(browser.preview_pending.borrow().is_empty());
+}
+
+#[test]
+fn selection_changes_preserve_current_preview_requests() {
+    let browser = BrowserState::new(WindowRequest::manager(None));
+    let path = PathBuf::from("/pictures/current.png");
+    let generation = browser.preview_generation.get();
+    queue_preview_request(&browser, &path);
+    browser.edit(|tab| tab.selected = Some(path.clone()));
+    assert_eq!(browser.preview_generation.get(), generation);
+    browser.preview_queue.borrow_mut().pop_front();
+    browser.finish_preview(generation, path.clone(), Ok(None));
+    assert!(matches!(
+        browser.previews.borrow_mut().get(&path),
+        Some(None)
+    ));
+    assert!(browser.preview_pending.borrow().is_empty());
+}
+
 #[test]
 fn navigation_notifies_live_subscribers_only_after_state_is_consistent() {
     let fixture = tempfile::tempdir().unwrap();

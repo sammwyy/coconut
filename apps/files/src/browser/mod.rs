@@ -45,6 +45,7 @@ pub(crate) struct BrowserState {
     preview_queue: Rc<RefCell<VecDeque<PathBuf>>>,
     preview_pending: Rc<RefCell<HashSet<PathBuf>>>,
     preview_running: Rc<Cell<bool>>,
+    preview_generation: Rc<Cell<u64>>,
     preview_revision: Signal<u64>,
     pub(crate) name: TextController,
     pub(crate) message: Signal<Option<String>>,
@@ -112,6 +113,7 @@ impl BrowserState {
             preview_queue: Rc::new(RefCell::new(VecDeque::new())),
             preview_pending: Rc::new(RefCell::new(HashSet::new())),
             preview_running: Rc::new(Cell::new(false)),
+            preview_generation: Rc::new(Cell::new(0)),
             preview_revision: Signal::new(0),
             name: TextController::new(name),
             message: Signal::new(None),
@@ -134,7 +136,11 @@ impl BrowserState {
         if let Some(cached) = self.previews.borrow_mut().get(path) {
             return cached;
         }
-        if self.window.borrow().is_some()
+        if self
+            .window
+            .borrow()
+            .as_ref()
+            .is_some_and(|window| !window.is_closed())
             && self.preview_pending.borrow_mut().insert(path.to_path_buf())
         {
             let mut queue = self.preview_queue.borrow_mut();
@@ -163,38 +169,73 @@ impl BrowserState {
         if self.preview_running.get() {
             return;
         }
-        let Some(path) = self.preview_queue.borrow_mut().pop_front() else {
+        let Some(window) = self.window.borrow().clone() else {
             return;
         };
-        let Some(window) = self.window.borrow().clone() else {
+        if window.is_closed() {
+            self.invalidate_preview_requests();
+            return;
+        }
+        let Some(path) = self.preview_queue.borrow_mut().pop_front() else {
             return;
         };
         self.preview_running.set(true);
         let state = self.clone();
         let requested = path.clone();
+        let generation = self.preview_generation.get();
         window.app().spawn_background(
             move || {
                 coconut_thumbnails::Thumbnailer::new()
                     .and_then(|generator| generator.get(&path, 160))
             },
-            move |result| {
-                let image = match result {
-                    Ok(Some(bytes)) => ImageData::from_bytes(&bytes).ok(),
-                    Ok(None) => None,
-                    Err(error) => {
-                        eprintln!("cfiles: thumbnail {}: {error}", requested.display());
-                        None
-                    }
-                };
-                state.previews.borrow_mut().insert(requested.clone(), image);
-                state.preview_pending.borrow_mut().remove(&requested);
-                state.preview_running.set(false);
-                state
-                    .preview_revision
-                    .update(|revision| *revision = revision.wrapping_add(1));
-                state.load_next_preview();
-            },
+            move |result| state.finish_preview(generation, requested, result),
         );
+    }
+
+    fn finish_preview(
+        &self,
+        generation: u64,
+        requested: PathBuf,
+        result: std::io::Result<Option<Vec<u8>>>,
+    ) {
+        self.preview_running.set(false);
+        if generation != self.preview_generation.get()
+            || self
+                .window
+                .borrow()
+                .as_ref()
+                .is_some_and(WindowHandle::is_closed)
+        {
+            self.load_next_preview();
+            return;
+        }
+        let image = match result {
+            Ok(Some(bytes)) => ImageData::from_bytes(&bytes)
+                .map_err(|error| {
+                    eprintln!(
+                        "cfiles: cannot decode thumbnail {}: {error}",
+                        requested.display()
+                    );
+                })
+                .ok(),
+            Ok(None) => None,
+            Err(error) => {
+                eprintln!("cfiles: thumbnail {}: {error}", requested.display());
+                None
+            }
+        };
+        self.previews.borrow_mut().insert(requested.clone(), image);
+        self.preview_pending.borrow_mut().remove(&requested);
+        self.preview_revision
+            .update(|revision| *revision = revision.wrapping_add(1));
+        self.load_next_preview();
+    }
+
+    fn invalidate_preview_requests(&self) {
+        self.preview_generation
+            .set(self.preview_generation.get().wrapping_add(1));
+        self.preview_queue.borrow_mut().clear();
+        self.preview_pending.borrow_mut().clear();
     }
     pub(crate) fn toggle_search(&self) {
         let active = !self.search_active.peek();
@@ -271,9 +312,13 @@ impl BrowserState {
             self.tabs.update(|tabs| {
                 let tab = &mut tabs[index];
                 let previous_view = tab.view;
+                let previous_revision = tab.load_revision;
                 edit(tab);
                 if tab.view == DirectoryView::Columns && previous_view != tab.view {
                     tab.reload();
+                }
+                if tab.load_revision != previous_revision || tab.view != previous_view {
+                    self.invalidate_preview_requests();
                 }
             });
             self.load_directories();
@@ -309,6 +354,9 @@ impl BrowserState {
     pub(crate) fn switch(&self, index: usize) {
         self.file_menu.close_menu();
         batch(|| {
+            if self.active.peek() != index {
+                self.invalidate_preview_requests();
+            }
             self.active.set(index);
             self.message.set(None);
             self.overwrite.set(None);
@@ -330,6 +378,9 @@ impl BrowserState {
         tabs.remove(index);
         let active = self.active.peek();
         batch(|| {
+            if index == active {
+                self.invalidate_preview_requests();
+            }
             self.switch(if index < active {
                 active - 1
             } else {

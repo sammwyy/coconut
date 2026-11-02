@@ -94,6 +94,10 @@ Decoded previews use a 256-entry cache per window. New previews evict the least
 recently used entry, keeping visible images cached while browsing larger folders.
 At 160×160 RGBA pixels this bounds the cache's decoded pixel storage to 25 MiB;
 encoded data, mounted widgets and renderer resources use additional memory.
+Navigation, refresh, view changes and tab changes discard queued preview requests
+and ignore obsolete completions. One decoder runs at a time; an active decoder
+finishes before work for the new view starts. Stale directory results do not
+invalidate previews belonging to the current folder snapshot.
 
 List, Grid and Columns mount only visible rows with a small overscan through
 CreamUI's virtual list. Filtering and sorting reuse a cached snapshot until the
