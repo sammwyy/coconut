@@ -1,5 +1,6 @@
 mod loading;
 mod menus;
+mod previews;
 use crate::{
     config::ExplorerConfig,
     context::WindowContext,
@@ -16,6 +17,7 @@ use creamui_render::{
     WindowHandle,
 };
 use creamui_widgets::{ScrollController, TextController};
+use previews::PreviewCache;
 use std::{
     cell::{Cell, RefCell},
     collections::{HashMap, HashSet, VecDeque},
@@ -39,7 +41,7 @@ pub(crate) struct BrowserState {
     pub(crate) drives: Signal<Vec<files::Drive>>,
     pub(crate) icons: Icons,
     application_icons: Rc<RefCell<HashMap<String, Option<ImageData>>>>,
-    previews: Rc<RefCell<HashMap<PathBuf, Option<ImageData>>>>,
+    previews: Rc<RefCell<PreviewCache>>,
     preview_queue: Rc<RefCell<VecDeque<PathBuf>>>,
     preview_pending: Rc<RefCell<HashSet<PathBuf>>>,
     preview_running: Rc<Cell<bool>>,
@@ -106,7 +108,7 @@ impl BrowserState {
             drives: Signal::new(files::drives()),
             icons: Icons::load(),
             application_icons: Rc::new(RefCell::new(HashMap::new())),
-            previews: Rc::new(RefCell::new(HashMap::new())),
+            previews: Rc::new(RefCell::new(PreviewCache::default())),
             preview_queue: Rc::new(RefCell::new(VecDeque::new())),
             preview_pending: Rc::new(RefCell::new(HashSet::new())),
             preview_running: Rc::new(Cell::new(false)),
@@ -129,8 +131,8 @@ impl BrowserState {
         if !coconut_thumbnails::Thumbnailer::supports(path) {
             return None;
         }
-        if let Some(cached) = self.previews.borrow().get(path) {
-            return cached.clone();
+        if let Some(cached) = self.previews.borrow_mut().get(path) {
+            return cached;
         }
         if self.window.borrow().is_some()
             && self.preview_pending.borrow_mut().insert(path.to_path_buf())
@@ -184,12 +186,7 @@ impl BrowserState {
                         None
                     }
                 };
-                let mut previews = state.previews.borrow_mut();
-                if previews.len() >= 256 {
-                    previews.clear();
-                }
-                previews.insert(requested.clone(), image);
-                drop(previews);
+                state.previews.borrow_mut().insert(requested.clone(), image);
                 state.preview_pending.borrow_mut().remove(&requested);
                 state.preview_running.set(false);
                 state

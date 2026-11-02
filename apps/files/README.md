@@ -90,6 +90,11 @@ runs one directory load at a time, coalesces newer navigation requests, and igno
 results for obsolete locations or closed tabs. Columns mode uses these same
 snapshots rather than reading directories during rendering.
 
+Decoded previews use a 256-entry cache per window. New previews evict the least
+recently used entry, keeping visible images cached while browsing larger folders.
+At 160×160 RGBA pixels this bounds the cache's decoded pixel storage to 25 MiB;
+encoded data, mounted widgets and renderer resources use additional memory.
+
 List, Grid and Columns mount only visible rows with a small overscan through
 CreamUI's virtual list. Filtering and sorting reuse a cached snapshot until the
 entries, query, sort order or chooser filter changes. Icon fallback results are

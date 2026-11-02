@@ -104,7 +104,7 @@ impl BrowserState {
     }
 
     fn finish_directory_load(&self, request: &DirectoryRequest, results: DirectoryResults) {
-        self.previews.borrow_mut().retain(|path, _| {
+        self.previews.borrow_mut().retain(|path| {
             !request
                 .paths
                 .iter()
