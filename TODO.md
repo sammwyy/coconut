@@ -21,9 +21,11 @@
   protocols with Blair. Coconut's clipboard/history permissions currently protect
   the session service API; direct native protocol access follows compositor policy.
 
-- Bound on-disk thumbnail cache growth with expiration/eviction, and add
-  integration fixtures for real-world GStreamer/FFmpeg codec combinations
-  and PE icon variants.
+- Add thumbnail integration fixtures for real-world GStreamer/FFmpeg codec
+  combinations and PE icon variants.
+- Update the three CFiles installation fixtures that still invoke the removed
+  root-level `install.sh`; they currently exit before exercising the installer
+  in `scripts/install.sh`.
 - Investigate five CFiles scene tests failing in this environment: four
   settings focus/controls assertions and the browser client-control count.
 - Resolve pre-existing strict Clippy failures in file-menu's copy tests

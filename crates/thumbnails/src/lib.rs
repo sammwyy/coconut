@@ -19,6 +19,8 @@ use symphonia::core::{
     probe::Hint,
 };
 
+mod cache;
+
 const MAX_SIDE: u32 = 512;
 const MAX_CACHE_BYTES: u64 = 4 * 1024 * 1024;
 
@@ -69,6 +71,12 @@ impl Thumbnailer {
             }
             Err(error) => return Err(error),
         };
+        if let Err(error) = cache::maintain(&cache) {
+            eprintln!(
+                "coconut-thumbnails: cannot clean {}: {error}",
+                cache.display()
+            );
+        }
         Ok(Self { cache, key })
     }
 
@@ -126,11 +134,23 @@ impl Thumbnailer {
         let name: String = digest.as_ref().iter().map(|b| format!("{b:02x}")).collect();
         let destination = self.cache.join(name);
         if let Ok(file) = fs::File::open(&destination) {
-            if file.metadata()?.len() <= MAX_CACHE_BYTES + 28 {
+            let metadata = file.metadata()?;
+            if metadata.len() <= MAX_CACHE_BYTES + 28 {
                 let mut encrypted = Vec::new();
-                file.take(MAX_CACHE_BYTES + 28)
+                (&file)
+                    .take(MAX_CACHE_BYTES + 28)
                     .read_to_end(&mut encrypted)?;
                 if let Ok(plain) = self.decrypt(&encrypted, digest.as_ref()) {
+                    if metadata.modified()?.elapsed().unwrap_or_default()
+                        >= Duration::from_secs(60 * 60)
+                    {
+                        if let Err(error) = file.set_modified(std::time::SystemTime::now()) {
+                            eprintln!(
+                                "coconut-thumbnails: cannot refresh {}: {error}",
+                                destination.display()
+                            );
+                        }
+                    }
                     return Ok(Some(plain));
                 }
             }
@@ -139,19 +159,10 @@ impl Thumbnailer {
             return Ok(None);
         };
         if png.len() as u64 <= MAX_CACHE_BYTES {
-            let result = (|| -> io::Result<()> {
-                let encrypted = self.encrypt(&png, digest.as_ref())?;
-                let mut temporary = tempfile::NamedTempFile::new_in(&self.cache)?;
-                temporary
-                    .as_file()
-                    .set_permissions(fs::Permissions::from_mode(0o600))?;
-                temporary.write_all(&encrypted)?;
-                temporary
-                    .persist(&destination)
-                    .map_err(|error| error.error)?;
-                Ok(())
-            })();
-            if let Err(error) = result {
+            if let Err(error) = self
+                .encrypt(&png, digest.as_ref())
+                .and_then(|encrypted| cache::store(&self.cache, &destination, &encrypted))
+            {
                 eprintln!(
                     "coconut-thumbnails: cannot cache {}: {error}",
                     destination.display()
@@ -617,6 +628,42 @@ mod tests {
         fs::write(&cache, b"unavailable").unwrap();
         let preview = generator.get(&source, 32).unwrap().unwrap();
         assert_eq!(image_rs::load_from_memory(&preview).unwrap().width(), 32);
+    }
+
+    #[test]
+    fn cache_hits_refresh_recency_without_rewriting_encrypted_pixels() {
+        let directory = tempfile::tempdir().unwrap();
+        let source = directory.path().join("picture.png");
+        image_rs::RgbaImage::new(10, 10).save(&source).unwrap();
+        let cache = directory.path().join("cache");
+        let generator = Thumbnailer::at(cache.clone(), directory.path().join("key")).unwrap();
+        let preview = generator.get(&source, 32).unwrap().unwrap();
+        let cached = fs::read_dir(&cache)
+            .unwrap()
+            .next()
+            .unwrap()
+            .unwrap()
+            .path();
+        let encrypted = fs::read(&cached).unwrap();
+        fs::File::open(&cached)
+            .unwrap()
+            .set_modified(std::time::SystemTime::now() - Duration::from_secs(7200))
+            .unwrap();
+        assert_eq!(generator.get(&source, 32).unwrap(), Some(preview));
+        assert_eq!(fs::read(&cached).unwrap(), encrypted);
+        assert!(
+            fs::metadata(&cached)
+                .unwrap()
+                .modified()
+                .unwrap()
+                .elapsed()
+                .unwrap()
+                < Duration::from_secs(60)
+        );
+        assert_eq!(
+            fs::metadata(&cached).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
     }
 
     #[test]
