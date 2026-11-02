@@ -28,6 +28,9 @@
   in `scripts/install.sh`.
 - Investigate five CFiles scene tests failing in this environment: four
   settings focus/controls assertions and the browser client-control count.
+- Keep CFiles breadcrumbs inside the titlebar at enlarged text scales in
+  compact windows; the 640-pixel scene at 150% text currently wraps below
+  the toolbar.
 - Resolve pre-existing strict Clippy failures in file-menu's copy tests
   (`cloned_ref_to_slice_refs` in `crates/file-menu/src/operations.rs`).
 - Implement native notification history and unread counts for the statusbar

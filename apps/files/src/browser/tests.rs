@@ -658,6 +658,112 @@ impl creamui_core::Painter for Recorder {
 }
 
 #[test]
+fn grid_names_use_the_full_caption_width_and_keep_click_targets() {
+    use crate::config::ItemSize;
+    let fixture = tempfile::tempdir().unwrap();
+    let names = [
+        "Photo-000.svg",
+        "Photo-001.svg",
+        "very-long-file-name-with-many-details.svg",
+        "東京の写真と説明が長い画像ファイル.svg",
+    ];
+    for name in names {
+        fs::write(fixture.path().join(name), "preview").unwrap();
+    }
+    for (variant, mut theme) in [("light", Theme::light()), ("dark", Theme::dark())] {
+        for text_scale in [1.0, 1.5] {
+            theme.text_scale = text_scale;
+            for width in [1120.0, 640.0] {
+                for (item_size, scale) in [
+                    (ItemSize::Compact, 0.82),
+                    (ItemSize::Default, 1.0),
+                    (ItemSize::Large, 1.22),
+                ] {
+                    creamui_reactive::with_context_scope(|| {
+                        creamui_reactive::provide_context(ThemeProvider::new(theme));
+                        crate::test_window::TestWindow::install(TitlebarState::default());
+                        let mut browser =
+                            BrowserState::new(WindowRequest::manager(Some(fixture.path().into())));
+                        browser.explorer.item_size = item_size;
+                        browser.edit(|tab| tab.view = DirectoryView::Grid);
+                        let size = Size {
+                            width,
+                            height: 760.0,
+                        };
+                        let mut recorder = Recorder::default();
+                        let scene = Renderer::new().render(
+                            view::build(&browser, size),
+                            size,
+                            &mut recorder,
+                        );
+                        if let Ok(directory) = std::env::var("CFILES_SNAPSHOT_DIR") {
+                            fs::create_dir_all(&directory).unwrap();
+                            let mut snapshot = SceneRecorder::new();
+                            snapshot.begin(
+                                width as u32,
+                                760,
+                                1.0,
+                                Color::rgba(0, 0, 0, 0),
+                                theme.colors,
+                            );
+                            Renderer::new().render(
+                                view::build(&browser, size),
+                                size,
+                                &mut snapshot,
+                            );
+                            let mut raster = Rasterizer::new(width as u32, 760);
+                            raster.render(&snapshot.finish(), &Damage::Full);
+                            raster
+                                .pixmap()
+                                .save_png(Path::new(&directory).join(format!(
+                                    "grid-labels-{variant}-{width}-{text_scale}-{item_size:?}.png"
+                                )))
+                                .unwrap();
+                        }
+                        let captions = recorder
+                            .0
+                            .iter()
+                            .filter(|(text, _)| {
+                                text.starts_with("Photo")
+                                    || text.starts_with("very")
+                                    || text.starts_with("東京")
+                            })
+                            .collect::<Vec<_>>();
+                        assert_eq!(
+                            captions.len(),
+                            names.len(),
+                            "painted captions: {:?}",
+                            recorder.0
+                        );
+                        for ((text, rect), name) in captions.into_iter().zip(names) {
+                            if text_scale == 1.0
+                                && item_size != ItemSize::Compact
+                                && name.starts_with("Photo-")
+                            {
+                                assert_eq!(text, name);
+                            }
+                            if name.starts_with("very") || name.starts_with("東京") {
+                                assert!(text.ends_with('…'));
+                            }
+                            assert!((rect.width - (96.0 * scale - 12.0)).abs() <= 1.0);
+                            let point = Point {
+                                x: rect.x + rect.width / 2.0,
+                                y: rect.y + rect.height - 1.0,
+                            };
+                            scene
+                                .hit_test(point)
+                                .expect("caption remains inside its file tile")(
+                            );
+                            assert_eq!(browser.tab().selected, Some(fixture.path().join(name)));
+                        }
+                    });
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn secondary_click_targets_items_and_background_in_every_directory_view() {
     creamui_reactive::with_context_scope(|| {
         creamui_reactive::provide_context(ThemeProvider::new(Theme::light()));

@@ -106,6 +106,10 @@ cached as well. Directory metadata, filtered snapshots and row height indexes
 still use memory proportional to the number of entries; mounted widgets and
 painting are bounded by the viewport.
 
+Grid captions use the current font's metrics and the full tile width before
+ellipsizing. Row heights leave room for one line at the system text scale,
+including Compact items.
+
 `large_directories_mount_only_visible_rows_and_keep_cached_results` exercises
 20,000 entries, Unicode names, both themes, normal and compact windows, and
 scrolling to the last entry in all three views.

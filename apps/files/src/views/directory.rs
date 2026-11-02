@@ -350,7 +350,7 @@ pub(crate) fn directory_view(b: &BrowserState, tab: &Tab, width: f32) -> BoxedWi
             1
         };
         let row_height = if tab.view == DirectoryView::Grid {
-            94.0 * scale + 10.0
+            grid_tile_height(scale) + 10.0
         } else {
             42.0 * scale + 2.0
         };
@@ -409,6 +409,18 @@ fn prepare_rows(state: &VirtualListState, count: usize, height: f32) {
     }
 }
 
+fn grid_label_height() -> f32 {
+    let theme = use_theme();
+    let size = 12.0 * theme.text_scale;
+    creamui_widgets::row_height_family(size, Some(theme.font_family))
+        .max(size * 1.4)
+        .ceil()
+}
+
+fn grid_tile_height(scale: f32) -> f32 {
+    (56.0 * scale + 18.0 + grid_label_height()).max(94.0 * scale)
+}
+
 fn directory_entry(
     b: &BrowserState,
     tab: &Tab,
@@ -433,17 +445,24 @@ fn directory_entry(
                         width: LengthPercentage::Length(6.0),
                         height: LengthPercentage::Length(6.0),
                     },
-                    ..fixed(96.0 * scale, 94.0 * scale)
+                    ..fixed(96.0 * scale, grid_tile_height(scale))
                 },
                 6.0,
                 6.0,
             ),
             vec![
                 entry_art(b, &entry, icon, 56.0 * scale, t.colors.accent),
-                label(
-                    short(&name, text_capacity(96.0 * scale - 12.0, 14.0)),
-                    12.0,
-                    false,
+                Box::new(
+                    Text::new(creamui_widgets::clamp_to_lines(
+                        &name.replace(['\n', '\r', '\t'], " "),
+                        12.0 * t.text_scale,
+                        96.0 * scale - 12.0,
+                        Some(t.font_family),
+                        1,
+                    ))
+                    .font_size(12.0)
+                    .text_align(creamui_core::TextAlign::Center)
+                    .layout(fixed(96.0 * scale - 12.0, grid_label_height())),
                 ),
             ],
         )
