@@ -24,7 +24,8 @@ bytes are encrypted with AES-256-GCM and a random nonce. The random 256-bit
 key is stored separately at `$XDG_STATE_HOME/coconut/thumbnails.key`; new
 directories and files use mode 0700 and 0600 respectively. Missing or
 tampered entries regenerate from the source. No metadata is written to
-the original directory.
+the original directory. If a generated preview cannot be saved to the cache,
+it is still returned to the caller and the cache error is logged.
 
 This is not interoperable with other desktops' PNG thumbnail caches. The key
 is accessible to processes running as the same user, so this protects an

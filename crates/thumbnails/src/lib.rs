@@ -139,13 +139,24 @@ impl Thumbnailer {
             return Ok(None);
         };
         if png.len() as u64 <= MAX_CACHE_BYTES {
-            let encrypted = self.encrypt(&png, digest.as_ref())?;
-            let mut temporary = tempfile::NamedTempFile::new_in(&self.cache)?;
-            temporary
-                .as_file()
-                .set_permissions(fs::Permissions::from_mode(0o600))?;
-            temporary.write_all(&encrypted)?;
-            temporary.persist(&destination).map_err(|e| e.error)?;
+            let result = (|| -> io::Result<()> {
+                let encrypted = self.encrypt(&png, digest.as_ref())?;
+                let mut temporary = tempfile::NamedTempFile::new_in(&self.cache)?;
+                temporary
+                    .as_file()
+                    .set_permissions(fs::Permissions::from_mode(0o600))?;
+                temporary.write_all(&encrypted)?;
+                temporary
+                    .persist(&destination)
+                    .map_err(|error| error.error)?;
+                Ok(())
+            })();
+            if let Err(error) = result {
+                eprintln!(
+                    "coconut-thumbnails: cannot cache {}: {error}",
+                    destination.display()
+                );
+            }
         }
         Ok(Some(png))
     }
@@ -594,6 +605,19 @@ fn crypto_error(_: impl std::fmt::Debug) -> io::Error {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn generated_preview_survives_cache_write_failure() {
+        let directory = tempfile::tempdir().unwrap();
+        let source = directory.path().join("picture.png");
+        image_rs::RgbaImage::new(10, 10).save(&source).unwrap();
+        let cache = directory.path().join("cache");
+        let generator = Thumbnailer::at(cache.clone(), directory.path().join("key")).unwrap();
+        fs::remove_dir(&cache).unwrap();
+        fs::write(&cache, b"unavailable").unwrap();
+        let preview = generator.get(&source, 32).unwrap().unwrap();
+        assert_eq!(image_rs::load_from_memory(&preview).unwrap().width(), 32);
+    }
 
     #[test]
     fn cache_is_private_and_invalidates_on_change() {
