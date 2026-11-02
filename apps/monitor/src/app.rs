@@ -492,12 +492,11 @@ fn topbar(state: &State, width: f32, index: usize) -> BoxedWidget {
     let t = use_theme();
     let wide = width > 950.0;
     let tools = if wide { 160.0 } else { 68.0 };
-    let titlebar = AppTitlebar::new(width)
-        .height(52.0)
-        .padding(8.0)
-        .center_margin(tools + 20.0);
+    let titlebar = AppTitlebar::new(width).height(52.0).padding(8.0);
     let (start, end) = titlebar.reserved();
-    let available = (width - 2.0 * (start.max(end) + tools + 20.0)).max(0.0);
+    let margin = start.max(end).max(tools + 20.0);
+    let titlebar = titlebar.center_margin(margin - start.max(end));
+    let available = (width - 2.0 * margin).max(0.0);
     let tab_width = (available / PAGES.len() as f32).min(116.0);
     let mut colors = creamui_widgets::TabColors::dark();
     colors.background = CLEAR;
@@ -511,7 +510,7 @@ fn topbar(state: &State, width: f32, index: usize) -> BoxedWidget {
         colors,
         Style {
             justify_content: Some(JustifyContent::Center),
-            ..row(0.0)
+            ..fixed(tab_width * PAGES.len() as f32, 34.0)
         },
     );
     for (i, (path, title)) in PAGES.iter().enumerate() {
@@ -564,11 +563,7 @@ fn topbar(state: &State, width: f32, index: usize) -> BoxedWidget {
             ),
         ],
     );
-    Box::new(
-        titlebar
-            .start_boxed(tools)
-            .center_boxed(view(fixed(available, 34.0), vec![Box::new(tabs)])),
-    )
+    Box::new(titlebar.start_boxed(tools).center_boxed(Box::new(tabs)))
 }
 
 fn fill() -> Style {

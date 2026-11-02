@@ -20,7 +20,9 @@ The executable is `cmonitor`; the desktop name is **System Monitor**.
   services. Destructive actions require confirmation and process identities
   are checked against PID reuse.
 - **Respects the desktop** — system theme, live CreamUI theme updates, and
-  hybrid compositor decorations with fallbacks.
+  hybrid compositor decorations with fallbacks. Navigation stays centered
+  and uses compact labels in narrow windows, with actions opposite the window
+  controls.
 - **CPU rendering** — windows rasterize through CreamUI's CPU backend;
   `CUI_OVERRIDE_RENDER_BACKEND=gpu` opts into `wgpu` per launch.
 

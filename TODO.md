@@ -76,12 +76,6 @@
   `settings::settings_draw_client_controls_only_for_client_decorations`).
   They already failed in the original `dfiles` repository, so the cause is
   environmental rather than a migration regression.
-- Three `apps/monitor` visual tests fail on this machine
-  (`app::visual_tests::frame_ownership_and_refresh_keep_header_positions_stable`,
-  `app::visual_tests::hybrid_controls_on_either_side_relocate_actions_without_overlap`,
-  `app::visual_tests::tabs_stay_centered_in_the_window_for_server_client_and_hybrid_frames`).
-  They already failed in the original `dmonitor` repository, so the cause is
-  environmental rather than a migration regression.
 - One `apps/settings` visual test fails on this machine
   (`visual_tests::connectivity_layout_matches_reference`, a window-drag
   hit-test assertion). It already failed on the pre-lint HEAD (verified via

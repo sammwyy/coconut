@@ -5,6 +5,35 @@ use creamui_core::{Point, Renderer};
 use creamui_render::{Damage, DisplayList, Rasterizer, SceneRecorder};
 use creamui_theme::ThemeProvider;
 
+struct TestControls(Signal<creamui_render::WindowDecorations>);
+impl creamui_core::WindowControlsBackend for TestControls {
+    fn state(&self) -> creamui_core::TitlebarState {
+        use creamui_core::{Rect, TitlebarMode, TitlebarState};
+        use creamui_render::WindowDecorationMode;
+        let decorations = self.0.get();
+        TitlebarState {
+            mode: match decorations.mode {
+                WindowDecorationMode::Client => TitlebarMode::Client,
+                WindowDecorationMode::Hybrid => TitlebarMode::Overlay,
+                WindowDecorationMode::Server => TitlebarMode::Server,
+                WindowDecorationMode::None => TitlebarMode::None,
+                WindowDecorationMode::Pending => TitlebarMode::Pending,
+            },
+            overlay: Rect {
+                x: decorations.controls.x as f32,
+                y: decorations.controls.y as f32,
+                width: decorations.controls.width as f32,
+                height: decorations.controls.height as f32,
+            },
+            ..Default::default()
+        }
+    }
+    fn request_titlebar(&self) {}
+    fn minimize(&self) {}
+    fn toggle_maximize(&self) {}
+    fn close(&self) {}
+}
+
 fn fixture() -> Snapshot {
     let mut s = Snapshot::default();
     s.hostname = "dandelion".into();
@@ -455,7 +484,9 @@ fn frame_ownership_and_refresh_keep_header_positions_stable() {
     creamui_reactive::with_context_scope(|| {
         creamui_reactive::provide_context(WindowDragHandle::new(|| {}));
         let decorations = Signal::new(WindowDecorations::default());
-        creamui_reactive::provide_context(decorations.clone());
+        creamui_reactive::provide_context(creamui_core::WindowControls::new(TestControls(
+            decorations.clone(),
+        )));
         let state = state();
         let router = router();
         let mut renderer = Renderer::new();
@@ -502,7 +533,7 @@ fn frame_ownership_and_refresh_keep_header_positions_stable() {
             });
             let (scene, list) = frame(&mut renderer, &state, &router, Theme::light(), size);
             assert_eq!(
-                scene.hit_test(Point { x: 1145.0, y: 26.0 }).is_some(),
+                scene.hit_test(Point { x: 1158.0, y: 26.0 }).is_some(),
                 mode == WindowDecorationMode::Client
             );
             assert!(scene.window_drag_at(Point { x: 300.0, y: 49.0 }).is_some());
@@ -563,7 +594,9 @@ fn hybrid_controls_on_either_side_relocate_actions_without_overlap() {
     use creamui_render::{CompositorControls, WindowDecorationMode, WindowDecorations};
     creamui_reactive::with_context_scope(|| {
         let decorations = Signal::new(WindowDecorations::default());
-        creamui_reactive::provide_context(decorations.clone());
+        creamui_reactive::provide_context(creamui_core::WindowControls::new(TestControls(
+            decorations.clone(),
+        )));
         let state = state();
         let router = router();
         let mut renderer = Renderer::new();
@@ -632,7 +665,9 @@ fn tabs_stay_centered_in_the_window_for_server_client_and_hybrid_frames() {
     use creamui_render::{CompositorControls, WindowDecorationMode, WindowDecorations};
     creamui_reactive::with_context_scope(|| {
         let decorations = Signal::new(WindowDecorations::default());
-        creamui_reactive::provide_context(decorations.clone());
+        creamui_reactive::provide_context(creamui_core::WindowControls::new(TestControls(
+            decorations.clone(),
+        )));
         let state = state();
         let router = router();
         let mut renderer = Renderer::new();
@@ -668,6 +703,10 @@ fn tabs_stay_centered_in_the_window_for_server_client_and_hybrid_frames() {
                             height: 760.0,
                         },
                     );
+                    save(
+                        &format!("titlebar-{mode:?}-{left}-{}-{busy}", width as u32),
+                        &list,
+                    );
                     let middle = scene
                         .hit_test(Point {
                             x: width / 2.0,
@@ -685,6 +724,10 @@ fn tabs_stay_centered_in_the_window_for_server_client_and_hybrid_frames() {
                         })
                         .collect::<Vec<_>>();
                     let center = (*pixels.first().unwrap() + *pixels.last().unwrap()) as f32 / 2.0;
+                    assert!(
+                        pixels.len() >= 70,
+                        "compact tabs leave room for a single-line label"
+                    );
                     assert!((center - width / 2.0).abs() <= 1.0,
                         "middle tab must align with the window center: {mode:?}, left={left}, width={width}, actual={center}");
                     middle();
