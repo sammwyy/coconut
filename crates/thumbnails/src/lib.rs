@@ -80,6 +80,9 @@ impl Thumbnailer {
     }
 
     pub fn supports(path: &Path) -> bool {
+        if cfg!(windows) {
+            return true;
+        }
         matches!(
             extension(path).as_deref(),
             Some(
@@ -246,15 +249,18 @@ fn generate(path: &Path, side: u32) -> io::Result<Option<Vec<u8>>> {
         } else {
             video_frame(path)?
         }) else {
-            return Ok(None);
+            return shell_icon(path, side);
         };
         image_rs::load_from_memory(&frame).map_err(io::Error::other)?
     } else if ext.as_deref() == Some("exe") {
         let Some(icon) = pe_icon(path)? else {
-            return Ok(None);
+            return shell_icon(path, side);
         };
         image_rs::load_from_memory(&icon).map_err(io::Error::other)?
-    } else {
+    } else if matches!(
+        ext.as_deref(),
+        Some("png" | "jpg" | "jpeg" | "webp" | "gif" | "bmp" | "ico" | "tif" | "tiff")
+    ) {
         let mut reader = ImageReader::open(path)
             .map_err(io::Error::other)?
             .with_guessed_format()
@@ -265,6 +271,8 @@ fn generate(path: &Path, side: u32) -> io::Result<Option<Vec<u8>>> {
         limits.max_image_height = Some(16_000);
         reader.limits(limits);
         reader.decode().map_err(io::Error::other)?
+    } else {
+        return shell_icon(path, side);
     };
     let thumb = image.thumbnail(side, side);
     let mut png = Cursor::new(Vec::new());
@@ -272,6 +280,24 @@ fn generate(path: &Path, side: u32) -> io::Result<Option<Vec<u8>>> {
         .write_to(&mut png, ImageFormat::Png)
         .map_err(io::Error::other)?;
     Ok(Some(png.into_inner()))
+}
+
+#[cfg(windows)]
+fn shell_icon(path: &Path, side: u32) -> io::Result<Option<Vec<u8>>> {
+    let icon = delib::windows::file_icon(path, side)?;
+    let image = image_rs::RgbaImage::from_raw(icon.width, icon.height, icon.rgba)
+        .ok_or_else(|| io::Error::other("Windows returned an invalid icon buffer"))?;
+    let mut png = Cursor::new(Vec::new());
+    image_rs::DynamicImage::ImageRgba8(image)
+        .thumbnail(side, side)
+        .write_to(&mut png, ImageFormat::Png)
+        .map_err(io::Error::other)?;
+    Ok(Some(png.into_inner()))
+}
+
+#[cfg(not(windows))]
+fn shell_icon(_: &Path, _: u32) -> io::Result<Option<Vec<u8>>> {
+    Ok(None)
 }
 
 fn audio_cover(path: &Path) -> io::Result<Option<Vec<u8>>> {
@@ -736,6 +762,7 @@ mod tests {
         let cached = fs::read_dir(cache).unwrap().next().unwrap().unwrap().path();
         fs::write(&cached, b"invalid").unwrap();
         assert_eq!(generator.get(&source, 64).unwrap(), Some(original));
+        #[cfg(not(windows))]
         assert!(generator
             .get(Path::new("not-supported.txt"), 64)
             .unwrap()
@@ -767,6 +794,20 @@ mod tests {
         fs::write(&cached[1], left).unwrap();
         assert_eq!(generator.get(&first, 32).unwrap(), Some(first_bytes));
         assert_eq!(generator.get(&second, 32).unwrap(), Some(expected));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn resolves_native_icons_for_file_associations() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("notes.txt");
+        fs::write(&source, b"text").unwrap();
+        let generator = Thumbnailer::at(dir.path().join("cache"), dir.path().join("key")).unwrap();
+        assert!(Thumbnailer::supports(&source));
+        let result = generator.get(&source, 48).unwrap().unwrap();
+        assert!(result.starts_with(b"\x89PNG"));
+        let image = image_rs::load_from_memory(&result).unwrap();
+        assert!(image.width() <= 48 && image.height() <= 48);
     }
 
     #[test]
@@ -908,7 +949,13 @@ mod tests {
         }
         assert!(status.unwrap().success());
         let generator = Thumbnailer::at(dir.path().join("cache"), dir.path().join("key")).unwrap();
+        #[cfg(not(windows))]
         assert!(generator.get(&audio, 40).unwrap().is_none());
+        #[cfg(windows)]
+        assert!(generator
+            .get(&audio, 40)
+            .unwrap()
+            .is_some_and(|bytes| bytes.starts_with(b"\x89PNG")));
         let cover = dir.path().join("cover.png");
         image_rs::RgbaImage::from_pixel(32, 32, image_rs::Rgba([255, 70, 10, 255]))
             .save(&cover)

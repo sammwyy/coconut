@@ -1,0 +1,17 @@
+[explorer]
+show_hidden = false
+default_grid_view = false
+tab_position = "top"
+show_statusbar = true
+item_size = "default"
+
+[explorer.columns]
+name = true
+size = true
+kind = true
+modified = true
+created = false
+permissions = false
+
+[shortcuts]
+search = "Ctrl+Shift+F"

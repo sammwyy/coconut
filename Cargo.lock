@@ -1467,6 +1467,7 @@ dependencies = [
 name = "coconut-thumbnails"
 version = "0.1.0"
 dependencies = [
+ "delib",
  "image",
  "resvg",
  "ring",
@@ -1987,8 +1988,9 @@ dependencies = [
 [[package]]
 name = "delib"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8676077a16b7661486fdbe90ba30e0e6e9ea1f965c18e4e29ee822b83a03a15c"
+dependencies = [
+ "windows 0.52.0",
+]
 
 [[package]]
 name = "discord-rich-presence"

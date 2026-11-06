@@ -595,8 +595,12 @@ impl BrowserState {
     }
 }
 
-/// Opens a file through the desktop's MIME Apps association, rather than
-/// delegating policy to an opaque `xdg-open` subprocess.
+#[cfg(windows)]
+fn open_with_default_application(path: &Path) -> Result<(), String> {
+    delib::windows::open_path(path).map_err(|error| error.to_string())
+}
+
+#[cfg(not(windows))]
 fn open_with_default_application(path: &Path) -> Result<(), String> {
     let mime = mime_guess::from_path(path).first_or_octet_stream();
     let mime = mime.essence_str();

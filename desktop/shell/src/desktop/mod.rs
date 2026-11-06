@@ -875,7 +875,11 @@ fn desktop_directory() -> PathBuf {
     std::env::var_os("XDG_DESKTOP_DIR")
         .map(PathBuf::from)
         .or_else(desktop_directory_from_config)
-        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join("Desktop")))
+        .or_else(|| {
+            std::env::var_os("HOME")
+                .or_else(|| std::env::var_os("USERPROFILE"))
+                .map(|home| PathBuf::from(home).join("Desktop"))
+        })
         .unwrap_or_else(|| PathBuf::from("."))
 }
 
@@ -910,7 +914,9 @@ fn open_target(target: DesktopTarget) {
 
 #[cfg(target_os = "windows")]
 fn open_path(path: PathBuf) {
-    let _ = coconut_core::spawn_detached(Command::new("explorer.exe").arg(path));
+    if let Err(error) = delib::windows::open_path(&path) {
+        eprintln!("coconut: could not open {}: {error}", path.display());
+    }
 }
 
 #[cfg(not(target_os = "windows"))]

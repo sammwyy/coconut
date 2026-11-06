@@ -44,6 +44,27 @@ pub(super) fn properties(path: &Path) -> Result<String, String> {
         metadata.len(),
         metadata.permissions().readonly()
     );
+    #[cfg(windows)]
+    if metadata.is_file() {
+        match delib::windows::file_association(path) {
+            Ok(association) => {
+                if let Some(application) = association.display_name.or_else(|| {
+                    association
+                        .executable
+                        .map(|path| path.to_string_lossy().into_owned())
+                }) {
+                    text.push_str(&format!("\nOpens with: {application}"));
+                }
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                eprintln!(
+                    "file-menu: could not resolve association for {}: {error}",
+                    path.display()
+                )
+            }
+        }
+    }
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;

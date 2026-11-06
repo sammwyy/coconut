@@ -3,8 +3,10 @@
 `coconut-thumbnails` generates bounded PNG previews for images (PNG, JPEG,
 WebP, GIF, BMP, ICO, TIFF and SVG), videos (MP4, MKV, WebM, MOV and AVI),
 embedded audio artwork (MP3, M4A, FLAC, OGG, Opus, WMA, WAV and AAC), and
-embedded PE icon resources (`.exe`). `Thumbnailer::get(path, side)` returns
-PNG bytes or `None` when the format has no preview. Embedded audio metadata
+embedded PE icon resources (`.exe`). On Windows, files without a specialized
+preview use their native shell icon, including shortcuts and per-extension
+application associations. `Thumbnailer::get(path, side)` returns PNG bytes or
+`None` when the format has no preview. Embedded audio metadata
 is read natively with Symphonia; `ffmpeg` is an optional fallback for artwork
 Symphonia cannot extract. Video frames use `ffmpeg` first and then
 `gst-launch-1.0` (GStreamer) when FFmpeg is unavailable or cannot decode the

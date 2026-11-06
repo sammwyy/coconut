@@ -1,6 +1,6 @@
 # TODO
 
-- Publish delib's existing `MimeApps::applications_for` implementation upstream,
+- Publish delib's `MimeApps::applications_for` and Windows shell integration,
   then update the release workflow's delib pin and remove the temporary
   `.github/patches/delib-mimeapps.patch` application and packaging checksum assertion.
 
@@ -33,6 +33,12 @@
   the toolbar.
 - Resolve pre-existing strict Clippy failures in file-menu's copy tests
   (`cloned_ref_to_slice_refs` in `crates/file-menu/src/operations.rs`).
+- Complete the Windows desktop shell build by separating its Wayland renderer
+  features and Linux-only IPC, shortcut, location, and compositor integrations.
+  Native file activation and shell icons are available, but `coconut-shell`
+  does not yet compile as a full Windows application.
+- Fix the existing Windows-only CFiles test failures covering verbatim path
+  normalization, Unix-only fixtures, and native window-control scenes.
 - Implement native notification history and unread counts for the statusbar
   notification capsule in the shell design.
 - `statusbar.position` and `dockbar.position` only anchor correctly on the

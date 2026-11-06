@@ -116,6 +116,9 @@ wgpu = { version = "22", default-features = false, features = ["wgsl"] }
 windows = "0.52"
 zbus = { version = "5", default-features = false, features = ["tokio"] }
 
+[patch.crates-io]
+delib = { path = "../delib" }
+
 # Lint policy shared by every member; each opts in with
 # `[lints] workspace = true`. Keep the set high-signal: anything noisier
 # belongs in an explicit per-member allow.
