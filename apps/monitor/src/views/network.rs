@@ -174,7 +174,7 @@ fn endpoints(
         columns.push(Column::fixed("State", "", 104.0, false, None));
     }
     if size.width >= 900.0 {
-        columns.push(Column::fixed("Inode", "", 76.0, true, None));
+        columns.push(Column::fixed(system::SOCKET_ID_LABEL, "", 76.0, true, None));
     }
     let rows = items
         .into_iter()
@@ -193,11 +193,18 @@ fn endpoints(
             let state = state.clone();
             let title = format!("{} endpoint", socket.protocol);
             let detail = format!(
-                "Local address\n{}\n\nRemote address\n{}\n\nState\n{}\n\nSocket inode\n{}",
-                socket.local, socket.remote, socket.state, socket.inode
+                "Local address\n{}\n\nRemote address\n{}\n\nState\n{}\n\n{}\n{}",
+                socket.local,
+                socket.remote,
+                socket.state,
+                system::SOCKET_ID_LABEL,
+                socket.inode
             );
             Row {
-                key: format!("{}:{}", socket.protocol, socket.inode),
+                key: format!(
+                    "{}:{}:{}:{}:{}",
+                    socket.protocol, socket.local, socket.remote, socket.state, socket.inode
+                ),
                 values,
                 selected: false,
                 select: Rc::new(move || {

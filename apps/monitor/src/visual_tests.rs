@@ -47,9 +47,12 @@ fn fixture() -> Snapshot {
     s.cpu.sampled = true;
     s.cpu.per_core = vec![25.0, 18.0, 30.0, 11.0];
     s.cpu.frequency_mhz = Some(880.0);
-    s.cpu.load = (1.1, 0.8, 0.6);
-    s.cpu.driver = "intel_pstate".into();
-    s.cpu.governor = "powersave".into();
+    #[cfg(target_os = "linux")]
+    {
+        s.cpu.load = (1.1, 0.8, 0.6);
+        s.cpu.driver = "intel_pstate".into();
+        s.cpu.governor = "powersave".into();
+    }
     s.memory.total = 32 * 1024_u64.pow(3);
     s.memory.available = 21 * 1024_u64.pow(3);
     s.memory.swap_total = 4 * 1024_u64.pow(3);
@@ -63,7 +66,7 @@ fn fixture() -> Snapshot {
             p.name
         );
         p.executable = format!("/usr/bin/{}", p.name);
-        p.user = unsafe { libc::geteuid() }.to_string();
+        p.user = system::current_user();
         p.memory = (8 + i as u64 % 20) * 1024_u64.pow(2);
         p.cpu = (i % 10) as f32 * 0.2;
         p.threads = 4;
@@ -856,7 +859,7 @@ fn cpu_selector_shares_the_title_row_and_sixteen_cores_fit_the_compact_default()
         );
         save("apps-compact-shell-header", &list);
         router.navigate("/services").unwrap();
-        let (scene, list) = frame(
+        let (_scene, list) = frame(
             &mut renderer,
             &state,
             &router,
@@ -867,29 +870,32 @@ fn cpu_selector_shares_the_title_row_and_sixteen_cores_fit_the_compact_default()
             },
         );
         save("services-compact-shell-header", &list);
-        scene
-            .hit_test(Point {
-                x: width as f32 - 64.0,
-                y: 80.0,
-            })
-            .expect("User scope in the shell header")();
-        assert!(state.user_services.get());
-        let (scene, _) = frame(
-            &mut renderer,
-            &state,
-            &router,
-            Theme::dark(),
-            Size {
-                width: width as f32,
-                height: height as f32,
-            },
-        );
-        scene
-            .hit_test(Point {
-                x: width as f32 - 140.0,
-                y: 80.0,
-            })
-            .expect("System scope in the shell header")();
-        assert!(!state.user_services.get());
+        #[cfg(target_os = "linux")]
+        {
+            _scene
+                .hit_test(Point {
+                    x: width as f32 - 64.0,
+                    y: 80.0,
+                })
+                .expect("User scope in the shell header")();
+            assert!(state.user_services.get());
+            let (scene, _) = frame(
+                &mut renderer,
+                &state,
+                &router,
+                Theme::dark(),
+                Size {
+                    width: width as f32,
+                    height: height as f32,
+                },
+            );
+            scene
+                .hit_test(Point {
+                    x: width as f32 - 140.0,
+                    y: 80.0,
+                })
+                .expect("System scope in the shell header")();
+            assert!(!state.user_services.get());
+        }
     });
 }

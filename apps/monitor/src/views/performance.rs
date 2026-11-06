@@ -339,6 +339,9 @@ fn cpu(state: &State, s: &Snapshot, width: f32, height: f32) -> Vec<BoxedWidget>
         ),
         ("Logical processors".into(), s.cpu.cores.to_string()),
         ("Uptime".into(), system::duration(s.uptime)),
+    ];
+    #[cfg(target_os = "linux")]
+    stats.extend([
         (
             "Load · 1 / 5 / 15 min".into(),
             format!(
@@ -348,8 +351,8 @@ fn cpu(state: &State, s: &Snapshot, width: f32, height: f32) -> Vec<BoxedWidget>
         ),
         ("Scaling driver".into(), s.cpu.driver.clone()),
         ("Governor".into(), s.cpu.governor.clone()),
-        ("Architecture".into(), s.architecture.clone()),
-    ];
+    ]);
+    stats.push(("Architecture".into(), s.architecture.clone()));
     if let Some(temp) = system::cpu_temperature(s) {
         stats.push(("Temperature".into(), format!("{temp:.0} °C")));
     }

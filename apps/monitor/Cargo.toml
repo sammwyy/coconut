@@ -13,17 +13,27 @@ path = "src/main.rs"
 
 [dependencies]
 coconut-integration-cream.workspace = true
-libc.workspace = true
-delib = { workspace = true }
 creamui-core = { workspace = true }
 creamui-reactive = { workspace = true }
-creamui-render = { workspace = true, default-features = true, features = ["platform-wayland", "system-theme", "platform-window-integration-blair", "platform-blur-blair", "platform-blur-kwin"] }
+creamui-render = { workspace = true, features = ["system-theme"] }
 creamui-router = { workspace = true }
 creamui-theme = { workspace = true }
 creamui-theme-loader = { workspace = true }
 creamui-theme-watch = { workspace = true }
 creamui-fonts = { workspace = true }
 creamui-widgets = { workspace = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+creamui-render = { workspace = true, features = ["platform-winit", "platform-wayland", "platform-x11", "platform-window-integration-blair", "platform-blur-blair", "platform-blur-kwin"] }
+delib.workspace = true
+libc.workspace = true
+
+[target.'cfg(target_os = "windows")'.dependencies]
+creamui-render = { workspace = true, features = ["platform-windows"] }
+serde.workspace = true
+serde_json.workspace = true
+sysinfo.workspace = true
+windows = { workspace = true, features = ["Win32_Foundation", "Win32_System_Diagnostics_ToolHelp", "Win32_System_Power", "Win32_System_Threading"] }
 
 [lints]
 workspace = true
