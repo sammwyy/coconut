@@ -3,10 +3,11 @@ use ring::{
     aead, hmac,
     rand::{SecureRandom, SystemRandom},
 };
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::{
     env, fs,
     io::{self, Cursor, Read, Write},
-    os::unix::{ffi::OsStrExt, fs::PermissionsExt},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     thread,
@@ -55,9 +56,7 @@ impl Thumbnailer {
                 SystemRandom::new().fill(&mut bytes).map_err(crypto_error)?;
                 let parent = key_path.parent().expect("key parent");
                 let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
-                temporary
-                    .as_file()
-                    .set_permissions(fs::Permissions::from_mode(0o600))?;
+                set_private_permissions(temporary.path(), 0o600)?;
                 temporary.write_all(&bytes)?;
                 match temporary.persist_noclobber(&key_path) {
                     Ok(_) => bytes,
@@ -126,14 +125,18 @@ impl Thumbnailer {
             .modified()?
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default();
-        let mut identity = Vec::from(absolute.as_os_str().as_bytes());
+        let mut identity = Vec::from(absolute.as_os_str().as_encoded_bytes());
         identity.extend_from_slice(&metadata.len().to_le_bytes());
         identity.extend_from_slice(&modified.as_nanos().to_le_bytes());
         identity.extend_from_slice(&side.to_le_bytes());
         let digest = hmac::sign(&hmac::Key::new(hmac::HMAC_SHA256, &self.key), &identity);
         let name: String = digest.as_ref().iter().map(|b| format!("{b:02x}")).collect();
         let destination = self.cache.join(name);
-        if let Ok(file) = fs::File::open(&destination) {
+        let mut options = fs::OpenOptions::new();
+        options.read(true);
+        #[cfg(windows)]
+        options.write(true);
+        if let Ok(file) = options.open(&destination) {
             let metadata = file.metadata()?;
             if metadata.len() <= MAX_CACHE_BYTES + 28 {
                 let mut encrypted = Vec::new();
@@ -598,15 +601,25 @@ fn xdg_dir(variable: &str, fallback: &str) -> io::Result<PathBuf> {
             return Ok(path);
         }
     }
-    Ok(
-        PathBuf::from(env::var_os("HOME").ok_or_else(|| io::Error::from(io::ErrorKind::NotFound))?)
-            .join(fallback),
-    )
+    let home = env::var_os("HOME")
+        .or_else(|| env::var_os("USERPROFILE"))
+        .ok_or_else(|| io::Error::from(io::ErrorKind::NotFound))?;
+    Ok(PathBuf::from(home).join(fallback))
 }
 
 fn private_dir(path: &Path) -> io::Result<()> {
     fs::create_dir_all(path)?;
-    fs::set_permissions(path, fs::Permissions::from_mode(0o700))
+    set_private_permissions(path, 0o700)
+}
+
+#[cfg(unix)]
+fn set_private_permissions(path: &Path, mode: u32) -> io::Result<()> {
+    fs::set_permissions(path, fs::Permissions::from_mode(mode))
+}
+
+#[cfg(not(unix))]
+fn set_private_permissions(_: &Path, _: u32) -> io::Result<()> {
+    Ok(())
 }
 
 fn crypto_error(_: impl std::fmt::Debug) -> io::Error {
@@ -645,7 +658,9 @@ mod tests {
             .unwrap()
             .path();
         let encrypted = fs::read(&cached).unwrap();
-        fs::File::open(&cached)
+        fs::OpenOptions::new()
+            .write(true)
+            .open(&cached)
             .unwrap()
             .set_modified(std::time::SystemTime::now() - Duration::from_secs(7200))
             .unwrap();
@@ -660,6 +675,7 @@ mod tests {
                 .unwrap()
                 < Duration::from_secs(60)
         );
+        #[cfg(unix)]
         assert_eq!(
             fs::metadata(&cached).unwrap().permissions().mode() & 0o777,
             0o600
@@ -686,10 +702,12 @@ mod tests {
         )
         .unwrap();
         assert!(!encrypted.windows(first.len()).any(|window| window == first));
+        #[cfg(unix)]
         assert_eq!(
             fs::metadata(&cache).unwrap().permissions().mode() & 0o777,
             0o700
         );
+        #[cfg(unix)]
         assert_eq!(
             fs::metadata(&key).unwrap().permissions().mode() & 0o777,
             0o600

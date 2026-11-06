@@ -19,7 +19,7 @@ pub mod window;
 pub use app::{show_settings, show_window};
 pub use window::{WindowMode, WindowRequest};
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod installation_tests;
 #[cfg(test)]
 mod test_window;

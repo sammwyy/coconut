@@ -861,6 +861,7 @@ dependencies = [
  "tempfile",
  "toml 0.9.12+spec-1.1.0",
  "url",
+ "windows 0.52.0",
 ]
 
 [[package]]
@@ -1691,7 +1692,7 @@ dependencies = [
 
 [[package]]
 name = "creamui-appearance"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "creamui-theme",
  "dbus",
@@ -1702,7 +1703,7 @@ dependencies = [
 
 [[package]]
 name = "creamui-core"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "bitflags 2.13.2",
  "creamui-reactive",
@@ -1713,7 +1714,7 @@ dependencies = [
 
 [[package]]
 name = "creamui-devtools"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "creamui-core",
  "creamui-render",
@@ -1725,7 +1726,7 @@ dependencies = [
 
 [[package]]
 name = "creamui-fonts"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "creamui-reactive",
  "log",
@@ -1736,7 +1737,7 @@ dependencies = [
 
 [[package]]
 name = "creamui-image"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "creamui-core",
  "creamui-theme",
@@ -1746,14 +1747,14 @@ dependencies = [
 
 [[package]]
 name = "creamui-jsx"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "creamui-core",
 ]
 
 [[package]]
 name = "creamui-macros"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "creamui-core",
  "proc-macro-crate",
@@ -1764,7 +1765,7 @@ dependencies = [
 
 [[package]]
 name = "creamui-platform"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "jni",
  "libc",
@@ -1786,11 +1787,11 @@ dependencies = [
 
 [[package]]
 name = "creamui-reactive"
-version = "0.2.0"
+version = "0.3.0"
 
 [[package]]
 name = "creamui-render"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "bytemuck",
  "creamui-appearance",
@@ -1823,7 +1824,7 @@ dependencies = [
 
 [[package]]
 name = "creamui-router"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "android-activity",
  "creamui-core",
@@ -1840,7 +1841,7 @@ dependencies = [
 
 [[package]]
 name = "creamui-theme"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "creamui-fonts",
  "creamui-reactive",
@@ -1848,7 +1849,7 @@ dependencies = [
 
 [[package]]
 name = "creamui-theme-loader"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "creamui-appearance",
  "creamui-theme",
@@ -1859,7 +1860,7 @@ dependencies = [
 
 [[package]]
 name = "creamui-theme-watch"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "creamui-appearance",
  "creamui-theme-loader",
@@ -1869,14 +1870,14 @@ dependencies = [
 
 [[package]]
 name = "creamui-tray"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "ksni",
 ]
 
 [[package]]
 name = "creamui-widgets"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "arboard",
  "creamui-core",
@@ -1985,7 +1986,9 @@ dependencies = [
 
 [[package]]
 name = "delib"
-version = "0.1.0"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8676077a16b7661486fdbe90ba30e0e6e9ea1f965c18e4e29ee822b83a03a15c"
 
 [[package]]
 name = "discord-rich-presence"

@@ -16,7 +16,6 @@ repository = "https://github.com/sammwyy/creamshell"
 [workspace.dependencies]
 # Sibling repositories.
 alphin = { path = "../alphin" }
-delib = { version = "0.1.0", path = "../delib" }
 blair-client = { path = "../blair/crates/client" }
 blair-protocol = { path = "../blair/crates/protocol" }
 
@@ -77,6 +76,7 @@ futures-util = { version = "0.3", default-features = false, features = ["std"] }
 arboard = "3"
 chrono = "0.4"
 dbus = "0.9"
+delib = "0.2.0"
 discord-rich-presence = "1.1.0"
 image = { version = "0.25.10", default-features = false }
 image-rs = { package = "image", version = "0.25.10" }

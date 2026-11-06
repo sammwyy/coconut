@@ -13,11 +13,13 @@ theme-watch = ["dep:creamui-theme-watch"]
 [dependencies]
 serde.workspace = true
 toml.workspace = true
-dbus.workspace = true
 serde_json.workspace = true
 delib = { workspace = true }
 creamui-theme-watch = { workspace = true, optional = true }
 blair-protocol = { workspace = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+dbus.workspace = true
 
 [lints]
 workspace = true

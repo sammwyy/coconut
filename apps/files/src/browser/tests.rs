@@ -188,6 +188,7 @@ fn navigation_history_branches_and_tabs_keep_their_state() {
     assert_eq!(browser.tabs.peek().len(), 1);
 }
 
+#[cfg(unix)]
 #[test]
 fn listing_is_complete_sorted_and_follows_directory_links() {
     let fixture = tempfile::tempdir().unwrap();

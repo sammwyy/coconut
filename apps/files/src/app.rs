@@ -6,7 +6,6 @@ use creamui_theme::{Color, Theme};
 use creamui_theme_watch::ThemeListener;
 use std::{
     cell::RefCell,
-    fs,
     rc::Rc,
     sync::{Arc, Mutex},
 };
@@ -133,6 +132,7 @@ fn watch_theme_reloads(
         },
     );
 }
+#[cfg(target_os = "linux")]
 fn ensure_wayland_display() {
     if std::env::var_os("WAYLAND_DISPLAY").is_some() {
         return;
@@ -141,7 +141,7 @@ fn ensure_wayland_display() {
         return;
     };
     use std::os::unix::fs::FileTypeExt;
-    let mut sockets = fs::read_dir(runtime)
+    let mut sockets = std::fs::read_dir(runtime)
         .into_iter()
         .flatten()
         .filter_map(Result::ok)
@@ -154,3 +154,6 @@ fn ensure_wayland_display() {
         std::env::set_var("WAYLAND_DISPLAY", socket);
     }
 }
+
+#[cfg(not(target_os = "linux"))]
+fn ensure_wayland_display() {}
