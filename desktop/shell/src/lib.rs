@@ -61,7 +61,7 @@ pub fn run() {
 
     initialize_system_theme();
     let initial_config = ShellConfig::load();
-    let render_backend = render_backend(&initial_config);
+    let render_backend = RenderBackend::Cpu;
     let config = Signal::new(initial_config.clone());
     let runtime_events = Arc::new(Mutex::new(coconut_core::ipc::listen_for_runtime_events()));
     let themed_windows: Rc<RefCell<Vec<WindowHandle>>> = Rc::new(RefCell::new(Vec::new()));
@@ -393,14 +393,6 @@ fn island_present(bars: &[DockConfig], id: &str) -> bool {
         .filter(|section| section.enabled)
         .flat_map(|section| &section.islands)
         .any(|entry| entry.id == id)
-}
-
-fn render_backend(config: &ShellConfig) -> RenderBackend {
-    if config.rendering.gpu_acceleration {
-        RenderBackend::Gpu
-    } else {
-        RenderBackend::Cpu
-    }
 }
 
 /// Recreates the statusbar and dockbar windows after a bar configuration

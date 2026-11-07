@@ -1126,7 +1126,7 @@ mod tests {
                 let host = PopupHost::start(
                     app.clone(),
                     config,
-                    RenderBackend::Gpu,
+                    RenderBackend::Cpu,
                     level.clone(),
                     Signal::new(0.7),
                     Rc::new(coconut_api::volume::Fallback),
