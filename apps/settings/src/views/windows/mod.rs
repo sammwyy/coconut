@@ -2084,6 +2084,7 @@ impl Widget for ShortcutRecorder {
                 Key::Char(',') => "Comma".to_owned(),
                 Key::Char('+') => "Plus".to_owned(),
                 Key::Char(key) => key.to_ascii_uppercase().to_string(),
+                Key::Function(number) => format!("F{number}"),
                 Key::Enter => "Return".to_owned(),
                 Key::Escape => "Escape".to_owned(),
                 Key::Tab => "Tab".to_owned(),
