@@ -15,8 +15,7 @@ The executable is `cfiles`; the desktop name is **File Explorer**.
   backend for open, save, and folder-selection dialogs.
 - Installs the File Explorer icon from `assets/icons/apps/app-files.svg` as
   `cfiles` in the desktop icon theme.
-- Renders through CreamUI's CPU backend; `CUI_OVERRIDE_RENDER_BACKEND=gpu`
-  opts into `wgpu` per launch.
+- Renders through CreamUI's CPU backend without compiling the GPU renderer.
 - Shows image, video, audio cover and embedded Windows executable icon previews
   in directory views, falling back to themed file icons when unavailable.
   A lower-left badge shows the associated default application's icon when
