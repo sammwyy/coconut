@@ -527,7 +527,7 @@ fn run(backend: Backend, demo: Option<DemoLogin>) {
                     resizable: true,
                     transparent: false,
                     role: WindowRole::Normal,
-                    backend: RenderBackend::Gpu,
+                    backend: RenderBackend::Cpu,
                     theme: ui::theme(),
                     ..Default::default()
                 },
