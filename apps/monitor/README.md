@@ -23,8 +23,8 @@ The executable is `cmonitor`; the desktop name is **System Monitor**.
   hybrid compositor decorations with fallbacks. Navigation stays centered
   and uses compact labels in narrow windows, with actions opposite the window
   controls.
-- **CPU rendering** — windows rasterize through CreamUI's CPU backend;
-  `CUI_OVERRIDE_RENDER_BACKEND=gpu` opts into `wgpu` per launch.
+- **CPU rendering** — windows rasterize through CreamUI's CPU backend without
+  compiling the GPU renderer; GPU telemetry remains available.
 
 ## Build
 
