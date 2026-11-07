@@ -66,6 +66,7 @@ coconut-plugin-clipboard.workspace = true
 
 [target.'cfg(target_os = "windows")'.dependencies]
 coconut-registry = { workspace = true, default-features = false, features = ["windows"] }
+delib = { workspace = true, features = ["windows"] }
 
 [lints]
 workspace = true

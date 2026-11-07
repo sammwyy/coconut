@@ -1,8 +1,7 @@
+#[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::{
-    ffi::CString,
     fs, io,
-    os::unix::ffi::OsStrExt,
     path::{Path, PathBuf},
     time::SystemTime,
 };
@@ -43,6 +42,7 @@ pub(crate) fn name(path: &Path) -> String {
 
 pub(crate) fn home() -> PathBuf {
     std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
         .map(PathBuf::from)
         .filter(|p| p.is_dir())
         .unwrap_or_else(|| PathBuf::from("/"))
@@ -52,7 +52,7 @@ pub(crate) fn entries(path: &Path, show_hidden: bool) -> io::Result<Vec<Entry>> 
     let mut items = Vec::new();
     for entry in fs::read_dir(path)? {
         let entry = entry?;
-        if !show_hidden && entry.file_name().as_bytes().starts_with(b".") {
+        if !show_hidden && entry.file_name().as_encoded_bytes().starts_with(b".") {
             continue;
         }
         // Follow symlinks so linked folders remain navigable.
@@ -65,14 +65,24 @@ pub(crate) fn entries(path: &Path, show_hidden: bool) -> io::Result<Vec<Entry>> 
             bytes: metadata.len(),
             modified: metadata.modified().ok(),
             created: metadata.created().ok(),
-            permissions: metadata.permissions().mode() & 0o777,
+            permissions: permission_bits(&metadata),
         });
     }
     items.sort_by_cached_key(|entry| (!entry.directory, entry.name().to_lowercase()));
     Ok(items)
 }
 
-#[cfg(test)]
+#[cfg(unix)]
+fn permission_bits(metadata: &fs::Metadata) -> u32 {
+    metadata.permissions().mode() & 0o777
+}
+
+#[cfg(not(unix))]
+fn permission_bits(_: &fs::Metadata) -> u32 {
+    0
+}
+
+#[cfg(all(test, unix))]
 mod symlink_tests {
     use super::*;
 
@@ -151,6 +161,7 @@ pub(crate) struct Drive {
     pub space: Option<(u64, u64)>,
 }
 
+#[cfg(target_os = "linux")]
 pub(crate) fn drives() -> Vec<Drive> {
     let mut paths = vec![PathBuf::from("/")];
     if let Ok(mounts) = fs::read_to_string("/proc/self/mountinfo") {
@@ -192,7 +203,9 @@ pub(crate) fn drives() -> Vec<Drive> {
         .collect()
 }
 
+#[cfg(target_os = "linux")]
 fn disk_space(path: &Path) -> Option<(u64, u64)> {
+    use std::{ffi::CString, os::unix::ffi::OsStrExt};
     let path = CString::new(path.as_os_str().as_bytes()).ok()?;
     let mut stat = std::mem::MaybeUninit::<libc::statvfs>::uninit();
     // statvfs initializes the structure on success; the C string is alive throughout.
@@ -204,6 +217,43 @@ fn disk_space(path: &Path) -> Option<(u64, u64)> {
         stat.f_bavail.saturating_mul(stat.f_frsize),
         stat.f_blocks.saturating_mul(stat.f_frsize),
     ))
+}
+
+#[cfg(target_os = "windows")]
+pub(crate) fn drives() -> Vec<Drive> {
+    (b'A'..=b'Z')
+        .map(|letter| PathBuf::from(format!("{}:\\", letter as char)))
+        .filter(|path| path.is_dir())
+        .map(|path| Drive {
+            label: path.to_string_lossy().trim_end_matches('\\').to_owned(),
+            space: disk_space(&path),
+            path,
+        })
+        .collect()
+}
+
+#[cfg(target_os = "windows")]
+fn disk_space(path: &Path) -> Option<(u64, u64)> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows::{core::PCWSTR, Win32::Storage::FileSystem::GetDiskFreeSpaceExW};
+    let path: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
+    let mut available = 0;
+    let mut total = 0;
+    unsafe {
+        GetDiskFreeSpaceExW(
+            PCWSTR(path.as_ptr()),
+            Some(&mut available),
+            Some(&mut total),
+            None,
+        )
+    }
+    .ok()?;
+    Some((available, total))
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "windows")))]
+pub(crate) fn drives() -> Vec<Drive> {
+    Vec::new()
 }
 
 pub(crate) fn size(bytes: u64) -> String {

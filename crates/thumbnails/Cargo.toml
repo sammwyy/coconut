@@ -15,5 +15,8 @@ symphonia.workspace = true
 tempfile.workspace = true
 url.workspace = true
 
+[target.'cfg(windows)'.dependencies]
+delib = { workspace = true, features = ["windows"] }
+
 [lints]
 workspace = true

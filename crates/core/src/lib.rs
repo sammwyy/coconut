@@ -4,6 +4,7 @@ mod bar_edit;
 mod desktop;
 mod dock;
 pub mod geo;
+#[cfg(target_os = "linux")]
 pub mod ipc;
 pub mod modules;
 mod pinned_apps;

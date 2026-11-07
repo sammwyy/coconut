@@ -238,10 +238,13 @@ mod tests {
     }
     #[test]
     fn clipboard_accepts_local_uris_without_interpreting_commands() {
-        assert_eq!(
-            parse_paths("file:///tmp/hello%20world\r\n"),
-            Some(vec![PathBuf::from("/tmp/hello world")])
-        );
+        let path = if cfg!(windows) {
+            PathBuf::from(r"C:\tmp\hello world")
+        } else {
+            PathBuf::from("/tmp/hello world")
+        };
+        let uri = Url::from_file_path(&path).unwrap();
+        assert_eq!(parse_paths(&format!("{uri}\r\n")), Some(vec![path]));
         assert!(parse_paths("https://example.com/file").is_none());
         assert!(parse_paths("$(touch /tmp/unsafe)").is_none());
     }

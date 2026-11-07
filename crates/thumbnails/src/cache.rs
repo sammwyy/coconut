@@ -1,9 +1,10 @@
+#[cfg(unix)]
+use std::os::unix::fs::OpenOptionsExt;
 use std::{
     cmp::Reverse,
     collections::BinaryHeap,
     fs::{self, File, OpenOptions},
     io::{self, Read, Seek, Write},
-    os::unix::fs::OpenOptionsExt,
     path::Path,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -92,13 +93,11 @@ fn lock(directory: &Path) -> io::Result<File> {
         .ok_or_else(|| io::Error::from(io::ErrorKind::InvalidInput))?
         .to_os_string();
     name.push(".lock");
-    let file = OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create(true)
-        .truncate(false)
-        .mode(0o600)
-        .open(directory.with_file_name(name))?;
+    let mut options = OpenOptions::new();
+    options.read(true).write(true).create(true).truncate(false);
+    #[cfg(unix)]
+    options.mode(0o600);
+    let file = options.open(directory.with_file_name(name))?;
     file.lock()?;
     Ok(file)
 }
@@ -201,7 +200,9 @@ fn now() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{fs::FileTimes, os::unix::fs::symlink, process::Command};
+    #[cfg(unix)]
+    use std::os::unix::fs::symlink;
+    use std::{fs::FileTimes, process::Command};
 
     fn directory() -> (tempfile::TempDir, std::path::PathBuf) {
         let root = tempfile::tempdir().unwrap();
@@ -221,7 +222,9 @@ mod tests {
     fn entry(directory: &Path, id: u32, bytes: usize, age: Duration) -> std::path::PathBuf {
         let path = directory.join(format!("{id:064x}"));
         fs::write(&path, vec![0; bytes]).unwrap();
-        File::open(&path)
+        OpenOptions::new()
+            .write(true)
+            .open(&path)
             .unwrap()
             .set_times(FileTimes::new().set_modified(SystemTime::now() - age))
             .unwrap();
@@ -281,6 +284,7 @@ mod tests {
         }
     }
 
+    #[cfg(unix)]
     #[test]
     fn expiration_does_not_remove_unmanaged_files_or_follow_symlinks() {
         let (_root, directory) = directory();

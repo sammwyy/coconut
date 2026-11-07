@@ -8,16 +8,17 @@ The executable is `cfiles`; the desktop name is **File Explorer**.
   local paths, and `file://` URIs.
 - Tabs, address-bar navigation, search, pinned folders, recently opened files,
   and storage information in one window.
-- Opens files through the MIME default applications already configured on the
-  desktop, so the application you chose remains the application that opens the
-  file.
+- Opens files through MIME default applications on Freedesktop systems and the
+  Windows shell's default association. Windows shortcuts (`.lnk`) retain their
+  target, arguments, working directory, and custom launch behavior.
 - Ships a `.desktop` entry and an optional XDG Desktop Portal FileChooser
   backend for open, save, and folder-selection dialogs.
 - Installs the File Explorer icon from `assets/icons/apps/app-files.svg` as
   `cfiles` in the desktop icon theme.
 - Renders through CreamUI's CPU backend without compiling the GPU renderer.
 - Shows image, video, audio cover and embedded Windows executable icon previews
-  in directory views, falling back to themed file icons when unavailable.
+  in directory views. Windows also supplies native shortcut and file-association
+  icons; themed file icons remain the fallback when no preview is available.
   A lower-left badge shows the associated default application's icon when
   installed; a lower-right link badge identifies symbolic links (including
   linked folders). MIME badges are resolved off the UI thread. Previews are

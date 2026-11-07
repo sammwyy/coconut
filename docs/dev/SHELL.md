@@ -12,7 +12,7 @@ for your distribution. Coconut links to PipeWire and uses `bindgen` while
 building; therefore, the PipeWire headers, `pkg-config`, Clang, and libclang
 must be present.
 
-The workspace uses local path dependencies for CreamUI, Blair, Alphin, and delib.
+The workspace uses local path dependencies for CreamUI, Blair, and Alphin.
 Keep these repositories side by side, following the paths in the root
 [Cargo.toml](../../Cargo.toml):
 
@@ -21,7 +21,6 @@ workspace/
 ├── alphin/
 ├── blair/
 ├── creamui/
-├── delib/
 └── coconut/
 ```
 

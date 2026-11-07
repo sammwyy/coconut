@@ -1,7 +1,8 @@
 //! Recognize desktop launchers and account for each application's process family.
 use crate::system::Process;
+use std::collections::{HashMap, HashSet};
+#[cfg(target_os = "linux")]
 use std::{
-    collections::{HashMap, HashSet},
     sync::{Mutex, OnceLock},
     time::{Duration, Instant},
 };
@@ -24,29 +25,33 @@ struct DesktopApp {
 }
 
 pub fn collect(processes: &[Process]) -> Vec<Application> {
-    struct Catalog {
-        loaded: Instant,
-        entries: Vec<DesktopApp>,
+    #[cfg(target_os = "windows")]
+    {
+        let catalog = load_catalog(processes);
+        group(processes, &catalog, &crate::system::current_user())
     }
-    static CATALOG: OnceLock<Mutex<Catalog>> = OnceLock::new();
-    let mut catalog = CATALOG
-        .get_or_init(|| {
-            Mutex::new(Catalog {
-                loaded: Instant::now(),
-                entries: load_catalog(),
+    #[cfg(target_os = "linux")]
+    {
+        struct Catalog {
+            loaded: Instant,
+            entries: Vec<DesktopApp>,
+        }
+        static CATALOG: OnceLock<Mutex<Catalog>> = OnceLock::new();
+        let mut catalog = CATALOG
+            .get_or_init(|| {
+                Mutex::new(Catalog {
+                    loaded: Instant::now(),
+                    entries: load_catalog(processes),
+                })
             })
-        })
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    if catalog.loaded.elapsed() >= Duration::from_secs(60) {
-        catalog.entries = load_catalog();
-        catalog.loaded = Instant::now();
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if catalog.loaded.elapsed() >= Duration::from_secs(60) {
+            catalog.entries = load_catalog(processes);
+            catalog.loaded = Instant::now();
+        }
+        group(processes, &catalog.entries, &crate::system::current_user())
     }
-    group(
-        processes,
-        &catalog.entries,
-        unsafe { libc::geteuid() }.to_string().as_str(),
-    )
 }
 
 fn group(processes: &[Process], catalog: &[DesktopApp], uid: &str) -> Vec<Application> {
@@ -108,7 +113,10 @@ impl DesktopApp {
         let program = basename(&self.executable);
         let executable = basename(&p.executable);
         let argv0 = p.arguments.first().map(|s| basename(s));
-        if program != executable && argv0 != Some(program) {
+        if !same_program(&self.executable, &p.executable)
+            && !same_program(program, executable)
+            && !argv0.is_some_and(|argument| same_program(argument, program))
+        {
             return false;
         }
         // Shared launchers/interpreters need the application-specific argument;
@@ -143,10 +151,21 @@ impl DesktopApp {
     }
 }
 fn basename(path: &str) -> &str {
-    path.rsplit('/').next().unwrap_or(path)
+    path.rsplit(['/', '\\']).next().unwrap_or(path)
 }
 
-fn load_catalog() -> Vec<DesktopApp> {
+#[cfg(target_os = "linux")]
+fn same_program(left: &str, right: &str) -> bool {
+    left == right
+}
+
+#[cfg(target_os = "windows")]
+fn same_program(left: &str, right: &str) -> bool {
+    left.eq_ignore_ascii_case(right)
+}
+
+#[cfg(target_os = "linux")]
+fn load_catalog(_processes: &[Process]) -> Vec<DesktopApp> {
     let paths = delib::xdg::XdgPaths::default();
     let mut directories = paths.application_dirs();
     // Flatpak exports may be absent from a minimal session's XDG_DATA_DIRS.
@@ -157,6 +176,42 @@ fn load_catalog() -> Vec<DesktopApp> {
         .filter_map(to_desktop_app)
         .collect()
 }
+
+#[cfg(target_os = "windows")]
+fn load_catalog(processes: &[Process]) -> Vec<DesktopApp> {
+    let current_user = crate::system::current_user();
+    let by_pid: HashMap<_, _> = processes
+        .iter()
+        .map(|process| (process.pid, process))
+        .collect();
+    let mut applications = processes
+        .iter()
+        .filter(|process| process.user == current_user && !process.executable.is_empty())
+        .filter(|process| {
+            by_pid
+                .get(&process.parent_pid)
+                .is_none_or(|parent| parent.user != current_user)
+        })
+        .map(|process| {
+            let name = std::path::Path::new(&process.executable)
+                .file_stem()
+                .map(|name| name.to_string_lossy().into_owned())
+                .filter(|name| !name.is_empty())
+                .unwrap_or_else(|| process.name.clone());
+            DesktopApp {
+                id: process.executable.to_lowercase(),
+                name,
+                executable: process.executable.clone(),
+                arguments: Vec::new(),
+            }
+        })
+        .collect::<Vec<_>>();
+    applications.sort_by(|left, right| left.id.cmp(&right.id));
+    applications.dedup_by(|left, right| left.id == right.id);
+    applications
+}
+
+#[cfg(target_os = "linux")]
 fn to_desktop_app(entry: delib::desktop_entry::DesktopEntry) -> Option<DesktopApp> {
     if !entry.is_visible_application() || entry.terminal() {
         return None;
@@ -178,12 +233,12 @@ fn to_desktop_app(entry: delib::desktop_entry::DesktopEntry) -> Option<DesktopAp
         arguments: command.into_iter().skip(1).collect(),
     })
 }
-#[cfg(test)]
+#[cfg(all(test, target_os = "linux"))]
 fn parse_desktop(id: &str, contents: &str) -> Option<DesktopApp> {
     to_desktop_app(delib::desktop_entry::DesktopEntry::parse(id, contents).with_id(id))
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "linux"))]
 #[allow(clippy::field_reassign_with_default)]
 mod tests {
     use super::*;
@@ -291,5 +346,36 @@ mod tests {
             "1000",
         );
         assert_eq!(apps[0].processes.len(), 1);
+    }
+}
+
+#[cfg(all(test, target_os = "windows"))]
+mod windows_tests {
+    use super::*;
+
+    #[test]
+    fn executable_families_are_refreshed_and_group_helpers() {
+        let user = crate::system::current_user();
+        let mut root = Process::default();
+        root.pid = 10;
+        root.executable = r"C:\Apps\Example.exe".into();
+        root.name = "Example.exe".into();
+        root.arguments = vec![r"C:\Apps\Example.exe".into()];
+        root.user = user.clone();
+        let mut helper = Process::default();
+        helper.pid = 11;
+        helper.parent_pid = 10;
+        helper.executable = r"C:\Apps\Helper.exe".into();
+        helper.name = "Helper.exe".into();
+        helper.user = user.clone();
+        let catalog = load_catalog(&[root.clone(), helper.clone()]);
+        assert_eq!(catalog.len(), 1);
+        assert_eq!(catalog[0].name, "Example");
+        let applications = group(&[root, helper.clone()], &catalog, &user);
+        assert_eq!(applications.len(), 1);
+        assert_eq!(applications[0].processes.len(), 2);
+        let refreshed = load_catalog(&[helper]);
+        assert_eq!(refreshed.len(), 1);
+        assert_eq!(refreshed[0].name, "Helper");
     }
 }

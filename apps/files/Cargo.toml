@@ -15,9 +15,7 @@ path = "src/main.rs"
 coconut-file-menu.workspace = true
 coconut-thumbnails.workspace = true
 coconut-integration-cream.workspace = true
-dbus.workspace = true
 url.workspace = true
-libc.workspace = true
 mime_guess.workspace = true
 serde.workspace = true
 toml.workspace = true
@@ -26,12 +24,22 @@ delib = { workspace = true }
 creamui-image = { workspace = true, features = ["svg"] }
 creamui-core = { workspace = true }
 creamui-reactive = { workspace = true }
-creamui-render = { workspace = true, default-features = false, features = ["platform-winit", "platform-wayland", "system-theme", "platform-window-integration-blair", "platform-blur-blair", "platform-blur-kwin"] }
+creamui-render = { workspace = true, default-features = false, features = ["system-theme"] }
 creamui-theme = { workspace = true }
 creamui-theme-loader = { workspace = true }
 creamui-theme-watch = { workspace = true }
 creamui-fonts = { workspace = true }
 creamui-widgets = { workspace = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+creamui-render = { workspace = true, features = ["platform-winit", "platform-wayland", "platform-window-integration-blair", "platform-blur-blair", "platform-blur-kwin"] }
+dbus.workspace = true
+libc.workspace = true
+
+[target.'cfg(target_os = "windows")'.dependencies]
+creamui-render = { workspace = true, features = ["platform-windows"] }
+delib = { workspace = true, features = ["windows"] }
+windows = { workspace = true, features = ["Win32_Storage_FileSystem"] }
 
 [dev-dependencies]
 tempfile.workspace = true

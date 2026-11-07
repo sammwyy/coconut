@@ -15,14 +15,21 @@ creamui-render = { workspace = true, features = ["context-menu"] }
 creamui-widgets.workspace = true
 delib.workspace = true
 mime_guess.workspace = true
-arboard = { workspace = true, features = ["wayland-data-control"] }
+arboard.workspace = true
 url.workspace = true
 
 [target.'cfg(target_os = "linux")'.dependencies]
+arboard = { workspace = true, features = ["wayland-data-control"] }
 libc.workspace = true
 
 [target.'cfg(target_os = "linux")'.dev-dependencies]
 creamui-render = { workspace = true, features = ["platform-wayland"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+delib = { workspace = true, features = ["windows"] }
+
+[target.'cfg(target_os = "windows")'.dev-dependencies]
+creamui-render = { workspace = true, features = ["platform-windows"] }
 
 [dev-dependencies]
 tempfile.workspace = true

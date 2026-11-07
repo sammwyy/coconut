@@ -55,7 +55,7 @@ pub(super) fn build(state: &State, size: Size) -> BoxedWidget {
     colors.active_text = t.colors.accent;
     colors.text = t.colors.text_secondary;
     let mut scope = creamui_widgets::Tabs::new(colors, row(0.0));
-    for (user_scope, title) in [(false, "System"), (true, "User")] {
+    for &(user_scope, title) in system::SERVICE_SCOPES {
         let selected = state.user_services.clone();
         scope = scope.child(Box::new(creamui_widgets::Tab::new(
             colors,

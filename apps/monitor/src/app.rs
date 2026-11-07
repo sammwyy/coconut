@@ -760,7 +760,7 @@ fn detail_dialog(state: &State, size: Size, detail: Detail) -> BoxedWidget {
     let mut contents = vec![];
     let (title, message, process) = match detail {
         Detail::Process(p) => {
-            let message=format!("PID {} · UID {} · {}\nCPU {:.1}% · Memory {}\nRead {} · Write {}\nParent PID {} · {} threads\n\nExecutable\n{}\n\nCommand\n{}",p.pid,p.user,process_state(&p.state),p.cpu,system::bytes(p.memory),rate(p.read_rate),rate(p.write_rate),p.parent_pid,p.threads,p.executable,p.command);
+            let message=format!("PID {} · User {} · {}\nCPU {:.1}% · Memory {}\nRead {} · Write {}\nParent PID {} · {} threads\n\nExecutable\n{}\n\nCommand\n{}",p.pid,p.user,process_state(&p.state),p.cpu,system::bytes(p.memory),rate(p.read_rate),rate(p.write_rate),p.parent_pid,p.threads,p.executable,p.command);
             (p.name.clone(), message, Some(p))
         }
         Detail::Text(title, message) => (title, message, None),

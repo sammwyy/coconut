@@ -1,7 +1,15 @@
 //! File chooser request types and the D-Bus backend, independent of the UI.
 mod filters;
+#[cfg(target_os = "linux")]
 mod options;
+#[cfg(target_os = "linux")]
 pub mod service;
+#[cfg(not(target_os = "linux"))]
+pub mod service {
+    pub fn run() -> Result<(), String> {
+        Err("The D-Bus file chooser backend is only available on Linux".into())
+    }
+}
 pub use filters::{FileFilter, FilterRule};
 use std::path::PathBuf;
 

@@ -1,4 +1,4 @@
-//! System Monitor — a small, native Linux system monitor.
+//! System Monitor — a small, native system monitor.
 
 mod actions;
 mod app;
