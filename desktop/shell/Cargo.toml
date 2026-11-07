@@ -46,7 +46,7 @@ creamui-image = { workspace = true, features = ["webp", "jpeg", "svg"] }
 creamui-jsx = { workspace = true }
 creamui-macros = { workspace = true }
 creamui-reactive = { workspace = true }
-creamui-render = { workspace = true, default-features = true, features = ["platform-wayland", "platform-blur-blair", "platform-blur-kwin", "system-theme"] }
+creamui-render = { workspace = true, default-features = false, features = ["platform-winit", "platform-wayland", "platform-blur-blair", "platform-blur-kwin", "system-theme"] }
 creamui-theme = { workspace = true }
 creamui-theme-loader = { workspace = true }
 creamui-widgets = { workspace = true }
