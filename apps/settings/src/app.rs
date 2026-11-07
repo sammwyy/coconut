@@ -17,11 +17,6 @@ pub fn run() {
     components::load_settings_fonts();
     let config = Signal::new(ShellConfig::load());
     let background = Signal::new(BackgroundConfig::load());
-    let render_backend = if config.peek().rendering.gpu_acceleration {
-        RenderBackend::Gpu
-    } else {
-        RenderBackend::Cpu
-    };
     let integrations = Rc::new(coconut_registry::detect());
     let appearance = Signal::new(load_system_appearance());
     let view = routes::create(&routes::initial_route(std::env::args().nth(1).as_deref()))
@@ -133,7 +128,7 @@ pub fn run() {
                     blur: Some(BlurRegion::Window),
                     role: WindowRole::Normal,
                     theme: initial_theme,
-                    backend: render_backend,
+                    backend: RenderBackend::Cpu,
                     ..Default::default()
                 },
                 creamui_theme::Color::rgba(0, 0, 0, 0),
