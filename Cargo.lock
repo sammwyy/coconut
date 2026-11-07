@@ -791,7 +791,7 @@ dependencies = [
  "blair-protocol",
  "creamui-theme-watch",
  "dbus",
- "delib",
+ "delib 0.2.0",
  "serde",
  "serde_json",
  "tempfile",
@@ -829,7 +829,7 @@ dependencies = [
  "creamui-reactive",
  "creamui-render",
  "creamui-widgets",
- "delib",
+ "delib 0.2.0",
  "libc",
  "mime_guess",
  "tempfile",
@@ -854,7 +854,7 @@ dependencies = [
  "creamui-theme-watch",
  "creamui-widgets",
  "dbus",
- "delib",
+ "delib 0.2.0",
  "libc",
  "mime_guess",
  "serde",
@@ -921,7 +921,7 @@ dependencies = [
  "coconut-api",
  "creamui-render",
  "dbus",
- "delib",
+ "delib 0.2.0",
 ]
 
 [[package]]
@@ -944,7 +944,7 @@ dependencies = [
 name = "coconut-integration-clipboard"
 version = "0.1.0"
 dependencies = [
- "delib",
+ "delib 0.2.0",
  "libc",
  "serde",
  "tempfile",
@@ -971,7 +971,7 @@ name = "coconut-integration-gtk"
 version = "0.1.0"
 dependencies = [
  "coconut-theme",
- "delib",
+ "delib 0.2.0",
  "libc",
  "tempfile",
 ]
@@ -983,7 +983,7 @@ dependencies = [
  "coconut-api",
  "creamui-render",
  "dbus",
- "delib",
+ "delib 0.2.0",
  "serde",
  "serde_json",
 ]
@@ -1046,7 +1046,7 @@ dependencies = [
  "coconut-core",
  "coconut-theme",
  "dbus",
- "delib",
+ "delib 0.2.0",
  "libc",
  "serde_json",
  "toml 0.9.12+spec-1.1.0",
@@ -1085,7 +1085,7 @@ dependencies = [
  "creamui-theme-watch",
  "creamui-widgets",
  "dbus",
- "delib",
+ "delib 0.2.0",
  "discord-rich-presence",
  "image",
  "libc",
@@ -1112,7 +1112,7 @@ dependencies = [
  "creamui-theme-loader",
  "creamui-theme-watch",
  "creamui-widgets",
- "delib",
+ "delib 0.2.0",
  "libc",
 ]
 
@@ -1129,7 +1129,7 @@ dependencies = [
  "creamui-theme",
  "creamui-theme-watch",
  "creamui-widgets",
- "delib",
+ "delib 0.2.0",
  "futures-util",
  "serde",
  "serde_json",
@@ -1228,7 +1228,7 @@ dependencies = [
  "creamui-render",
  "creamui-theme",
  "creamui-widgets",
- "delib",
+ "delib 0.2.0",
  "serde",
  "url",
 ]
@@ -1331,7 +1331,7 @@ dependencies = [
  "creamui-theme-watch",
  "creamui-widgets",
  "dbus",
- "delib",
+ "delib 0.2.0",
  "image",
  "libc",
  "rfd",
@@ -1371,10 +1371,11 @@ dependencies = [
  "creamui-theme-loader",
  "creamui-widgets",
  "dbus",
- "delib",
+ "delib 0.2.0",
  "image",
  "percent-encoding",
  "rfd",
+ "serde_json",
  "tokio",
  "toml 0.9.12+spec-1.1.0",
  "url",
@@ -1417,7 +1418,7 @@ dependencies = [
  "creamui-theme",
  "creamui-theme-loader",
  "creamui-widgets",
- "delib",
+ "delib 0.2.0",
  "mime_guess",
  "serde",
  "tokio",
@@ -1441,7 +1442,7 @@ dependencies = [
  "creamui-theme-loader",
  "creamui-theme-watch",
  "creamui-widgets",
- "delib",
+ "delib 0.2.0",
  "libc",
  "portable-pty",
  "regex",
@@ -1455,7 +1456,7 @@ dependencies = [
 name = "coconut-theme"
 version = "0.1.0"
 dependencies = [
- "delib",
+ "delib 0.2.0",
  "serde",
  "tempfile",
  "toml 0.9.12+spec-1.1.0",
@@ -1691,7 +1692,7 @@ dependencies = [
 
 [[package]]
 name = "creamui-appearance"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "creamui-theme",
  "dbus",
@@ -1702,7 +1703,7 @@ dependencies = [
 
 [[package]]
 name = "creamui-core"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "bitflags 2.13.2",
  "creamui-reactive",
@@ -1713,7 +1714,7 @@ dependencies = [
 
 [[package]]
 name = "creamui-devtools"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "creamui-core",
  "creamui-render",
@@ -1725,7 +1726,7 @@ dependencies = [
 
 [[package]]
 name = "creamui-fonts"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "creamui-reactive",
  "log",
@@ -1736,7 +1737,7 @@ dependencies = [
 
 [[package]]
 name = "creamui-image"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "creamui-core",
  "creamui-theme",
@@ -1746,14 +1747,14 @@ dependencies = [
 
 [[package]]
 name = "creamui-jsx"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "creamui-core",
 ]
 
 [[package]]
 name = "creamui-macros"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "creamui-core",
  "proc-macro-crate",
@@ -1764,7 +1765,7 @@ dependencies = [
 
 [[package]]
 name = "creamui-platform"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "jni",
  "libc",
@@ -1786,13 +1787,12 @@ dependencies = [
 
 [[package]]
 name = "creamui-reactive"
-version = "0.2.0"
+version = "0.3.0"
 
 [[package]]
 name = "creamui-render"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
- "bytemuck",
  "creamui-appearance",
  "creamui-core",
  "creamui-fonts",
@@ -1807,7 +1807,6 @@ dependencies = [
  "libc",
  "log",
  "ndk",
- "pollster 0.3.0",
  "raw-window-handle",
  "rustc-hash 2.1.3",
  "softbuffer",
@@ -1818,12 +1817,11 @@ dependencies = [
  "wayland-client",
  "web-sys",
  "web-time",
- "wgpu",
 ]
 
 [[package]]
 name = "creamui-router"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "android-activity",
  "creamui-core",
@@ -1840,7 +1838,7 @@ dependencies = [
 
 [[package]]
 name = "creamui-theme"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "creamui-fonts",
  "creamui-reactive",
@@ -1848,18 +1846,18 @@ dependencies = [
 
 [[package]]
 name = "creamui-theme-loader"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "creamui-appearance",
  "creamui-theme",
- "delib",
+ "delib 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde",
  "toml 0.9.12+spec-1.1.0",
 ]
 
 [[package]]
 name = "creamui-theme-watch"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "creamui-appearance",
  "creamui-theme-loader",
@@ -1869,14 +1867,14 @@ dependencies = [
 
 [[package]]
 name = "creamui-tray"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "ksni",
 ]
 
 [[package]]
 name = "creamui-widgets"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "arboard",
  "creamui-core",
@@ -1950,17 +1948,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f27ae1dd37df86211c42e150270f82743308803d90a6f6e6651cd730d5e1732f"
 
 [[package]]
-name = "d3d12"
-version = "22.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bdbd1f579714e3c809ebd822c81ef148b1ceaeb3d535352afc73fd0c4c6a0017"
-dependencies = [
- "bitflags 2.13.2",
- "libloading",
- "winapi",
-]
-
-[[package]]
 name = "dasp_sample"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1985,7 +1972,13 @@ dependencies = [
 
 [[package]]
 name = "delib"
-version = "0.1.0"
+version = "0.2.0"
+
+[[package]]
+name = "delib"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8676077a16b7661486fdbe90ba30e0e6e9ea1f965c18e4e29ee822b83a03a15c"
 
 [[package]]
 name = "discord-rich-presence"
@@ -4548,12 +4541,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "range-alloc"
-version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ca45419789ae5a7899559e9512e58ca889e41f04f1f2445e9f4b290ceccd1d08"
-
-[[package]]
 name = "rav1e"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6492,12 +6479,9 @@ dependencies = [
  "android_system_properties",
  "arrayvec",
  "ash",
- "bit-set",
  "bitflags 2.13.2",
- "block",
  "cfg_aliases 0.1.1",
  "core-graphics-types",
- "d3d12",
  "glow",
  "glutin_wgl_sys",
  "gpu-alloc",
@@ -6516,7 +6500,6 @@ dependencies = [
  "once_cell",
  "parking_lot",
  "profiling",
- "range-alloc",
  "raw-window-handle",
  "renderdoc-sys",
  "rustc-hash 1.1.0",

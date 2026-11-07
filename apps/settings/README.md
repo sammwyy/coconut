@@ -3,6 +3,20 @@
 `coconut-settings` is Coconut's native Rust/CreamUI settings application. Its
 package and executable are both named `coconut-settings`.
 
+## Keyboard repeat
+
+Hardware → Keyboard edits the delay in milliseconds and the rate in characters
+per second. Under Blair, these are compositor settings applied through its
+configuration service. Under KWin, Settings updates the `Keyboard` group of
+`kcminputrc` and requests a KWin reconfiguration. Under Hyprland, Settings
+adds a dedicated keyboard configuration to either `hyprland.lua` or
+`hyprland.conf` (preferring Lua when both exist), then reloads Hyprland. If
+there is no configuration file to persist the values, Settings reports an
+error instead of presenting a session-only change as saved. Detection uses the
+running compositor even if the visible desktop is Coconut; Hyprland instances
+are matched against the session's Wayland socket when its signature is not
+inherited. Other compositors are not modified.
+
 ## Editing bars
 
 Open Desktop → Statusbar or Desktop → Dockbar. Both pages start on Contents:

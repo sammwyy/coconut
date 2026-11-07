@@ -16,6 +16,8 @@ use creamui_widgets::{
 };
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
+mod keyboard_repeat;
+
 const DEFAULT: &str = r#"
 [general]
 backend = "auto"
@@ -77,6 +79,7 @@ pub struct WindowState {
     numeric_inputs: RefCell<HashMap<String, TextController>>,
     layout_select: SelectController,
     input_capabilities: Signal<InputCapabilityState>,
+    external_keyboard: Option<keyboard_repeat::ExternalKeyboard>,
 }
 
 #[derive(Clone, Default)]
@@ -490,6 +493,9 @@ impl WindowState {
                 str_at(&config, &["window", "layout"], "floating") == "tiling",
             )),
             input_capabilities: Signal::new(InputCapabilityState::default()),
+            external_keyboard: (!available)
+                .then(keyboard_repeat::ExternalKeyboard::detect)
+                .flatten(),
             confirmed: Signal::new(config.clone()),
             config: Signal::new(config),
             available,
@@ -1226,6 +1232,16 @@ pub fn build_effects(_: Size, state: &WindowState) -> BoxedWidget {
 }
 
 pub fn build_keyboard(_: Size, state: &WindowState) -> BoxedWidget {
+    if let Some(keyboard) = &state.external_keyboard {
+        return keyboard.view(&state.app);
+    }
+    if !state.available {
+        return section(
+            "Keyboard",
+            "Keyboard repeat settings are not available for this compositor.",
+            Vec::new(),
+        );
+    }
     let c = state.config.get();
     let keyboard_layout = str_at(&c, &["input", "keyboard", "layout"], "us").to_owned();
     let writer = state.writer();
@@ -1246,7 +1262,7 @@ pub fn build_keyboard(_: Size, state: &WindowState) -> BoxedWidget {
     finish(
         state,
         "Keyboard",
-        "Use an XKB layout code, for example us, es or latam.",
+        "Use an XKB layout code (us, es or latam). Repeat delay is in milliseconds; rate is characters per second.",
         vec![group(vec![
             row("Layout", layout_control),
             integer_field(
@@ -1258,7 +1274,7 @@ pub fn build_keyboard(_: Size, state: &WindowState) -> BoxedWidget {
             ),
             integer_field(
                 state,
-                "Repeat rate",
+                "Repeat rate (per second)",
                 &["input", "keyboard", "repeat_rate"],
                 1,
                 Some(100),

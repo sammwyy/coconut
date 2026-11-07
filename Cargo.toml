@@ -16,7 +16,7 @@ repository = "https://github.com/sammwyy/creamshell"
 [workspace.dependencies]
 # Sibling repositories.
 alphin = { path = "../alphin" }
-delib = { version = "0.1.0", path = "../delib" }
+delib = { version = "0.2.0", path = "../delib" }
 blair-client = { path = "../blair/crates/client" }
 blair-protocol = { path = "../blair/crates/protocol" }
 
